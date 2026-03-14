@@ -1,0 +1,23 @@
+{
+  "name": "gokball",
+  "version": "1.0.0",
+  "description": "GokBall - Modern Haxball Clone",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "socket.io-client": "^4.7.4",
+    "json5": "^2.2.3"
+  },
+  "devDependencies": {
+    "vite": "^5.0.12",
+    "concurrently": "^8.2.2"
+  }
+}
