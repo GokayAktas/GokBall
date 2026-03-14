@@ -193,24 +193,25 @@ body {
    ============================================ */
 .logo-container {
   text-align: center;
-  margin-top: 40px;
-  margin-bottom: var(--space-2xl);
+  margin-top: 80px;
+  margin-bottom: 10px;
   position: relative;
   width: 100%;
-  max-width: 750px;
+  max-width: 900px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .logo-banner {
   width: 100%;
-  max-width: 700px;
+  max-width: 850px;
   height: auto;
   display: block;
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.15)) brightness(1.1);
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2)) brightness(1.15);
   border-radius: var(--radius-md);
   transition: transform 0.5s ease;
+  margin: 0 auto;
 }
 
 .logo-container:hover .logo-banner {
