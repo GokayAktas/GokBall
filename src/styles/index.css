@@ -188,21 +188,19 @@ body {
   }
 }
 
-/* ============================================
-   Logo & Title
-   ============================================ */
 .menu-container {
   width: 100%;
   max-width: 1600px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: var(--space-xl);
 }
 
 .logo-container {
   text-align: center;
-  margin-top: 20px;
-  margin-bottom: 25px;
+  margin-top: -20px;
+  margin-bottom: 0px;
   position: relative;
   width: 100%;
   max-width: 1600px;
@@ -212,18 +210,23 @@ body {
 
 .logo-banner {
   width: 100%;
-  max-width: 1500px;
+  max-width: 1400px;
   height: auto;
   display: block;
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 35px rgba(255, 255, 255, 0.35)) brightness(1.3);
+  filter: drop-shadow(0 0 50px rgba(255, 255, 255, 0.4)) brightness(1.4);
   border-radius: var(--radius-md);
   transition: transform 0.5s ease;
   margin: 0 auto;
 }
 
 .logo-container:hover .logo-banner {
-  transform: scale(1.05);
+  transform: scale(1.03);
+}
+
+.main-menu-card {
+  width: 100%;
+  max-width: 450px !important;
 }
 
 /* ============================================
@@ -1203,17 +1206,7 @@ select.input option {
   gap: var(--space-md);
 }
 
-/* ============================================
-   Menu Layout
-   ============================================ */
-.menu-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-lg);
-  width: 100%;
-  max-width: 400px;
-}
+/* Pre-existing menu-container removed to avoid conflicts with consolidated style above */
 
 .menu-buttons {
   display: flex;

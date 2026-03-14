@@ -16,7 +16,7 @@ export class MainMenu {
           <img src="/logo.png" alt="GokBall" class="logo-banner" />
         </div>
 
-        <div class="card" style="width: 100%;">
+        <div class="card main-menu-card" style="width: 100%;">
           <div class="input-group">
             <label for="nickname">Takma Ad</label>
             <input type="text" id="nickname" class="input" placeholder="Adını gir..." maxlength="16" autocomplete="off" />
