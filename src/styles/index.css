@@ -193,18 +193,18 @@ body {
    ============================================ */
 .logo-container {
   text-align: center;
-  margin-top: 50px;
-  margin-bottom: 20px;
+  margin-top: 100px;
+  margin-bottom: 10px;
   position: relative;
   width: 100%;
-  max-width: 800px;
+  max-width: 950px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .logo-banner {
   width: 100%;
-  max-width: 700px;
+  max-width: 850px;
   height: auto;
   display: block;
   mix-blend-mode: screen;
