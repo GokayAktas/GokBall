@@ -193,22 +193,22 @@ body {
    ============================================ */
 .logo-container {
   text-align: center;
-  margin-top: 80px;
-  margin-bottom: 10px;
+  margin-top: 60px;
+  margin-bottom: 5px;
   position: relative;
   width: 100%;
-  max-width: 800px;
+  max-width: 600px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .logo-banner {
   width: 100%;
-  max-width: 700px;
+  max-width: 500px;
   height: auto;
   display: block;
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2)) brightness(1.15);
+  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.2)) brightness(1.15);
   border-radius: var(--radius-md);
   transition: transform 0.5s ease;
   margin: 0 auto;
