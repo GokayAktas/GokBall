@@ -645,10 +645,7 @@ export class Physics {
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
 
-            // Skip position update for admin in local mode (they are the source)
-            if (this.isLocalAuthorityMode && disc.id === this.myPlayerId && this.myPlayerId) {
-                continue;
-            }
+
 
             // Direct position set — no interpolation
             disc.pos.x = sd.x;
@@ -676,13 +673,24 @@ export class Physics {
             const isNewAssignment = (sd.isPlayer && disc.id !== sd.id);
             const isMe = (sd.id === this.myPlayerId && this.myPlayerId !== null);
 
-            // Apply metadata
+            // Apply metadata and physics attributes!
             if (sd.isPlayer !== undefined) {
                 disc.isPlayer = sd.isPlayer;
                 disc.team = sd.team;
                 if (sd.name) disc._playerName = sd.name;
                 if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
+                
+                // Physics properties from server (crucial for local admin!)
+                if (sd.cMask !== undefined) disc.cMask = sd.cMask;
+                if (sd.cGroup !== undefined) disc.cGroup = sd.cGroup;
+                if (sd.bCoef !== undefined) disc.bCoef = sd.bCoef;
+                if (sd.invMass !== undefined) disc.invMass = sd.invMass;
+                if (sd.damping !== undefined) disc.damping = sd.damping;
+                if (sd.acceleration !== undefined) disc.acceleration = sd.acceleration;
+                if (sd.kickingAcceleration !== undefined) disc.kickingAcceleration = sd.kickingAcceleration;
+                if (sd.kickingDamping !== undefined) disc.kickingDamping = sd.kickingDamping;
+                if (sd.kickStrength !== undefined) disc.kickStrength = sd.kickStrength;
             } else if (sd.color) {
                 disc.color = sd.color;
             }

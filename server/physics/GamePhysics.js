@@ -480,7 +480,24 @@ export class GamePhysics {
                 sy: Math.round(d.speed.y * 100) / 100,
                 kicking: d.kicking,
                 isPlayer: d.isPlayer,
-                ...(d.isPlayer ? { team: d.team, radius: d.radius, name: d._playerName, avatar: d._avatar, typing: d.typing, id: d.ownerId || d.id } : { radius: d.radius, color: d.color })
+                ...(d.isPlayer ? { 
+                    team: d.team, 
+                    radius: d.radius, 
+                    name: d._playerName, 
+                    avatar: d._avatar, 
+                    typing: d.typing, 
+                    id: d.ownerId || d.id,
+                    input: d.input,
+                    cMask: d.cMask,
+                    cGroup: d.cGroup,
+                    bCoef: d.bCoef,
+                    invMass: d.invMass,
+                    damping: d.damping,
+                    acceleration: d.acceleration,
+                    kickingAcceleration: d.kickingAcceleration,
+                    kickingDamping: d.kickingDamping,
+                    kickStrength: d.kickStrength
+                } : { radius: d.radius, color: d.color })
             }))
         };
     }
