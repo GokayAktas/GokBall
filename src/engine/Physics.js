@@ -286,6 +286,59 @@ export class Physics {
         return { goalTeam, kickHappened };
     }
 
+    /**
+     * Lightweight local-only prediction step.
+     * Only moves the local player's disc (applies input + damping + boundary collisions).
+     * Does NOT move other discs, ball, or check goals.
+     * This prevents double-simulation conflicts with the server.
+     */
+    stepLocalOnly(localPlayerId) {
+        if (!localPlayerId) return;
+        
+        const disc = this.discs.find(d => d.id === localPlayerId);
+        if (!disc || !disc.isPlayer) return;
+
+        // Apply input acceleration (same as full step)
+        if (disc.input) {
+            let ax = 0, ay = 0;
+            if (disc.input.up) ay -= 1;
+            if (disc.input.down) ay += 1;
+            if (disc.input.left) ax -= 1;
+            if (disc.input.right) ax += 1;
+
+            // Normalize diagonal
+            const len = Math.sqrt(ax * ax + ay * ay);
+            if (len > 0) {
+                ax /= len;
+                ay /= len;
+            }
+
+            const accel = disc.acceleration || 0.11;
+            disc.speed.x += ax * accel;
+            disc.speed.y += ay * accel;
+        }
+
+        // Damping
+        disc.speed.x *= disc.damping;
+        disc.speed.y *= disc.damping;
+
+        // Move
+        disc.pos.x += disc.speed.x;
+        disc.pos.y += disc.speed.y;
+
+        // Boundary collisions (planes) for local player only
+        for (const plane of this.planes) {
+            if (!(disc.cMask & plane.cGroup) && !(plane.cMask & disc.cGroup)) continue;
+            this._collideDiscPlane(disc, plane);
+        }
+
+        // Segment collisions for local player
+        for (const seg of this.segments) {
+            if (!(disc.cMask & seg.cGroup) && !(seg.cMask & disc.cGroup)) continue;
+            this._collideDiscSegment(disc, seg);
+        }
+    }
+
     _performKick(playerDisc) {
         if (!this.ballDisc) return false;
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
@@ -570,7 +623,9 @@ export class Physics {
             this.discs.pop();
         }
 
-        // --- Server Reconciliation / Interpolation ---
+        // --- Server State Application ---
+        // Since the client no longer runs full physics.step() (only stepLocalOnly),
+        // we can trust server positions more directly.
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
@@ -579,34 +634,34 @@ export class Physics {
             const isLocalPlayer = (disc.id === this.myPlayerId && this.myPlayerId !== null);
             const isLocalAdminAuthority = this.isLocalAuthorityMode && isLocalPlayer;
             
+            if (isLocalAdminAuthority) {
+                // Admin in Local mode: completely skip server state for own disc
+                continue;
+            }
+            
             if (isLocalPlayer) {
-                if (isLocalAdminAuthority) continue; // Admin in Local mode is master
-
-                // Client-Side Prediction Reconciliation
+                // Local player in Cloud mode: gentle convergence to avoid snap
+                // stepLocalOnly already moved us, so just nudge towards server
                 const dist = Math.sqrt((disc.pos.x - sd.x) ** 2 + (disc.pos.y - sd.y) ** 2);
-                
-                // Only snap if the error is significant (e.g. > 45px)
-                const snapThreshold = 45; 
-                if (dist > snapThreshold) {
+                if (dist > 50) {
+                    // Large desync: hard snap
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
                     disc.speed.x = sd.sx;
                     disc.speed.y = sd.sy;
-                } else {
-                    // Smoothly converge to server position instead of snapping
-                    const convergeFactor = 0.15;
-                    disc.pos.x += (sd.x - disc.pos.x) * convergeFactor;
-                    disc.pos.y += (sd.y - disc.pos.y) * convergeFactor;
+                } else if (dist > 2) {
+                    // Small desync: smooth convergence
+                    const factor = 0.15;
+                    disc.pos.x += (sd.x - disc.pos.x) * factor;
+                    disc.pos.y += (sd.y - disc.pos.y) * factor;
                 }
+                // If dist <= 2, do nothing — prediction is accurate enough
             } else {
-                // Remote Players: Strong interpolation + velocity smoothing
-                const lerpFactor = 0.35; 
-                
-                // Move towards server position
+                // Remote players and ball: directly lerp to server position
+                // Since we don't simulate these locally, we can use a high factor
+                const lerpFactor = 0.5;
                 disc.pos.x += (sd.x - disc.pos.x) * lerpFactor;
                 disc.pos.y += (sd.y - disc.pos.y) * lerpFactor;
-                
-                // Sync velocity for better local extrapolation between frames
                 disc.speed.x = sd.sx;
                 disc.speed.y = sd.sy;
             }

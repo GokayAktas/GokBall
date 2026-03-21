@@ -385,6 +385,9 @@ class GokBallApp {
     _gameLoop() {
         if (!this.gameRunning) return;
 
+        const isLocalMode = this.currentRoomData?.roomType === 'local';
+        const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
+
         // Apply input to local disc for prediction
         const inputState = this.input.getInput();
         if (this.network.socket?.id) {
@@ -398,12 +401,27 @@ class GokBallApp {
         // Send input to server
         this.network.sendInput(inputState);
 
-        // --- Client-Side Prediction (CSP) & Admin Authority ---
-        this.physics.step();
+        // Physics stepping strategy:
+        // - Cloud mode: Only server runs physics. Client just interpolates from server state.
+        //   We still run step() for the LOCAL player only (client-side prediction).
+        // - Local mode + Admin: Admin runs full physics and is the source of truth.
+        // - Local mode + Non-Admin: Same as cloud — interpolate from server.
+        if (isLocalMode && isAdmin) {
+            // Admin in local mode: full physics simulation, this is the master
+            this.physics.step();
 
-        // If 'Local' mode and I am Admin, send my current simulation state to others
-        if (this.currentRoomData?.roomType === 'local' && this.network.socket?.id === this.currentRoomData?.adminId) {
-            this.network.socket.emit('authorityState', this._gameState);
+            // Build and send authoritative state to server
+            const authorityState = {
+                physics: this.physics.getState(),
+                scoreRed: this.scoreboard?.scoreRed || 0,
+                scoreBlue: this.scoreboard?.scoreBlue || 0,
+                time: this.scoreboard?.time || 0
+            };
+            this.network.socket.emit('authorityState', authorityState);
+        } else {
+            // Cloud mode or non-admin in Local mode:
+            // Run local prediction step ONLY for the local player's disc
+            this.physics.stepLocalOnly(this.network.socket?.id);
         }
 
         // Update camera: Fixed static camera centered on stadium
@@ -431,6 +449,18 @@ class GokBallApp {
     }
 
     _handleGameState(state) {
+        const isLocalMode = this.currentRoomData?.roomType === 'local';
+        const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
+
+        // If I am the Admin in Local mode, I am the source of truth.
+        // Completely ignore server state for physics — only update scoreboard.
+        if (isLocalMode && isAdmin) {
+            if (state.scoreRed !== undefined) {
+                this.scoreboard.update(state.scoreRed, state.scoreBlue, state.time);
+            }
+            return;
+        }
+
         // Detect kicks for sound effects
         if (state.physics && state.physics.discs) {
             const ball = state.physics.discs[0];
@@ -441,11 +471,9 @@ class GokBallApp {
                     const dx = ball.x - p.x;
                     const dy = ball.y - p.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    // More lenient distance check for sound trigger (radius sum + 8)
                     const minDist = (p.radius || 15) + (ball.radius || 10) + 8;
 
                     if (dist < minDist) {
-                        // Debounce sound to avoid multiple plays in few frames
                         const now = Date.now();
                         if (!this._lastKickSound || now - this._lastKickSound > 150) {
                             this.audio.playKick();
