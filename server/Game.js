@@ -206,7 +206,17 @@ export class Game {
         if (this.state !== 'playing') return;
 
         // Advance physics
-        const goalTeam = this.physics.step();
+        // NEW: If in local authority mode, server skips its own physics simulation
+        // and relies solely on authorityState packets from the Admin.
+        const isLocalMode = this.room.roomType === 'local';
+        let goalTeam = null;
+        
+        if (!isLocalMode) {
+            goalTeam = this.physics.step();
+        } else {
+            // In local mode, we still check some basics or just increment time
+            // but the actual positions are updated via applyAuthorityState
+        }
 
         // Increment time
         this.timeElapsed++;

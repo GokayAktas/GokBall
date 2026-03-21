@@ -597,15 +597,14 @@ export class Physics {
                     disc.speed.y = sd.sy;
                 }
             } else {
-                // Interpolation for others
-                // The original code used a lerpFactor of 0.6, the new snippet suggests 0.5.
-                // Sticking to the provided snippet's 0.5 for consistency with the requested change.
-                const lerpFactor = 0.5; 
+                // Interpolation for others: Smoother lerp for other players to prevent jitter
+                const lerpFactor = 0.2; 
                 disc.pos.x = disc.pos.x + (sd.x - disc.pos.x) * lerpFactor;
                 disc.pos.y = disc.pos.y + (sd.y - disc.pos.y) * lerpFactor;
                 
-                disc.speed.x = sd.sx;
-                disc.speed.y = sd.sy;
+                // Also smooth velocity to avoid sudden speed changes
+                disc.speed.x = disc.speed.x + (sd.sx - disc.speed.x) * lerpFactor;
+                disc.speed.y = disc.speed.y + (sd.sy - disc.speed.y) * lerpFactor;
             }
 
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
