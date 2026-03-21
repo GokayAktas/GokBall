@@ -148,6 +148,8 @@ class GokBallApp {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.stadiumData = data.stadium;
+            this.physics.myPlayerId = this.network.socket?.id;
+            this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
             this.ui.showScreen('roomLobby', data);
         });
 
@@ -155,6 +157,8 @@ class GokBallApp {
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.stadiumData = data.stadium;
+            this.physics.myPlayerId = this.network.socket?.id;
+            this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
 
             // If game is active, jump in as spectator/player
             if (data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal')) {
@@ -208,6 +212,9 @@ class GokBallApp {
         this.network.on('adminUpdate', (data) => {
             if (this.currentRoomData && data.players) {
                 this.currentRoomData.players = data.players;
+                this.currentRoomData.adminId = data.playerId;
+                this.physics.isLocalAuthorityMode = (this.currentRoomData.roomType === 'local' && this.network.socket?.id === data.playerId);
+                
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             }
         });

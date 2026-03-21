@@ -110,6 +110,8 @@ export class Physics {
         this.segments = [];
         this.planes = [];
         this.goals = [];
+        this.isLocalAuthorityMode = false; // New: To skip server sync for Admin authority rooms
+        this.predictionThreshold = 30; // New: Smoothing threshold
         this.ballDisc = null;
         this.myPlayerId = null; // Local player ID for self-highlighting
     }
@@ -568,26 +570,37 @@ export class Physics {
             this.discs.pop();
         }
 
+        // --- Server Reconciliation / Interpolation ---
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
+            if (!disc) continue;
 
-            // If this is our own disc, we only sync if the error is significant (Prediction)
-            const isLocal = (disc.id === localId && localId !== null);
+            const isLocalPlayer = (disc.id === this.myPlayerId && this.myPlayerId !== null);
+            // SPECIAL FIX: In Local Authority mode, Admin should NEVER snap to server state.
+            const isLocalAdminAuthority = this.isLocalAuthorityMode && isLocalPlayer;
             
-            if (isLocal) {
-                const distError = Math.sqrt(Math.pow(disc.pos.x - sd.x, 2) + Math.pow(disc.pos.y - sd.y, 2));
-                // Only snap if server and client are too far apart (e.g. > 30px)
-                if (distError > 30) {
+            if (isLocalPlayer) {
+                // prediction logic
+                if (isLocalAdminAuthority) {
+                    // Admin in Local mode: TOTALLY immune to server correction.
+                    // We only sync scores/time, but NOT position.
+                    continue; 
+                }
+                const dist = Math.sqrt((disc.pos.x - sd.x) ** 2 + (disc.pos.y - sd.y) ** 2);
+                // Using a default predictionThreshold if not defined, e.g., 30px
+                const predictionThreshold = this.predictionThreshold !== undefined ? this.predictionThreshold : 30;
+                if (dist > predictionThreshold) {
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
-                    disc.speed.x = sd.sx;
+                    disc.speed.x = sd.sx; // Assuming sd.sx/sy for speed
                     disc.speed.y = sd.sy;
                 }
             } else {
-                // For other discs, we could interpolate, but for now let's use velocity-based smoothing
-                // Instead of snapping, we move towards the target to avoid "teleporting"
-                const lerpFactor = 0.6; // Higher = faster snap, Lower = smoother but more laggy-looking
+                // Interpolation for others
+                // The original code used a lerpFactor of 0.6, the new snippet suggests 0.5.
+                // Sticking to the provided snippet's 0.5 for consistency with the requested change.
+                const lerpFactor = 0.5; 
                 disc.pos.x = disc.pos.x + (sd.x - disc.pos.x) * lerpFactor;
                 disc.pos.y = disc.pos.y + (sd.y - disc.pos.y) * lerpFactor;
                 
