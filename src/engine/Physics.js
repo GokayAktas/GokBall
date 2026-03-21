@@ -577,36 +577,39 @@ export class Physics {
             if (!disc) continue;
 
             const isLocalPlayer = (disc.id === this.myPlayerId && this.myPlayerId !== null);
-            // SPECIAL FIX: In Local Authority mode, Admin should NEVER snap to server state.
             const isLocalAdminAuthority = this.isLocalAuthorityMode && isLocalPlayer;
             
             if (isLocalPlayer) {
-                // prediction logic
-                if (isLocalAdminAuthority) {
-                    // Admin in Local mode: TOTALLY immune to server correction.
-                    // We only sync scores/time, but NOT position.
-                    continue; 
-                }
+                if (isLocalAdminAuthority) continue; // Admin in Local mode is master
+
+                // Client-Side Prediction Reconciliation
                 const dist = Math.sqrt((disc.pos.x - sd.x) ** 2 + (disc.pos.y - sd.y) ** 2);
-                // Using a default predictionThreshold if not defined, e.g., 30px
-                const predictionThreshold = this.predictionThreshold !== undefined ? this.predictionThreshold : 30;
-                if (dist > predictionThreshold) {
+                
+                // Only snap if the error is significant (e.g. > 45px)
+                const snapThreshold = 45; 
+                if (dist > snapThreshold) {
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
-                    disc.speed.x = sd.sx; // Assuming sd.sx/sy for speed
+                    disc.speed.x = sd.sx;
                     disc.speed.y = sd.sy;
+                } else {
+                    // Smoothly converge to server position instead of snapping
+                    const convergeFactor = 0.15;
+                    disc.pos.x += (sd.x - disc.pos.x) * convergeFactor;
+                    disc.pos.y += (sd.y - disc.pos.y) * convergeFactor;
                 }
             } else {
-                // Interpolation for others: Smoother lerp for other players to prevent jitter
-                const lerpFactor = 0.2; 
-                disc.pos.x = disc.pos.x + (sd.x - disc.pos.x) * lerpFactor;
-                disc.pos.y = disc.pos.y + (sd.y - disc.pos.y) * lerpFactor;
+                // Remote Players: Strong interpolation + velocity smoothing
+                const lerpFactor = 0.35; 
                 
-                // Also smooth velocity to avoid sudden speed changes
-                disc.speed.x = disc.speed.x + (sd.sx - disc.speed.x) * lerpFactor;
-                disc.speed.y = disc.speed.y + (sd.sy - disc.speed.y) * lerpFactor;
+                // Move towards server position
+                disc.pos.x += (sd.x - disc.pos.x) * lerpFactor;
+                disc.pos.y += (sd.y - disc.pos.y) * lerpFactor;
+                
+                // Sync velocity for better local extrapolation between frames
+                disc.speed.x = sd.sx;
+                disc.speed.y = sd.sy;
             }
-
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
