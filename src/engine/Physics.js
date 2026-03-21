@@ -624,24 +624,37 @@ export class Physics {
         }
 
         // --- Server State Application ---
-        // Since the client no longer runs full physics.step() (only stepLocalOnly),
-        // we can trust server positions more directly.
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
             if (!disc) continue;
 
+            // *** CRITICAL: Set metadata FIRST, BEFORE checking isLocalPlayer ***
+            // Otherwise disc.id is undefined and we can never identify our own disc
+            if (sd.isPlayer !== undefined) {
+                disc.isPlayer = sd.isPlayer;
+                disc.team = sd.team;
+                if (sd.name) disc._playerName = sd.name;
+                if (sd.avatar) disc.avatar = sd.avatar;
+                if (sd.id) disc.id = sd.id;
+            } else if (sd.color) {
+                disc.color = sd.color;
+            }
+            if (sd.kicking !== undefined) disc.kicking = sd.kicking;
+            if (sd.typing !== undefined) disc.typing = sd.typing;
+            if (sd.radius) disc.radius = sd.radius;
+
+            // NOW we can correctly identify the local player
             const isLocalPlayer = (disc.id === this.myPlayerId && this.myPlayerId !== null);
             const isLocalAdminAuthority = this.isLocalAuthorityMode && isLocalPlayer;
             
             if (isLocalAdminAuthority) {
-                // Admin in Local mode: completely skip server state for own disc
+                // Admin in Local mode: completely skip server position for own disc
                 continue;
             }
             
             if (isLocalPlayer) {
-                // Local player in Cloud mode: gentle convergence to avoid snap
-                // stepLocalOnly already moved us, so just nudge towards server
+                // Local player: gentle convergence (stepLocalOnly already predicted us)
                 const dist = Math.sqrt((disc.pos.x - sd.x) ** 2 + (disc.pos.y - sd.y) ** 2);
                 if (dist > 50) {
                     // Large desync: hard snap
@@ -655,28 +668,13 @@ export class Physics {
                     disc.pos.x += (sd.x - disc.pos.x) * factor;
                     disc.pos.y += (sd.y - disc.pos.y) * factor;
                 }
-                // If dist <= 2, do nothing — prediction is accurate enough
             } else {
-                // Remote players and ball: directly lerp to server position
-                // Since we don't simulate these locally, we can use a high factor
+                // Remote players and ball: lerp to server position
                 const lerpFactor = 0.5;
                 disc.pos.x += (sd.x - disc.pos.x) * lerpFactor;
                 disc.pos.y += (sd.y - disc.pos.y) * lerpFactor;
                 disc.speed.x = sd.sx;
                 disc.speed.y = sd.sy;
-            }
-            if (sd.kicking !== undefined) disc.kicking = sd.kicking;
-            if (sd.typing !== undefined) disc.typing = sd.typing;
-            if (sd.radius) disc.radius = sd.radius;
-
-            if (sd.isPlayer !== undefined) {
-                disc.isPlayer = sd.isPlayer;
-                disc.team = sd.team;
-                if (sd.name) disc._playerName = sd.name;
-                if (sd.avatar) disc.avatar = sd.avatar;
-                if (sd.id) disc.id = sd.id;
-            } else if (sd.color) {
-                disc.color = sd.color;
             }
         }
     }

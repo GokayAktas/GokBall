@@ -95,25 +95,42 @@ export class RoomList {
       return;
     }
 
-    container.innerHTML = rooms.map(room => `
-      <div class="room-item" data-room-id="${room.id}">
-        <div class="room-item-info">
-          <span class="room-item-name">${this._escapeHtml(room.name)}</span>
-          <div class="room-item-details">
-            <span>🏟️ ${this._escapeHtml(room.stadiumName)}</span>
-            <span>${room.hasPassword ? '🔒 Şifreli' : '🔓 Açık'}</span>
-            ${room.gameState === 'playing' ? '<span>⚽ Oyun devam ediyor</span>' : ''}
+    container.innerHTML = rooms.map(room => {
+      const isPlaying = room.gameState === 'playing';
+      const playerRatio = room.playerCount / room.maxPlayers;
+      const playerColor = playerRatio >= 0.8 ? '#e74c3c' : playerRatio >= 0.5 ? '#f39c12' : '#2ecc71';
+      
+      return `
+      <div class="room-card" data-room-id="${room.id}">
+        <div class="room-card-left">
+          <div class="room-card-icon">${isPlaying ? '⚽' : '🏟️'}</div>
+        </div>
+        <div class="room-card-body">
+          <div class="room-card-header">
+            <span class="room-card-name">${this._escapeHtml(room.name)}</span>
+            ${room.hasPassword ? '<span class="room-card-lock">🔒</span>' : ''}
+          </div>
+          <div class="room-card-meta">
+            <span class="room-card-stadium">${this._escapeHtml(room.stadiumName)}</span>
+            <span class="room-card-divider">•</span>
+            ${isPlaying 
+              ? '<span class="room-card-status playing">Oyunda</span>' 
+              : '<span class="room-card-status waiting">Bekliyor</span>'}
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap: var(--space-md);">
-          ${room.hasPassword ? '<span class="badge badge-locked">🔒</span>' : '<span class="badge badge-open">Açık</span>'}
-          <span class="room-item-players">${room.playerCount}/${room.maxPlayers}</span>
+        <div class="room-card-right">
+          <div class="room-card-players" style="--player-color: ${playerColor}">
+            <span class="room-card-players-count">${room.playerCount}</span>
+            <span class="room-card-players-sep">/</span>
+            <span class="room-card-players-max">${room.maxPlayers}</span>
+          </div>
+          <svg class="room-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     // Click handlers
-    container.querySelectorAll('.room-item').forEach(item => {
+    container.querySelectorAll('.room-card').forEach(item => {
       item.addEventListener('click', () => {
         const roomId = item.dataset.roomId;
         const room = rooms.find(r => r.id === roomId);
