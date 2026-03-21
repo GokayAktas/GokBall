@@ -659,6 +659,52 @@ export class Physics {
     }
 
     /**
+     * Admin uses this to receive player metadata/inputs from the Server without replacing positions.
+     * Also detects when players join/spawn and captures their initial coordinates.
+     */
+    applyMetadata(state) {
+        if (!state.discs) return;
+
+        while (this.discs.length < state.discs.length) this.discs.push(new Disc());
+        while (this.discs.length > state.discs.length) this.discs.pop();
+
+        for (let i = 0; i < state.discs.length; i++) {
+            const sd = state.discs[i];
+            const disc = this.discs[i];
+            if (!disc) continue;
+
+            const isNewAssignment = (sd.isPlayer && disc.id !== sd.id);
+            const isMe = (sd.id === this.myPlayerId && this.myPlayerId !== null);
+
+            // Apply metadata
+            if (sd.isPlayer !== undefined) {
+                disc.isPlayer = sd.isPlayer;
+                disc.team = sd.team;
+                if (sd.name) disc._playerName = sd.name;
+                if (sd.avatar) disc.avatar = sd.avatar;
+                if (sd.id) disc.id = sd.id;
+            } else if (sd.color) {
+                disc.color = sd.color;
+            }
+            if (sd.radius) disc.radius = sd.radius;
+            if (sd.typing !== undefined) disc.typing = sd.typing;
+
+            // Apply inputs from server (except for my own input)
+            if (sd.input && !isMe) {
+                disc.input = sd.input;
+            }
+
+            // Only copy positions if it's a newly assigned player (initial spawn location)
+            if (isNewAssignment) {
+                disc.pos.x = sd.x;
+                disc.pos.y = sd.y;
+                disc.speed.x = sd.sx || 0;
+                disc.speed.y = sd.sy || 0;
+            }
+        }
+    }
+
+    /**
      * Reset all discs to spawn positions
      */
     resetPositions() {

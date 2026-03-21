@@ -382,6 +382,7 @@ class GokBallApp {
         }
     }
 
+
     _gameLoop() {
         if (!this.gameRunning) return;
 
@@ -398,18 +399,16 @@ class GokBallApp {
         this.network.sendInput(inputState);
 
         // Physics strategy (Haxball model):
-        // - Cloud mode: NO client physics. Server is 100% authority.
-        //   Client just renders the positions received from server.
-        // - Local mode + Admin: Admin runs full physics, sends to server.
-        //   Admin never receives corrections from server.
-        // - Local mode + Non-Admin: Same as cloud.
         if (isLocalMode && isAdmin) {
             // Apply input to admin's disc
             const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
             if (myDisc) myDisc.input = inputState;
 
-            // Admin runs full physics
-            this.physics.step();
+            // Admin runs full physics ONLY if game is actively playing
+            // During goal pauses or countdowns, we pause physics to respect server resets
+            if (this._serverGameState === 'playing') {
+                this.physics.step();
+            }
 
             // Send authoritative state to server for relay to others
             const authorityState = {
@@ -448,14 +447,22 @@ class GokBallApp {
     }
 
     _handleGameState(state) {
+        this._serverGameState = state.state; // Track game state locally
+
         const isLocalMode = this.currentRoomData?.roomType === 'local';
         const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
 
-        // If I am the Admin in Local mode, I am the source of truth.
-        // Completely ignore server state for physics — only update scoreboard.
+        // If I am Admin in Local mode, I am the physics source of truth.
         if (isLocalMode && isAdmin) {
             if (state.scoreRed !== undefined) {
                 this.scoreboard.update(state.scoreRed, state.scoreBlue, state.time);
+            }
+            if (state.state !== 'playing') {
+                // If game is paused (goal/countdown), hard sync to server positions (respawns, kickoffs)
+                this.physics.applyState(state.physics);
+            } else {
+                // If playing, only sync metadata (spawns, typing, other players' inputs) so I don't jitter my own physics
+                this.physics.applyMetadata(state.physics);
             }
             return;
         }

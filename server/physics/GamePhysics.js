@@ -485,41 +485,25 @@ export class GamePhysics {
         };
     }
 
+    // Server's applyState only accepts positional and physics updates from Admin.
+    // Server remains the strict authority on array size (who is playing) and metadata (teams, names).
     applyState(state) {
         if (!state.discs) return;
-
-        // Ensure disc array size matches
-        while (this.discs.length < state.discs.length) {
-            this.discs.push(new Disc());
-        }
-        while (this.discs.length > state.discs.length) {
-            this.discs.pop();
-        }
 
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
+            // If admin has extra or fewer discs during a race condition, just update what matches.
             if (!disc) continue;
-
-            // Apply metadata
-            if (sd.isPlayer !== undefined) {
-                disc.isPlayer = sd.isPlayer;
-                disc.team = sd.team;
-                if (sd.name) disc._playerName = sd.name;
-                if (sd.avatar) disc._avatar = sd.avatar;
-                if (sd.id) disc.ownerId = sd.id; // Server uses ownerId instead of id
-            } else if (sd.color) {
-                disc.color = sd.color;
-            }
-            if (sd.kicking !== undefined) disc.kicking = sd.kicking;
-            if (sd.typing !== undefined) disc.typing = sd.typing;
-            if (sd.radius) disc.radius = sd.radius;
 
             // Apply position and speed directly
             disc.pos.x = sd.x;
             disc.pos.y = sd.y;
             disc.speed.x = sd.sx;
             disc.speed.y = sd.sy;
+            
+            // Admin also controls kicking state since Admin simulates collision
+            if (sd.kicking !== undefined) disc.kicking = sd.kicking;
         }
     }
 
