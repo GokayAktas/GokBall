@@ -47,7 +47,7 @@ io.on('connection', (socket) => {
     });
 
     // --- Create Room ---
-    socket.on('createRoom', (options) => {
+    socket.on('createRoom', (options = {}) => {
         const roomName = (options.name || 'GokBall Room').trim();
 
         // Duplicate name check
@@ -61,9 +61,9 @@ io.on('connection', (socket) => {
         const room = new Room({
             name: roomName,
             password: options.password || '',
-            maxPlayers: options.maxPlayers || 10,
-            scoreLimit: options.scoreLimit || 3,
-            timeLimit: options.timeLimit || 180,
+            maxPlayers: options.maxPlayers || 12,
+            scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
+            timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180,
             stadium: options.stadium || null
         });
 
@@ -227,7 +227,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         const player = room.players.get(socket.id);
         if (player?.isAdmin) {
-            room.game.scoreLimit = parseInt(limit) || 3;
+            room.game.scoreLimit = limit === "0" ? 0 : (parseInt(limit) || 3);
             room.broadcast('roomUpdate', { scoreLimit: room.game.scoreLimit });
         }
     });
@@ -237,7 +237,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         const player = room.players.get(socket.id);
         if (player?.isAdmin) {
-            room.game.timeLimit = parseInt(limit) || 180;
+            room.game.timeLimit = limit === "0" ? 0 : (parseInt(limit) || 180);
             room.broadcast('roomUpdate', { timeLimit: room.game.timeLimit });
         }
     });

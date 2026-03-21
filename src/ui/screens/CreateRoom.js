@@ -36,7 +36,7 @@ export class CreateRoom {
 
         <div class="form-row">
           <div class="input-group">
-            <label for="maxPlayers">Max Oyuncu</label>
+            <label for="maxPlayers">Max Oyuncu: <span id="maxPlayersValue" class="value-highlight">12</span></label>
             <select id="maxPlayers" class="input">
               <option value="2">2</option>
               <option value="4">4</option>
@@ -53,7 +53,7 @@ export class CreateRoom {
           </div>
 
           <div class="input-group">
-            <label for="scoreLimit">Skor Limiti</label>
+            <label for="scoreLimit">Skor Limiti: <span id="scoreLimitValue" class="value-highlight">3</span></label>
             <select id="scoreLimit" class="input">
               <option value="0">Limit Yok</option>
               <option value="1">1</option>
@@ -67,7 +67,7 @@ export class CreateRoom {
 
         <div class="form-row">
           <div class="input-group">
-            <label for="timeLimit">Süre Limiti (dk)</label>
+            <label for="timeLimit">Süre Limiti (dk): <span id="timeLimitValue" class="value-highlight">3</span></label>
             <select id="timeLimit" class="input">
               <option value="0">Limit Yok</option>
               <option value="1">1</option>
@@ -115,16 +115,22 @@ export class CreateRoom {
     // Slider value display
     const sliders = [
       { id: 'maxPlayers', display: 'maxPlayersValue' },
-      { id: 'scoreLimit', display: 'scoreLimitValue' },
-      { id: 'timeLimit', display: 'timeLimitValue' }
+      { id: 'scoreLimit', display: 'scoreLimitValue', labels: { '0': 'Limit Yok' } },
+      { id: 'timeLimit', display: 'timeLimitValue', labels: { '0': 'Limit Yok' } }
     ];
 
-    sliders.forEach(({ id, display }) => {
+    sliders.forEach(({ id, display, labels }) => {
       const slider = document.getElementById(id);
       const span = document.getElementById(display);
-      slider?.addEventListener('input', () => {
-        if (span) span.textContent = slider.value;
-      });
+      if (!slider || !span) return;
+
+      const update = () => {
+        const val = slider.value;
+        span.textContent = (labels && labels[val]) ? labels[val] : val;
+      };
+
+      slider.addEventListener('change', update);
+      slider.addEventListener('input', update);
     });
 
     // Clear error on input
@@ -169,6 +175,7 @@ export class CreateRoom {
 
   _createRoom() {
     const nameInput = document.getElementById('roomName');
+    const btnCreate = document.getElementById('btnCreate');
     const name = nameInput?.value.trim();
 
     // Validate room name
@@ -184,8 +191,13 @@ export class CreateRoom {
 
     const password = document.getElementById('roomPassword')?.value || '';
     const maxPlayers = parseInt(document.getElementById('maxPlayers')?.value) || 12;
-    const scoreLimit = parseInt(document.getElementById('scoreLimit')?.value) || 3;
-    const timeLimit = (parseInt(document.getElementById('timeLimit')?.value) || 3) * 60;
+
+    const scoreLimitVal = document.getElementById('scoreLimit')?.value;
+    const scoreLimit = (scoreLimitVal === '0') ? 0 : (parseInt(scoreLimitVal) || 3);
+
+    const timeLimitVal = document.getElementById('timeLimit')?.value;
+    const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
+
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
 
     const options = {
@@ -203,6 +215,24 @@ export class CreateRoom {
       options.stadium = this._customStadium;
     }
 
+    // Feedback
+    btnCreate.disabled = true;
+    btnCreate.innerHTML = `
+      <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+      Oda Oluşturuluyor...
+    `;
+
     this.app.createRoom(options);
+
+    // Timeout to re-enable button if something goes wrong
+    setTimeout(() => {
+      if (btnCreate) {
+        btnCreate.disabled = false;
+        btnCreate.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Oda Oluştur
+        `;
+      }
+    }, 5000);
   }
 }

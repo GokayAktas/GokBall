@@ -17,8 +17,12 @@ export class NetworkManager {
      */
     connect() {
         return new Promise((resolve, reject) => {
-            this.socket = io({
-                transports: ['websocket'],
+            // Production URL: Use VITE_SERVER_URL if DEFINED, otherwise fallback to current origin
+            // Note: localhost vite proxy works with empty string
+            const serverUrl = import.meta.env.VITE_SERVER_URL || '';
+            
+            this.socket = io(serverUrl, {
+                transports: ['websocket', 'polling'],
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionAttempts: 10
@@ -167,7 +171,11 @@ export class NetworkManager {
     _trigger(event, data) {
         if (!this.callbacks[event]) return;
         for (const cb of this.callbacks[event]) {
-            cb(data);
+            try {
+                cb(data);
+            } catch (err) {
+                console.error(`[Network] Error in callback for ${event}:`, err);
+            }
         }
     }
 

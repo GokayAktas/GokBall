@@ -305,6 +305,10 @@ class GokBallApp {
     // ============================================
 
     createRoom(options) {
+        if (!this.network.connected) {
+            alert('Sunucuya bağlı değilsiniz! Lütfen sayfayı yenileyin.');
+            return;
+        }
         this.network.createRoom(options);
     }
 

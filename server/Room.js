@@ -108,8 +108,8 @@ export class Room {
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);
-        this.game.scoreLimit = options.scoreLimit || 3;
-        this.game.timeLimit = options.timeLimit || 180;
+        this.game.scoreLimit = options.scoreLimit !== undefined ? options.scoreLimit : 3;
+        this.game.timeLimit = options.timeLimit !== undefined ? options.timeLimit : 180;
     }
 
     /**
@@ -481,6 +481,17 @@ export class Room {
 
     getPlayerList() {
         return [...this.players.values()].map(p => p.toJSON());
+    }
+
+    getRoomData() {
+        return {
+            id: this.id,
+            name: this.name,
+            players: this.getPlayerList(),
+            teamsLocked: this.teamsLocked,
+            stadium: this.stadium,
+            game: this.game.getInfo()
+        };
     }
 
     getInfo() {
