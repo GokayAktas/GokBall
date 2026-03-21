@@ -20,6 +20,7 @@ export class NetworkManager {
             // Production URL: Use VITE_SERVER_URL if DEFINED, otherwise fallback to current origin
             // Note: localhost vite proxy works with empty string
             const serverUrl = import.meta.env.VITE_SERVER_URL || '';
+            console.log('[Network] Connecting to:', serverUrl || 'Current Host');
             
             this.socket = io(serverUrl, {
                 transports: ['websocket', 'polling'],
