@@ -388,29 +388,30 @@ class GokBallApp {
         const isLocalMode = this.currentRoomData?.roomType === 'local';
         const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
 
-        // Apply input to local disc for prediction
+        // Get input
         const inputState = this.input.getInput();
         if (this.network.socket?.id) {
             this.physics.myPlayerId = this.network.socket.id;
-            const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
-            if (myDisc) {
-                myDisc.input = inputState;
-            }
         }
 
         // Send input to server
         this.network.sendInput(inputState);
 
-        // Physics stepping strategy:
-        // - Cloud mode: Only server runs physics. Client just interpolates from server state.
-        //   We still run step() for the LOCAL player only (client-side prediction).
-        // - Local mode + Admin: Admin runs full physics and is the source of truth.
-        // - Local mode + Non-Admin: Same as cloud — interpolate from server.
+        // Physics strategy (Haxball model):
+        // - Cloud mode: NO client physics. Server is 100% authority.
+        //   Client just renders the positions received from server.
+        // - Local mode + Admin: Admin runs full physics, sends to server.
+        //   Admin never receives corrections from server.
+        // - Local mode + Non-Admin: Same as cloud.
         if (isLocalMode && isAdmin) {
-            // Admin in local mode: full physics simulation, this is the master
+            // Apply input to admin's disc
+            const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
+            if (myDisc) myDisc.input = inputState;
+
+            // Admin runs full physics
             this.physics.step();
 
-            // Build and send authoritative state to server
+            // Send authoritative state to server for relay to others
             const authorityState = {
                 physics: this.physics.getState(),
                 scoreRed: this.scoreboard?.scoreRed || 0,
@@ -418,13 +419,11 @@ class GokBallApp {
                 time: this.scoreboard?.time || 0
             };
             this.network.socket.emit('authorityState', authorityState);
-        } else {
-            // Cloud mode or non-admin in Local mode:
-            // Run local prediction step ONLY for the local player's disc
-            this.physics.stepLocalOnly(this.network.socket?.id);
         }
+        // Cloud mode and non-admin Local mode: do nothing here.
+        // All positions come from server via _handleGameState -> applyState.
 
-        // Update camera: Fixed static camera centered on stadium
+        // Update camera
         this.camera.targetX = 0;
         this.camera.targetY = 0;
         this.camera.update();

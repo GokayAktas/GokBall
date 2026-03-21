@@ -623,14 +623,15 @@ export class Physics {
             this.discs.pop();
         }
 
-        // --- Server State Application ---
+        // --- Direct Server State Application (Haxball Model) ---
+        // No lerp, no prediction. Server sends positions at 60fps, client displays them.
+        // This is exactly how Haxball works — no teleportation, no jitter.
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
             if (!disc) continue;
 
-            // *** CRITICAL: Set metadata FIRST, BEFORE checking isLocalPlayer ***
-            // Otherwise disc.id is undefined and we can never identify our own disc
+            // Set metadata first
             if (sd.isPlayer !== undefined) {
                 disc.isPlayer = sd.isPlayer;
                 disc.team = sd.team;
@@ -644,38 +645,16 @@ export class Physics {
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
 
-            // NOW we can correctly identify the local player
-            const isLocalPlayer = (disc.id === this.myPlayerId && this.myPlayerId !== null);
-            const isLocalAdminAuthority = this.isLocalAuthorityMode && isLocalPlayer;
-            
-            if (isLocalAdminAuthority) {
-                // Admin in Local mode: completely skip server position for own disc
+            // Skip position update for admin in local mode (they are the source)
+            if (this.isLocalAuthorityMode && disc.id === this.myPlayerId && this.myPlayerId) {
                 continue;
             }
-            
-            if (isLocalPlayer) {
-                // Local player: gentle convergence (stepLocalOnly already predicted us)
-                const dist = Math.sqrt((disc.pos.x - sd.x) ** 2 + (disc.pos.y - sd.y) ** 2);
-                if (dist > 50) {
-                    // Large desync: hard snap
-                    disc.pos.x = sd.x;
-                    disc.pos.y = sd.y;
-                    disc.speed.x = sd.sx;
-                    disc.speed.y = sd.sy;
-                } else if (dist > 2) {
-                    // Small desync: smooth convergence
-                    const factor = 0.15;
-                    disc.pos.x += (sd.x - disc.pos.x) * factor;
-                    disc.pos.y += (sd.y - disc.pos.y) * factor;
-                }
-            } else {
-                // Remote players and ball: lerp to server position
-                const lerpFactor = 0.5;
-                disc.pos.x += (sd.x - disc.pos.x) * lerpFactor;
-                disc.pos.y += (sd.y - disc.pos.y) * lerpFactor;
-                disc.speed.x = sd.sx;
-                disc.speed.y = sd.sy;
-            }
+
+            // Direct position set — no interpolation
+            disc.pos.x = sd.x;
+            disc.pos.y = sd.y;
+            disc.speed.x = sd.sx;
+            disc.speed.y = sd.sy;
         }
     }
 

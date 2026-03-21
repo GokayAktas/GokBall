@@ -241,8 +241,10 @@ export class Game {
             // Overtime - continue until a goal
         }
 
-        // Broadcast state
-        this.room.broadcast('gameState', this._getGameState());
+        // Broadcast state (only in cloud mode — local mode is handled by applyAuthorityState)
+        if (!isLocalMode) {
+            this.room.broadcast('gameState', this._getGameState());
+        }
     }
 
     _handleGoal(scoredOnTeam) {
