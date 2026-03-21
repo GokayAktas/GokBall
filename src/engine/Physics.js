@@ -207,17 +207,26 @@ export class Physics {
     step() {
         let kickHappened = false;
 
-        // Apply player input
+        // 1. Apply player input
         for (const disc of this.discs) {
             if (!disc.isPlayer) continue;
-            const accel = disc.kicking ? disc.kickingAcceleration : disc.acceleration;
+            
+            let ax = 0;
+            let ay = 0;
+            if (disc.input.up) ay -= 1;
+            if (disc.input.down) ay += 1;
+            if (disc.input.left) ax -= 1;
+            if (disc.input.right) ax += 1;
 
-            if (disc.input.up) disc.speed.y -= accel;
-            if (disc.input.down) disc.speed.y += accel;
-            if (disc.input.left) disc.speed.x -= accel;
-            if (disc.input.right) disc.speed.x += accel;
+            // 2. Normalize diagonal movement (Haxball standard)
+            const accelMag = Math.sqrt(ax * ax + ay * ay);
+            if (accelMag > 0) {
+                const currentAccel = disc.acceleration || 0.11; // Haxball punchy value
+                disc.speed.x += (ax / accelMag) * currentAccel;
+                disc.speed.y += (ay / accelMag) * currentAccel;
+            }
 
-            // Kick
+            // 3. Kick (Standard Haxball logic - no movement slowdown)
             if (disc.input.kick && !disc.kicking) {
                 disc.kicking = true;
                 if (this._performKick(disc)) kickHappened = true;
@@ -226,15 +235,15 @@ export class Physics {
             }
         }
 
-        // Apply damping and move discs
-        for (const disc of this.discs) {
-            if (disc.invMass === 0) continue;
-            const damp = disc.isPlayer && disc.kicking ? disc.kickingDamping : disc.damping;
-            disc.speed.x *= damp;
-            disc.speed.y *= damp;
-            disc.pos.x += disc.speed.x;
-            disc.pos.y += disc.speed.y;
-        }
+    // 4. Move and Damping
+    for (const disc of this.discs) {
+        if (disc.invMass === 0) continue;
+        // Haxball players use fixed damping regardless of kicking state
+        disc.speed.x *= disc.damping;
+        disc.speed.y *= disc.damping;
+        disc.pos.x += disc.speed.x;
+        disc.pos.y += disc.speed.y;
+    }
 
         // Disc-disc collisions
         for (let i = 0; i < this.discs.length; i++) {
@@ -543,11 +552,15 @@ export class Physics {
 
     /**
      * Apply state from server
+     * MODIFIED: Added interpolation for others and prediction support for local player
      */
     applyState(state) {
         if (!state.discs) return;
 
-        // Sync disc array length (server might have added/removed player discs)
+        // Keep local player ID
+        const localId = this.myPlayerId;
+
+        // Sync disc array length
         while (this.discs.length < state.discs.length) {
             this.discs.push(new Disc());
         }
@@ -555,31 +568,45 @@ export class Physics {
             this.discs.pop();
         }
 
-        // Apply state
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
-            disc.pos.x = sd.x;
-            disc.pos.y = sd.y;
-            disc.speed.x = sd.sx;
-            disc.speed.y = sd.sy;
+
+            // If this is our own disc, we only sync if the error is significant (Prediction)
+            const isLocal = (disc.id === localId && localId !== null);
+            
+            if (isLocal) {
+                const distError = Math.sqrt(Math.pow(disc.pos.x - sd.x, 2) + Math.pow(disc.pos.y - sd.y, 2));
+                // Only snap if server and client are too far apart (e.g. > 30px)
+                if (distError > 30) {
+                    disc.pos.x = sd.x;
+                    disc.pos.y = sd.y;
+                    disc.speed.x = sd.sx;
+                    disc.speed.y = sd.sy;
+                }
+            } else {
+                // For other discs, we could interpolate, but for now let's use velocity-based smoothing
+                // Instead of snapping, we move towards the target to avoid "teleporting"
+                const lerpFactor = 0.6; // Higher = faster snap, Lower = smoother but more laggy-looking
+                disc.pos.x = disc.pos.x + (sd.x - disc.pos.x) * lerpFactor;
+                disc.pos.y = disc.pos.y + (sd.y - disc.pos.y) * lerpFactor;
+                
+                disc.speed.x = sd.sx;
+                disc.speed.y = sd.sy;
+            }
 
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
-
-            // Sync radius for ALL discs (player + non-player)
             if (sd.radius) disc.radius = sd.radius;
 
-            // Sync player-specific properties if provided
             if (sd.isPlayer !== undefined) {
                 disc.isPlayer = sd.isPlayer;
                 disc.team = sd.team;
                 if (sd.name) disc._playerName = sd.name;
                 if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
-            } else {
-                // Static disc props (ball, posts)
-                if (sd.color) disc.color = sd.color;
+            } else if (sd.color) {
+                disc.color = sd.color;
             }
         }
     }

@@ -378,9 +378,22 @@ class GokBallApp {
     _gameLoop() {
         if (!this.gameRunning) return;
 
-        // Send input to server
+        // Apply input to local disc for prediction
         const inputState = this.input.getInput();
+        if (this.network.socket?.id) {
+            this.physics.myPlayerId = this.network.socket.id;
+            const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
+            if (myDisc) {
+                myDisc.input = inputState;
+            }
+        }
+
+        // Send input to server
         this.network.sendInput(inputState);
+
+        // --- Client-Side Prediction (CSP) ---
+        // Run physics step on client so local player moves instantly
+        this.physics.step();
 
         // Update camera: Fixed static camera centered on stadium
         this.camera.targetX = 0;

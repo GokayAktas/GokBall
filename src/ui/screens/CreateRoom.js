@@ -96,6 +96,17 @@ export class CreateRoom {
           </div>
         </div>
 
+        <div class="input-group">
+          <label for="roomType">Sunucu Lokasyonu / Performans</label>
+          <select id="roomType" class="input">
+            <option value="cloud" selected>🌍 Bulut Sunucu (Standart - Herkese Eşit)</option>
+            <option value="local">⚡ Yerel Ana Bilgisayar (Admin İçin 0 Ping)</option>
+          </select>
+          <small style="color: var(--text-muted); font-size: 11px; display:block; margin-top:4px; line-height: 1.4;">
+            <b>Yerel:</b> Odayı kuran kişi (Admin) 0 ping ile oynar. Fizik hesaplamaları Admin'in bilgisayarına göre yapılır (Haxball P2P modu).
+          </small>
+        </div>
+
         <button class="btn btn-primary btn-lg btn-block" id="btnCreate">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           Oda Oluştur
@@ -199,6 +210,7 @@ export class CreateRoom {
     const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
 
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
+    const roomType = document.getElementById('roomType')?.value || 'cloud';
 
     const options = {
       name,
@@ -207,6 +219,7 @@ export class CreateRoom {
       scoreLimit,
       timeLimit,
       stadium: stadiumValue,
+      roomType,
       playerName: this.app.playerName || 'Player'
     };
 
