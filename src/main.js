@@ -391,9 +391,13 @@ class GokBallApp {
         // Send input to server
         this.network.sendInput(inputState);
 
-        // --- Client-Side Prediction (CSP) ---
-        // Run physics step on client so local player moves instantly
+        // --- Client-Side Prediction (CSP) & Admin Authority ---
         this.physics.step();
+
+        // If 'Local' mode and I am Admin, send my current simulation state to others
+        if (this.currentRoomData?.roomType === 'local' && this.network.socket?.id === this.currentRoomData?.adminId) {
+            this.network.socket.emit('authorityState', this._gameState);
+        }
 
         // Update camera: Fixed static camera centered on stadium
         this.camera.targetX = 0;

@@ -64,7 +64,8 @@ io.on('connection', (socket) => {
             maxPlayers: options.maxPlayers || 12,
             scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
             timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180,
-            stadium: options.stadium || null
+            stadium: options.stadium || null,
+            roomType: options.roomType || 'cloud'
         });
 
         rooms.set(room.id, room);
@@ -132,6 +133,17 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (room && room.game.state === 'playing') {
             room.game.setPlayerInput(socket.id, input);
+        }
+    });
+
+    // --- Authority Update (Local/P2P Host Mode) ---
+    // In local mode, the Admin's client calculates physics and sends the authoritative state here.
+    socket.on('authorityState', (state) => {
+        const room = getPlayerRoom(socket.id);
+        if (room && room.roomType === 'local' && socket.id === room.hostId) {
+            // Apply admin's state to server and broadcast to everyone else
+            room.game.applyAuthorityState(state);
+            // Optimization: We could skip server tick in local mode, but for now we just sync.
         }
     });
 

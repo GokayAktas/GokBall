@@ -265,6 +265,26 @@ export class Game {
         return false;
     }
 
+    /**
+     * Apply state from an authoritative client (Admin in Local mode)
+     */
+    applyAuthorityState(state) {
+        if (!state) return;
+        
+        // Sync physics discs
+        if (state.physics) {
+            this.physics.applyState(state.physics);
+        }
+
+        // Sync score and time
+        if (state.scoreRed !== undefined) this.scoreRed = state.scoreRed;
+        if (state.scoreBlue !== undefined) this.scoreBlue = state.scoreBlue;
+        if (state.time !== undefined) this.timeElapsed = state.time * (this.tickRate || 60);
+
+        // Broadcast to others immediately
+        this.room.broadcast('gameState', this._getGameState());
+    }
+
     _getGameState() {
         // Sync typing status from players to physics discs
         for (const player of this.room.players.values()) {

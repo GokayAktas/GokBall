@@ -93,6 +93,7 @@ export class Room {
         this.name = options.name || 'GokBall Room';
         this.password = options.password || '';
         this.maxPlayers = Math.min(options.maxPlayers || 12, 24);
+        this.roomType = options.roomType || 'cloud';
         this.players = new Map(); // socketId -> Player
         this.bannedIPs = new Set();
         this.hostId = null;
@@ -486,10 +487,12 @@ export class Room {
     getRoomData() {
         return {
             id: this.id,
+            adminId: this.hostId,
             name: this.name,
             players: this.getPlayerList(),
             teamsLocked: this.teamsLocked,
             stadium: this.stadium,
+            roomType: this.roomType,
             game: this.game.getInfo()
         };
     }
