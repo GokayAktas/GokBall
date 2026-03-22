@@ -130,7 +130,7 @@ const STADIUMS = {
             { p0: [420, 75], p1: [420, -75], team: "blue" }
         ],
         discs: [
-            { pos: [0, 0], radius: 6.0, invMass: 1.0, bCoef: 0.5, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
+            { pos: [0, 0], radius: 6.5, invMass: 1.1, bCoef: 0.5, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
             // Posts (Red/Blue Dots)
             { pos: [-420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
             { pos: [-420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
@@ -150,7 +150,7 @@ const STADIUMS = {
             { normal: [-1, 0], dist: -600, bCoef: 0.1, cMask: ["all"] }
         ],
         playerPhysics: {
-            radius: 17.0, bCoef: 0.5, invMass: 0.4, damping: 0.957,
+            radius: 18.0, bCoef: 0.5, invMass: 0.38, damping: 0.957,
             acceleration: 0.105, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 3.8
         },
         ballPhysics: "disc0"

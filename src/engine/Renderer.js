@@ -233,7 +233,8 @@ export class Renderer {
             let fill, border, lw;
             if (disc.isPlayer) {
                 // Priority: Custom Color -> Default Team Color
-                if (disc.color) {
+                // Ensure disc.color is a valid hex string before using it
+                if (disc.color && disc.color.length >= 3 && disc.color !== 'null') {
                     fill = '#' + disc.color;
                 } else {
                     fill = disc.team === 'red' ? '#c70000' : '#00008c';
