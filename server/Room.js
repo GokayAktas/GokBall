@@ -144,8 +144,8 @@ const STADIUMS = {
             { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
         ],
         playerPhysics: {
-            radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 3.8
+            radius: 15.5, bCoef: 0.5, invMass: 0.5, damping: 0.957,
+            acceleration: 0.105, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 3.65
         },
         ballPhysics: "disc0"
     },

@@ -138,7 +138,7 @@ export class Renderer {
                 ctx.strokeStyle = '#' + bg.centerLineColor;
             }
             ctx.beginPath();
-            const r = bg.kickOffRadius || 0;
+            const r = (bg.kickOffRadius || 0) + 2;
             // Draw upper part
             ctx.moveTo(0, -h);
             ctx.lineTo(0, -r);

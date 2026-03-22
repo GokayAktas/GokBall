@@ -209,7 +209,7 @@ export class GamePhysics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -243,16 +243,20 @@ export class GamePhysics {
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // 1. Defending team (scored) strictly in their half
-                    if (isRed && disc.pos.x + disc.radius > 0) {
-                        disc.pos.x = -disc.radius;
-                        if (disc.speed.x > 0) disc.speed.x = 0;
-                    } else if (!isRed && disc.pos.x - disc.radius < 0) {
-                        disc.pos.x = disc.radius;
-                        if (disc.speed.x < 0) disc.speed.x = 0;
+                    // 1. Defending team strictly in their half (wall behavior)
+                    if (isRed) {
+                        if (disc.pos.x > -disc.radius) {
+                            disc.pos.x = -disc.radius;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
+                        }
+                    } else { // blue is defending
+                        if (disc.pos.x < disc.radius) {
+                            disc.pos.x = disc.radius;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
+                        }
                     }
 
-                    // 2. Defending team blocked FROM center circle
+                    // 2. Defending team blocked FROM center circle (radial wall)
                     if (dist < defendMinDist && dist > 0) {
                         const nx = dx / dist;
                         const ny = dy / dist;
@@ -266,14 +270,15 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (conceded)
-                    // If center of player is OUTSIDE the center circle, apply half-line constraint
-                    const inCircle = dist < kickOffRadius;
-                    if (!inCircle) {
-                        if (isRed && disc.pos.x + disc.radius > 0) {
+                    // 3. Kickoff team (the one who scored)
+                    // They MUST stay in their half, even inside the circle (wall behavior)
+                    if (isRed) {
+                        if (disc.pos.x > -disc.radius) {
                             disc.pos.x = -disc.radius;
                             if (disc.speed.x > 0) disc.speed.x = 0;
-                        } else if (!isRed && disc.pos.x - disc.radius < 0) {
+                        }
+                    } else { // blue is kickoff
+                        if (disc.pos.x < disc.radius) {
                             disc.pos.x = disc.radius;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
