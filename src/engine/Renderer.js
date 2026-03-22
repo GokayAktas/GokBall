@@ -17,6 +17,11 @@ export class Renderer {
         this.offCtx = this.offscreen.getContext('2d');
         this._stadiumDirty = true;
         this._lastStadiumName = null;
+
+        // Assets
+        this.starballImg = new Image();
+        this.starballImg.src = '/assets/starball.png';
+        this.starballImg.onload = () => { this._stadiumDirty = true; };
     }
 
     resize() {
@@ -134,11 +139,21 @@ export class Renderer {
             ctx.stroke();
         }
 
-        // Kickoff Circle (Optional)
-        if (bg.kickOffRadius > 0 && bg.showKickOffCircle !== false) {
-            ctx.beginPath();
-            ctx.arc(0, 0, bg.kickOffRadius, 0, Math.PI * 2);
-            ctx.stroke();
+        // Starball Image or Kickoff Circle
+        if (bg.kickOffRadius > 0) {
+            if (bg.useStarballImage && this.starballImg && this.starballImg.complete) {
+                // Draw Starball image
+                const r = bg.kickOffRadius;
+                ctx.save();
+                ctx.globalAlpha = 0.6; // Slightly transparent to blend in
+                ctx.drawImage(this.starballImg, -r, -r, r * 2, r * 2);
+                ctx.restore();
+            } else if (bg.showKickOffCircle !== false) {
+                // Draw standard circle
+                ctx.beginPath();
+                ctx.arc(0, 0, bg.kickOffRadius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
         }
     }
 
