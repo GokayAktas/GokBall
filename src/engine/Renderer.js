@@ -76,8 +76,8 @@ export class Renderer {
         const w = bg.width;
         const h = bg.height;
 
-        // Outer floor color (User request: #718d5a)
-        ctx.fillStyle = '#718d5a';
+        // Outer area color
+        ctx.fillStyle = '#' + (bg.bgColor || '718d5a');
         ctx.fillRect(-2000, -2000, 4000, 4000);
 
         // Inner field stripes
@@ -111,19 +111,31 @@ export class Renderer {
         const w = bg.width;
         const h = bg.height;
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        // Use custom line color if provided, otherwise default based on dark background
+        if (bg.lineColor) {
+            ctx.strokeStyle = '#' + bg.lineColor;
+        } else {
+            const isDark = bg.color === '404040' || bg.color === '333333';
+            ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.4)';
+        }
+        
         ctx.lineWidth = 2.5;
 
+        // Outer Boundary
         ctx.beginPath();
         ctx.rect(-w, -h, w * 2, h * 2);
         ctx.stroke();
 
-        ctx.beginPath();
-        ctx.moveTo(0, -h);
-        ctx.lineTo(0, h);
-        ctx.stroke();
+        // Midfield Line (Optional)
+        if (bg.showCenterLine !== false) {
+            ctx.beginPath();
+            ctx.moveTo(0, -h);
+            ctx.lineTo(0, h);
+            ctx.stroke();
+        }
 
-        if (bg.kickOffRadius > 0) {
+        // Kickoff Circle (Optional)
+        if (bg.kickOffRadius > 0 && bg.showKickOffCircle !== false) {
             ctx.beginPath();
             ctx.arc(0, 0, bg.kickOffRadius, 0, Math.PI * 2);
             ctx.stroke();

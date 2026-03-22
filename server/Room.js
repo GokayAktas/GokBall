@@ -84,7 +84,12 @@ const STADIUMS = {
     futsal: {
         name: "Futsal 3v3",
         width: 480, height: 260, spawnDistance: 170,
-        bg: { type: "grass", width: 420, height: 220, kickOffRadius: 80, cornerRadius: 0, color: "404040", stripeColor: "383838", bgColor: "333333" },
+        bg: { 
+            type: "grass", width: 420, height: 220, 
+            kickOffRadius: 80, cornerRadius: 0, 
+            color: "4A4A4A", stripeColor: "4A4A4A", bgColor: "3A3A3A",
+            lineColor: "FFFFFF", showCenterLine: false, showKickOffCircle: true
+        },
         vertexes: [
             { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] }, // 0
             { x: -420, y: 55, bCoef: 0.1, cMask: ["ball"] },  // 1
@@ -96,12 +101,22 @@ const STADIUMS = {
             { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 7
             { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
             { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
-            { x: -460, y: 35, bCoef: 0.1, cMask: ["ball"] },  // 10
-            { x: -460, y: -35, bCoef: 0.1, cMask: ["ball"] }, // 11
-            { x: 460, y: 35, bCoef: 0.1, cMask: ["ball"] },   // 12
-            { x: 460, y: -35, bCoef: 0.1, cMask: ["ball"] }   // 13
+            { x: -460, y: 40, bCoef: 0.1, cMask: ["ball"] },  // 10
+            { x: -460, y: -40, bCoef: 0.1, cMask: ["ball"] }, // 11
+            { x: 460, y: 40, bCoef: 0.1, cMask: ["ball"] },   // 12
+            { x: 460, y: -40, bCoef: 0.1, cMask: ["ball"] },  // 13
+            // Starball Pattern (Auto-generated)
+            { x: 90.0, y: 0.0, cMask: [], cGroup: [] }, { x: 70.6, y: -12.1, cMask: [], cGroup: [] }, { x: 61.3, y: 8.8, cMask: [], cGroup: [] }, { x: 88.7, y: 12.1, cMask: [], cGroup: [] }, { x: 79.4, y: -8.8, cMask: [], cGroup: [] },
+            { x: 63.6, y: 63.6, cMask: [], cGroup: [] }, { x: 41.3, y: 62.1, cMask: [], cGroup: [] }, { x: 45.4, y: 42.0, cMask: [], cGroup: [] }, { x: 69.8, y: 34.8, cMask: [], cGroup: [] }, { x: 50.8, y: 60.5, cMask: [], cGroup: [] },
+            { x: 0.0, y: 90.0, cMask: [], cGroup: [] }, { x: -12.1, y: 70.6, cMask: [], cGroup: [] }, { x: 8.8, y: 61.3, cMask: [], cGroup: [] }, { x: 12.1, y: 88.7, cMask: [], cGroup: [] }, { x: -8.8, y: 79.4, cMask: [], cGroup: [] },
+            { x: -63.6, y: 63.6, cMask: [], cGroup: [] }, { x: -62.1, y: 41.3, cMask: [], cGroup: [] }, { x: -42.0, y: 45.4, cMask: [], cGroup: [] }, { x: -34.8, y: 69.8, cMask: [], cGroup: [] }, { x: -60.5, y: 50.8, cMask: [], cGroup: [] },
+            { x: -90.0, y: 0.0, cMask: [], cGroup: [] }, { x: -70.6, y: 12.1, cMask: [], cGroup: [] }, { x: -61.3, y: -8.8, cMask: [], cGroup: [] }, { x: -88.7, y: -12.1, cMask: [], cGroup: [] }, { x: -79.4, y: 8.8, cMask: [], cGroup: [] },
+            { x: -63.6, y: -63.6, cMask: [], cGroup: [] }, { x: -41.3, y: -62.1, cMask: [], cGroup: [] }, { x: -45.4, y: -42.0, cMask: [], cGroup: [] }, { x: -69.8, y: -34.8, cMask: [], cGroup: [] }, { x: -50.8, y: -60.5, cMask: [], cGroup: [] },
+            { x: 0.0, y: -90.0, cMask: [], cGroup: [] }, { x: 12.1, y: -70.6, cMask: [], cGroup: [] }, { x: -8.8, y: -61.3, cMask: [], cGroup: [] }, { x: -12.1, y: -88.7, cMask: [], cGroup: [] }, { x: 8.8, y: -79.4, cMask: [], cGroup: [] },
+            { x: 63.6, y: -63.6, cMask: [], cGroup: [] }, { x: 62.1, y: -41.3, cMask: [], cGroup: [] }, { x: 42.0, y: -45.4, cMask: [], cGroup: [] }, { x: 34.8, y: -69.8, cMask: [], cGroup: [] }, { x: 60.5, y: -50.8, cMask: [], cGroup: [] }
         ],
         segments: [
+            // Outer Lines (White)
             { v0: 0, v1: 8, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 8, v1: 4, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 3, v1: 9, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
@@ -110,28 +125,38 @@ const STADIUMS = {
             { v0: 2, v1: 3, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 4, v1: 5, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 6, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            // Middle Line
-            { v0: 8, v1: 9, vis: true, color: "FFFFFF", bCoef: 0.1, cMask: ["ball"] },
-            // Red Goal
-            { v0: 1, v1: 10, curve: 90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 10, v1: 11, curve: 0, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 11, v1: 2, curve: 90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
-            // Blue Goal
-            { v0: 5, v1: 12, curve: -90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 12, v1: 13, curve: 0, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 13, v1: 6, curve: -90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] }
+            // Middle Line (Gray)
+            { v0: 8, v1: 9, vis: true, color: "666666", bCoef: 0.1, cMask: ["all"] },
+            // Goals (Gray)
+            { v0: 1, v1: 10, curve: 90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 10, v1: 11, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 11, v1: 2, curve: 90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 5, v1: 12, curve: -90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 12, v1: 13, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 13, v1: 6, curve: -90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            // Stars Pattern
+            { v0: 14, v1: 15, vis: true, color: "666666", bCoef: 0 }, { v0: 15, v1: 16, vis: true, color: "666666", bCoef: 0 }, { v0: 16, v1: 17, vis: true, color: "666666", bCoef: 0 }, { v0: 17, v1: 18, vis: true, color: "666666", bCoef: 0 }, { v0: 18, v1: 14, vis: true, color: "666666", bCoef: 0 },
+            { v0: 19, v1: 20, vis: true, color: "666666", bCoef: 0 }, { v0: 20, v1: 21, vis: true, color: "666666", bCoef: 0 }, { v0: 21, v1: 22, vis: true, color: "666666", bCoef: 0 }, { v0: 22, v1: 23, vis: true, color: "666666", bCoef: 0 }, { v0: 23, v1: 19, vis: true, color: "666666", bCoef: 0 },
+            { v0: 24, v1: 25, vis: true, color: "666666", bCoef: 0 }, { v0: 25, v1: 26, vis: true, color: "666666", bCoef: 0 }, { v0: 26, v1: 27, vis: true, color: "666666", bCoef: 0 }, { v0: 27, v1: 28, vis: true, color: "666666", bCoef: 0 }, { v0: 28, v1: 24, vis: true, color: "666666", bCoef: 0 },
+            { v0: 29, v1: 30, vis: true, color: "666666", bCoef: 0 }, { v0: 30, v1: 31, vis: true, color: "666666", bCoef: 0 }, { v0: 31, v1: 32, vis: true, color: "666666", bCoef: 0 }, { v0: 32, v1: 33, vis: true, color: "666666", bCoef: 0 }, { v0: 33, v1: 29, vis: true, color: "666666", bCoef: 0 },
+            { v0: 34, v1: 35, vis: true, color: "666666", bCoef: 0 }, { v0: 35, v1: 36, vis: true, color: "666666", bCoef: 0 }, { v0: 36, v1: 37, vis: true, color: "666666", bCoef: 0 }, { v0: 37, v1: 38, vis: true, color: "666666", bCoef: 0 }, { v0: 38, v1: 34, vis: true, color: "666666", bCoef: 0 },
+            { v0: 39, v1: 40, vis: true, color: "666666", bCoef: 0 }, { v0: 40, v1: 41, vis: true, color: "666666", bCoef: 0 }, { v0: 41, v1: 42, vis: true, color: "666666", bCoef: 0 }, { v0: 42, v1: 43, vis: true, color: "666666", bCoef: 0 }, { v0: 43, v1: 39, vis: true, color: "666666", bCoef: 0 },
+            { v0: 44, v1: 45, vis: true, color: "666666", bCoef: 0 }, { v0: 45, v1: 46, vis: true, color: "666666", bCoef: 0 }, { v0: 46, v1: 47, vis: true, color: "666666", bCoef: 0 }, { v0: 47, v1: 48, vis: true, color: "666666", bCoef: 0 }, { v0: 48, v1: 44, vis: true, color: "666666", bCoef: 0 },
+            { v0: 49, v1: 50, vis: true, color: "666666", bCoef: 0 }, { v0: 50, v1: 51, vis: true, color: "666666", bCoef: 0 }, { v0: 51, v1: 52, vis: true, color: "666666", bCoef: 0 }, { v0: 52, v1: 53, vis: true, color: "666666", bCoef: 0 }, { v0: 53, v1: 49, vis: true, color: "666666", bCoef: 0 }
         ],
         goals: [
             { p0: [-420, 55], p1: [-420, -55], team: "red" },
             { p0: [420, 55], p1: [420, -55], team: "blue" }
         ],
         discs: [
-            { pos: [0, 0], radius: 6.4, invMass: 1.5, bCoef: 0.4, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
-            // Posts
-            { pos: [-420, 55], radius: 6, invMass: 0, bCoef: 0.5, color: "FF0000", cMask: ["all"] },
-            { pos: [-420, -55], radius: 6, invMass: 0, bCoef: 0.5, color: "FF0000", cMask: ["all"] },
-            { pos: [420, 55], radius: 6, invMass: 0, bCoef: 0.5, color: "0000FF", cMask: ["all"] },
-            { pos: [420, -55], radius: 6, invMass: 0, bCoef: 0.5, color: "0000FF", cMask: ["all"] }
+            { pos: [0, 0], radius: 6, invMass: 1.6, bCoef: 0.4, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
+            // Posts (Red/Blue Dots)
+            { pos: [-420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
+            { pos: [-420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
+            { pos: [420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
+            { pos: [420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
+            // Center Spot
+            { pos: [0, 0], radius: 3, invMass: 0, bCoef: 0, color: "FFFFFF", cMask: [], cGroup: [] }
         ],
         planes: [
             { normal: [0, 1], dist: -260, bCoef: 0.1, cMask: ["all"] },
@@ -141,7 +166,7 @@ const STADIUMS = {
         ],
         playerPhysics: {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.08, kickingAcceleration: 0.05, kickingDamping: 0.96, kickStrength: 4 // Reduced kick for futsal feel
+            acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 3.8
         },
         ballPhysics: "disc0"
     },
