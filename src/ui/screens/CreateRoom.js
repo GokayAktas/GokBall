@@ -84,6 +84,7 @@ export class CreateRoom {
             <div style="display:flex; gap: var(--space-sm);">
               <select id="stadiumSelect" class="input" style="flex:1;">
                 <option value="small">Küçük (1v1)</option>
+                <option value="futsal">Futsal (3v3)</option>
                 <option value="classic" selected>Klasik (3v3)</option>
                 <option value="big">Büyük (5v5)</option>
                 <option value="huge">Devasa (7v7)</option>

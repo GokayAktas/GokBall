@@ -81,6 +81,70 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
 const STADIUMS = {
     small: createStadium("Küçük", 250, 120, 120),
     classic: createStadium("Klasik", 370, 170, 170),
+    futsal: {
+        name: "Futsal 3v3",
+        width: 480, height: 260, spawnDistance: 170,
+        bg: { type: "grass", width: 420, height: 220, kickOffRadius: 80, cornerRadius: 0, color: "404040", stripeColor: "383838", bgColor: "333333" },
+        vertexes: [
+            { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] }, // 0
+            { x: -420, y: 55, bCoef: 0.1, cMask: ["ball"] },  // 1
+            { x: -420, y: -55, bCoef: 0.1, cMask: ["ball"] }, // 2
+            { x: -420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 3
+            { x: 420, y: 220, bCoef: 0.1, cMask: ["ball"] },  // 4
+            { x: 420, y: 55, bCoef: 0.1, cMask: ["ball"] },   // 5
+            { x: 420, y: -55, bCoef: 0.1, cMask: ["ball"] },  // 6
+            { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 7
+            { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
+            { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
+            { x: -460, y: 35, bCoef: 0.1, cMask: ["ball"] },  // 10
+            { x: -460, y: -35, bCoef: 0.1, cMask: ["ball"] }, // 11
+            { x: 460, y: 35, bCoef: 0.1, cMask: ["ball"] },   // 12
+            { x: 460, y: -35, bCoef: 0.1, cMask: ["ball"] }   // 13
+        ],
+        segments: [
+            { v0: 0, v1: 8, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 8, v1: 4, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 3, v1: 9, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 9, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 0, v1: 1, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 2, v1: 3, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 4, v1: 5, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            { v0: 6, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
+            // Middle Line
+            { v0: 8, v1: 9, vis: true, color: "FFFFFF", bCoef: 0.1, cMask: ["ball"] },
+            // Red Goal
+            { v0: 1, v1: 10, curve: 90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 10, v1: 11, curve: 0, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 11, v1: 2, curve: 90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
+            // Blue Goal
+            { v0: 5, v1: 12, curve: -90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 12, v1: 13, curve: 0, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 13, v1: 6, curve: -90, vis: true, color: "CCCCCC", bCoef: 0.1, cMask: ["ball"] }
+        ],
+        goals: [
+            { p0: [-420, 55], p1: [-420, -55], team: "red" },
+            { p0: [420, 55], p1: [420, -55], team: "blue" }
+        ],
+        discs: [
+            { pos: [0, 0], radius: 6.4, invMass: 1.5, bCoef: 0.4, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
+            // Posts
+            { pos: [-420, 55], radius: 6, invMass: 0, bCoef: 0.5, color: "FF0000", cMask: ["all"] },
+            { pos: [-420, -55], radius: 6, invMass: 0, bCoef: 0.5, color: "FF0000", cMask: ["all"] },
+            { pos: [420, 55], radius: 6, invMass: 0, bCoef: 0.5, color: "0000FF", cMask: ["all"] },
+            { pos: [420, -55], radius: 6, invMass: 0, bCoef: 0.5, color: "0000FF", cMask: ["all"] }
+        ],
+        planes: [
+            { normal: [0, 1], dist: -260, bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, -1], dist: -260, bCoef: 0.1, cMask: ["all"] },
+            { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
+            { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
+        ],
+        playerPhysics: {
+            radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+            acceleration: 0.08, kickingAcceleration: 0.05, kickingDamping: 0.96, kickStrength: 4 // Reduced kick for futsal feel
+        },
+        ballPhysics: "disc0"
+    },
     big: createStadium("Büyük", 550, 270, 300),
     huge: createStadium("Devasa", 750, 370, 450)
 };

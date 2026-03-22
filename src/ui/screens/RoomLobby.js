@@ -2,6 +2,7 @@
  * Room Lobby Screen - Team picker, player list, chat, admin controls
  */
 import JSON5 from 'json5';
+import HBSParser from '../../engine/HBSParser.js';
 
 export class RoomLobby {
   constructor(app) {
@@ -97,9 +98,11 @@ export class RoomLobby {
               </button>
               <select id="lobbyStadiumSelect" class="input" style="padding: 4px 8px; font-size: 11px; height: 32px; min-width: 100px;">
                  <option value="small">Küçük (1v1)</option>
+                 <option value="futsal">Futsal (3v3)</option>
                  <option value="classic">Klasik (3v3)</option>
                  <option value="big">Büyük (5v5)</option>
                  <option value="huge">Devasa (7v7)</option>
+                 <option value="custom" disabled hidden>Özel Saha</option>
               </select>
               <select id="lobbyScoreLimit" class="input" style="padding: 4px 24px 4px 8px; font-size: 11px; height: 32px; min-width: 80px;">
                  <option value="1">1 Gol</option><option value="3">3 Gol</option><option value="5">5 Gol</option><option value="10">10 Gol</option><option value="0">Sınırsız</option>
@@ -222,13 +225,46 @@ export class RoomLobby {
       // Map Turkish name/current name to value
       const currentName = data.stadium?.name;
       if (currentName === 'Küçük') stadiumSelect.value = 'small';
+      else if (currentName === 'Futsal 3v3') stadiumSelect.value = 'futsal';
       else if (currentName === 'Klasik') stadiumSelect.value = 'classic';
       else if (currentName === 'Büyük') stadiumSelect.value = 'big';
       else if (currentName === 'Devasa') stadiumSelect.value = 'huge';
-      else stadiumSelect.value = 'classic';
+      else stadiumSelect.value = 'custom';
 
       stadiumSelect.addEventListener('change', (e) => {
         this.app.network.changeStadium(e.target.value);
+      });
+    }
+
+    // HBS Upload
+    const hbsUpload = document.getElementById('lobbyHbsUpload');
+    if (hbsUpload) {
+      hbsUpload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const hbsContent = event.target.result;
+            const stadiumData = HBSParser.parse(hbsContent);
+            
+            // Basic validation
+            if (!stadiumData.name) stadiumData.name = file.name.replace('.hbs', '');
+            
+            console.log('HBS parsed successfully:', stadiumData.name);
+            this.app.network.changeStadium(stadiumData);
+            
+            // Re-select value if it was a preset
+            if (stadiumSelect) stadiumSelect.value = 'classic'; // Reset selector visually
+          } catch (err) {
+            console.error('HBS Parse Error:', err);
+            alert('Saha dosyası okunamadı: ' + err.message);
+          }
+        };
+        reader.readAsText(file);
+        // Clear input so same file can be uploaded twice if needed
+        hbsUpload.value = '';
       });
     }
 
