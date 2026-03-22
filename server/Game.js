@@ -54,7 +54,7 @@ export class Game {
         this.scoreBlue = 0;
         this.timeElapsed = 0;
         this.state = 'countdown';
-        this.countdownTicks = 3 * this.tickRate; // 3 second countdown
+        this.countdownTicks = 0; // Starts immediately without waiting
 
         // Reset physics
         this.physics.loadStadium(this.stadiumData);

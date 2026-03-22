@@ -53,7 +53,10 @@ export class RoomLobby {
             <div class="team-card team-column spectator" id="teamSpectator">
               <div class="team-header spectator">
                  <div class="team-title"><span class="team-icon">👁️</span> İzleyiciler</div>
-                 <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinSpectator">İzle</button>
+                 <div style="display:flex; gap: 5px;">
+                   <button class="btn btn-xs team-join-btn" id="btnJoinAuto" style="background:#8e44ad; color:white; border:none; padding:4px 8px; border-radius:4px; font-weight:bold; cursor:pointer;" title="Rastgele/Otomatik yerleş">Rastgele</button>
+                   <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinSpectator">İzle</button>
+                 </div>
               </div>
               <div class="player-list" id="spectatorPlayers"></div>
             </div>
@@ -166,6 +169,26 @@ export class RoomLobby {
         return;
       }
       this.app.network.changeTeam('spectator');
+    });
+
+    document.getElementById('btnJoinAuto')?.addEventListener('click', () => {
+      if (this.teamsLocked) {
+        alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
+        return;
+      }
+      
+      const players = this.roomData?.players || [];
+      const redCount = players.filter(p => p.team === 'red').length;
+      const blueCount = players.filter(p => p.team === 'blue').length;
+      
+      let targetTeam = 'red';
+      if (blueCount < redCount) {
+        targetTeam = 'blue';
+      } else if (redCount === blueCount) {
+        targetTeam = Math.random() < 0.5 ? 'red' : 'blue';
+      }
+      
+      this.app.network.changeTeam(targetTeam);
     });
 
     // Admin buttons

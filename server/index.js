@@ -157,8 +157,8 @@ io.on('connection', (socket) => {
 
         const red = room.getTeamPlayers('red').length;
         const blue = room.getTeamPlayers('blue').length;
-        if (red === 0 || blue === 0) {
-            socket.emit('roomError', { error: 'Both teams need at least one player' });
+        if (red === 0 && blue === 0) {
+            socket.emit('roomError', { error: 'Oyunu başlatmak için en az 1 kişi takıma geçmelidir!' });
             return;
         }
 
