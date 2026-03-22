@@ -209,7 +209,7 @@ export class GamePhysics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 10;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -273,19 +273,37 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (the one who conceded)
-                    // They can enter the circle (even opponent's side), but blocked by midline OUTSIDE circle
+                    // 3. Kickoff team (can enter entire circle but blocked outside opponent side)
                     const inCircle = dist < kickOffRadius;
-                    if (!inCircle) {
-                        if (isRed) {
-                            if (disc.pos.x > -disc.radius) {
-                                disc.pos.x = -disc.radius;
-                                if (disc.speed.x > 0) disc.speed.x = 0;
+                    const inOpponentHalf = isRed ? (disc.pos.x > 0) : (disc.pos.x < 0);
+
+                    if (inOpponentHalf) {
+                        // While in opponent half, they MUST stay inside circle (Physical Wall)
+                        if (dist > (kickOffRadius - disc.radius)) {
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+                            disc.pos.x = nx * (kickOffRadius - disc.radius);
+                            disc.pos.y = ny * (kickOffRadius - disc.radius);
+                            
+                            const dot = disc.speed.x * nx + disc.speed.y * ny;
+                            if (dot > 0) {
+                                disc.speed.x -= dot * nx;
+                                disc.speed.y -= dot * ny;
                             }
-                        } else { // blue is kickoff
-                            if (disc.pos.x < disc.radius) {
-                                disc.pos.x = disc.radius;
-                                if (disc.speed.x < 0) disc.speed.x = 0;
+                        }
+                    } else {
+                        // In their own half, they are free except midline outside circle
+                        if (!inCircle) {
+                            if (isRed) {
+                                if (disc.pos.x > -disc.radius) {
+                                    disc.pos.x = -disc.radius;
+                                    if (disc.speed.x > 0) disc.speed.x = 0;
+                                }
+                            } else {
+                                if (disc.pos.x < disc.radius) {
+                                    disc.pos.x = disc.radius;
+                                    if (disc.speed.x < 0) disc.speed.x = 0;
+                                }
                             }
                         }
                     }
@@ -506,6 +524,7 @@ export class GamePhysics {
                     avatar: d._avatar, 
                     typing: d.typing, 
                     id: d.ownerId || d.id,
+                    color: d.color,
                     input: d.input,
                     cMask: d.cMask,
                     cGroup: d.cGroup,
