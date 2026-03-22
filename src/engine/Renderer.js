@@ -232,13 +232,18 @@ export class Renderer {
 
             let fill, border, lw;
             if (disc.isPlayer) {
-                fill = disc.team === 'red' ? '#E74C3C' : '#3498DB';
+                // Priority: Custom Color -> Default Team Color
+                if (disc.color) {
+                    fill = '#' + disc.color;
+                } else {
+                    fill = disc.team === 'red' ? '#c70000' : '#00008c';
+                }
                 border = disc.kicking ? '#FFFFFF' : '#000000';
                 lw = 2.5;
             } else {
-                fill = '#' + (disc.color || 'FFFFFF');
+                fill = '#' + (disc.color || 'FFB82E'); // Default to target yellow
                 border = '#000000';
-                lw = 1.5; // Thinner outline for ball
+                lw = 3; // Thicker outline for ball per request
             }
 
             ctx.fillStyle = fill;

@@ -398,28 +398,27 @@ class GokBallApp {
         // Send input to server
         this.network.sendInput(inputState);
 
-        // Physics strategy (Haxball model):
-        if (isLocalMode && isAdmin) {
-            // Apply input to admin's disc
-            const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
-            if (myDisc) myDisc.input = inputState;
+        // Fixed Timestep Physics (60Hz) - ROOT CAUSE FIX FOR TELEPORTING
+        const now = performance.now();
+        const dt = now - (this.lastPhysTime || now);
+        this.lastPhysTime = now;
+        
+        // Accumulate time since last frame (cap to avoid spiral of death)
+        this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
 
-            // Admin runs full physics ONLY if game is actively playing
-            if (this._serverGameState === 'playing') {
-                this.physics.step();
+        const stepSize = 1000 / 60; // Standard 60Hz physics
+        while (this.accumulator >= stepSize) {
+            if (isLocalMode && isAdmin) {
+                const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
+                if (myDisc) myDisc.input = inputState;
+                if (this._serverGameState === 'playing') {
+                    this.physics.step();
+                }
+            } else {
+                // RUN PREDICTION AT FIXED 60HZ
+                this.physics.stepLocalOnly(this.network.socket?.id);
             }
-
-            // Send authoritative state to server for relay to others
-            const authorityState = {
-                physics: this.physics.getState(),
-                scoreRed: this.scoreboard?.scoreRed || 0,
-                scoreBlue: this.scoreboard?.scoreBlue || 0,
-                time: this.scoreboard?.time || 0
-            };
-            this.network.socket.emit('authorityState', authorityState);
-        } else {
-            // Cloud mode and non-admin Local mode: Run local prediction
-            this.physics.stepLocalOnly(this.network.socket?.id);
+            this.accumulator -= stepSize;
         }
 
         // Update camera
@@ -434,7 +433,6 @@ class GokBallApp {
 
         // Calculate FPS
         this.frameCount++;
-        const now = performance.now();
         if (now - this.lastFpsTime >= 1000) {
             this.currentFps = this.frameCount;
             this.frameCount = 0;
