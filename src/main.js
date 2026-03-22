@@ -251,7 +251,7 @@ class GokBallApp {
         // Game over
         this.network.on('gameOver', (data) => {
             const winTeamStr = data.winner === 'red' ? 'Kırmızı' : 'Mavi';
-            const color = data.winner === 'red' ? '#E74C3C' : '#3498DB';
+            const color = data.winner === 'red' ? '#c70000' : '#00008c';
 
             // Create nice on-screen overlay instead of alert
             const overlay = document.createElement('div');

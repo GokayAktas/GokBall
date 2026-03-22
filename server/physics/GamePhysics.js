@@ -515,8 +515,7 @@ export class GamePhysics {
                     acceleration: d.acceleration,
                     kickingAcceleration: d.kickingAcceleration,
                     kickingDamping: d.kickingDamping,
-                    kickStrength: d.kickStrength,
-                    color: d.color
+                    kickStrength: d.kickStrength
                 } : { radius: d.radius, color: d.color })
             }))
         };

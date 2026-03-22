@@ -120,7 +120,7 @@ export class Settings {
         const oldText = btn.textContent;
         btn.textContent = 'Bir tuşa bas...';
         btn.style.background = 'rgba(231, 76, 60, 0.2)';
-        btn.style.borderColor = '#E74C3C';
+        btn.style.borderColor = '#c70000';
 
         const handler = (e) => {
           e.preventDefault();

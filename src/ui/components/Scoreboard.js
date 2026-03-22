@@ -109,7 +109,7 @@ export class Scoreboard {
   }
 
   showGoal(team) {
-    const color = team === 'red' ? '#E74C3C' : '#3498DB';
+    const color = team === 'red' ? '#c70000' : '#00008c';
     const overlay = document.createElement('div');
     overlay.className = 'goal-overlay';
     overlay.innerHTML = `<div class="goal-text" style="color: ${color}">GOOOL!!!</div>`;

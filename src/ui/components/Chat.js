@@ -140,7 +140,7 @@ export class Chat {
         if (data.system) {
             div.textContent = data.message;
         } else {
-            const color = data.team === 'red' ? '#E74C3C' : data.team === 'blue' ? '#3498DB' : '#A6C5D7';
+            const color = data.team === 'red' ? '#c70000' : data.team === 'blue' ? '#00008c' : '#A6C5D7';
             div.innerHTML = `<span class="chat-message-author" style="color:${color}">${this._esc(data.playerName)}</span>: ${this._esc(data.message)}`;
         }
 
