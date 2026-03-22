@@ -270,17 +270,20 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (the one who scored)
-                    // They MUST stay in their half, even inside the circle (wall behavior)
-                    if (isRed) {
-                        if (disc.pos.x > -disc.radius) {
-                            disc.pos.x = -disc.radius;
-                            if (disc.speed.x > 0) disc.speed.x = 0;
-                        }
-                    } else { // blue is kickoff
-                        if (disc.pos.x < disc.radius) {
-                            disc.pos.x = disc.radius;
-                            if (disc.speed.x < 0) disc.speed.x = 0;
+                    // 3. Kickoff team (the one who conceded)
+                    // They can enter the circle (even opponent's side), but blocked by midline OUTSIDE circle
+                    const inCircle = dist < kickOffRadius;
+                    if (!inCircle) {
+                        if (isRed) {
+                            if (disc.pos.x > -disc.radius) {
+                                disc.pos.x = -disc.radius;
+                                if (disc.speed.x > 0) disc.speed.x = 0;
+                            }
+                        } else { // blue is kickoff
+                            if (disc.pos.x < disc.radius) {
+                                disc.pos.x = disc.radius;
+                                if (disc.speed.x < 0) disc.speed.x = 0;
+                            }
                         }
                     }
                 }
