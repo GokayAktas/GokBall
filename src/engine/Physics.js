@@ -361,7 +361,7 @@ export class Physics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 3; // Reduced from 6 for better contact feel
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -749,8 +749,20 @@ export class Physics {
                 // Always sync speed from server for physics stability
                 disc.speed.x = sd.sx;
                 disc.speed.y = sd.sy;
+            } else if (disc === this.ballDisc) {
+                // --- NEW: Ball Reconciliation for Fluidity ---
+                // Only snap ball position if error is large (>40px)
+                const dx = sd.x - disc.pos.x;
+                const dy = sd.y - disc.pos.y;
+                if (dx * dx + dy * dy > 1600) { // 40px squared
+                    disc.pos.x = sd.x;
+                    disc.pos.y = sd.y;
+                }
+                // Always sync speed for physical consistency
+                disc.speed.x = sd.sx;
+                disc.speed.y = sd.sy;
             } else {
-                // For others (remote players and ball), snap to server position
+                // For others (remote players), snap to server position
                 disc.pos.x = sd.x;
                 disc.pos.y = sd.y;
                 disc.speed.x = sd.sx;
