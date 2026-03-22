@@ -101,19 +101,19 @@ const STADIUMS = {
             { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 7
             { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
             { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
-            { x: -460, y: 40, bCoef: 0.1, cMask: ["ball"] },  // 10
-            { x: -460, y: -40, bCoef: 0.1, cMask: ["ball"] }, // 11
-            { x: 460, y: 40, bCoef: 0.1, cMask: ["ball"] },   // 12
-            { x: 460, y: -40, bCoef: 0.1, cMask: ["ball"] },  // 13
-            // Starball Pattern (Auto-generated)
-            { x: 90.0, y: 0.0, cMask: [], cGroup: [] }, { x: 70.6, y: -12.1, cMask: [], cGroup: [] }, { x: 61.3, y: 8.8, cMask: [], cGroup: [] }, { x: 88.7, y: 12.1, cMask: [], cGroup: [] }, { x: 79.4, y: -8.8, cMask: [], cGroup: [] },
-            { x: 63.6, y: 63.6, cMask: [], cGroup: [] }, { x: 41.3, y: 62.1, cMask: [], cGroup: [] }, { x: 45.4, y: 42.0, cMask: [], cGroup: [] }, { x: 69.8, y: 34.8, cMask: [], cGroup: [] }, { x: 50.8, y: 60.5, cMask: [], cGroup: [] },
-            { x: 0.0, y: 90.0, cMask: [], cGroup: [] }, { x: -12.1, y: 70.6, cMask: [], cGroup: [] }, { x: 8.8, y: 61.3, cMask: [], cGroup: [] }, { x: 12.1, y: 88.7, cMask: [], cGroup: [] }, { x: -8.8, y: 79.4, cMask: [], cGroup: [] },
-            { x: -63.6, y: 63.6, cMask: [], cGroup: [] }, { x: -62.1, y: 41.3, cMask: [], cGroup: [] }, { x: -42.0, y: 45.4, cMask: [], cGroup: [] }, { x: -34.8, y: 69.8, cMask: [], cGroup: [] }, { x: -60.5, y: 50.8, cMask: [], cGroup: [] },
-            { x: -90.0, y: 0.0, cMask: [], cGroup: [] }, { x: -70.6, y: 12.1, cMask: [], cGroup: [] }, { x: -61.3, y: -8.8, cMask: [], cGroup: [] }, { x: -88.7, y: -12.1, cMask: [], cGroup: [] }, { x: -79.4, y: 8.8, cMask: [], cGroup: [] },
-            { x: -63.6, y: -63.6, cMask: [], cGroup: [] }, { x: -41.3, y: -62.1, cMask: [], cGroup: [] }, { x: -45.4, y: -42.0, cMask: [], cGroup: [] }, { x: -69.8, y: -34.8, cMask: [], cGroup: [] }, { x: -50.8, y: -60.5, cMask: [], cGroup: [] },
-            { x: 0.0, y: -90.0, cMask: [], cGroup: [] }, { x: 12.1, y: -70.6, cMask: [], cGroup: [] }, { x: -8.8, y: -61.3, cMask: [], cGroup: [] }, { x: -12.1, y: -88.7, cMask: [], cGroup: [] }, { x: 8.8, y: -79.4, cMask: [], cGroup: [] },
-            { x: 63.6, y: -63.6, cMask: [], cGroup: [] }, { x: 62.1, y: -41.3, cMask: [], cGroup: [] }, { x: 42.0, y: -45.4, cMask: [], cGroup: [] }, { x: 34.8, y: -69.8, cMask: [], cGroup: [] }, { x: 60.5, y: -50.8, cMask: [], cGroup: [] }
+            { x: -460, y: 55, bCoef: 0.1, cMask: ["ball"] },  // 10: Rectangular corner
+            { x: -460, y: -55, bCoef: 0.1, cMask: ["ball"] }, // 11: Rectangular corner
+            { x: 460, y: 55, bCoef: 0.1, cMask: ["ball"] },   // 12: Rectangular corner
+            { x: 460, y: -55, bCoef: 0.1, cMask: ["ball"] },  // 13: Rectangular corner
+            // Starball Pattern (Auto-generated 8-point star pattern, non-colliding)
+            { x: 92.5, y: 0.0, cMask: [], cGroup: [] }, { x: 74.5, y: -11.5, cMask: [], cGroup: [] }, { x: 67.5, y: 9.5, cMask: [], cGroup: [] }, { x: 91.5, y: 11.5, cMask: [], cGroup: [] }, { x: 84.5, y: -9.5, cMask: [], cGroup: [] },
+            { x: 68.4, y: 68.4, cMask: [], cGroup: [] }, { x: 44.5, y: 65.5, cMask: [], cGroup: [] }, { x: 47.5, y: 44.5, cMask: [], cGroup: [] }, { x: 70.8, y: 36.6, cMask: [], cGroup: [] }, { x: 52.6, y: 61.3, cMask: [], cGroup: [] },
+            { x: 0.0, y: 92.5, cMask: [], cGroup: [] }, { x: -11.5, y: 74.5, cMask: [], cGroup: [] }, { x: 9.5, y: 67.5, cMask: [], cGroup: [] }, { x: 11.5, y: 91.5, cMask: [], cGroup: [] }, { x: -9.5, y: 84.5, cMask: [], cGroup: [] },
+            { x: -68.4, y: 68.4, cMask: [], cGroup: [] }, { x: -65.5, y: 44.5, cMask: [], cGroup: [] }, { x: -44.5, y: 47.5, cMask: [], cGroup: [] }, { x: -36.6, y: 70.8, cMask: [], cGroup: [] }, { x: -61.3, y: 52.6, cMask: [], cGroup: [] },
+            { x: -92.5, y: 0.0, cMask: [], cGroup: [] }, { x: -74.5, y: 11.5, cMask: [], cGroup: [] }, { x: -67.5, y: -9.5, cMask: [], cGroup: [] }, { x: -91.5, y: -11.5, cMask: [], cGroup: [] }, { x: -84.5, y: 9.5, cMask: [], cGroup: [] },
+            { x: -68.4, y: -68.4, cMask: [], cGroup: [] }, { x: -44.5, y: -65.5, cMask: [], cGroup: [] }, { x: -47.5, y: -44.5, cMask: [], cGroup: [] }, { x: -70.8, y: -36.6, cMask: [], cGroup: [] }, { x: -52.6, y: -61.3, cMask: [], cGroup: [] },
+            { x: 0.0, y: -92.5, cMask: [], cGroup: [] }, { x: 11.5, y: -74.5, cMask: [], cGroup: [] }, { x: -9.5, y: -67.5, cMask: [], cGroup: [] }, { x: -11.5, y: -91.5, cMask: [], cGroup: [] }, { x: 9.5, y: -84.5, cMask: [], cGroup: [] },
+            { x: 68.4, y: -68.4, cMask: [], cGroup: [] }, { x: 65.5, y: -44.5, cMask: [], cGroup: [] }, { x: 44.5, y: -47.5, cMask: [], cGroup: [] }, { x: 36.6, y: -70.8, cMask: [], cGroup: [] }, { x: 61.3, y: -52.6, cMask: [], cGroup: [] }
         ],
         segments: [
             // Outer Lines (White)
@@ -127,22 +127,22 @@ const STADIUMS = {
             { v0: 6, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             // Middle Line (Gray)
             { v0: 8, v1: 9, vis: true, color: "666666", bCoef: 0.1, cMask: ["all"] },
-            // Goals (Gray)
-            { v0: 1, v1: 10, curve: 90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            // Goals (Gray Rectangular - Sharp Corners)
+            { v0: 1, v1: 10, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
             { v0: 10, v1: 11, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 11, v1: 2, curve: 90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 5, v1: 12, curve: -90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 11, v1: 2, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 5, v1: 12, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
             { v0: 12, v1: 13, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 13, v1: 6, curve: -90, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            // Stars Pattern
-            { v0: 14, v1: 15, vis: true, color: "666666", bCoef: 0 }, { v0: 15, v1: 16, vis: true, color: "666666", bCoef: 0 }, { v0: 16, v1: 17, vis: true, color: "666666", bCoef: 0 }, { v0: 17, v1: 18, vis: true, color: "666666", bCoef: 0 }, { v0: 18, v1: 14, vis: true, color: "666666", bCoef: 0 },
-            { v0: 19, v1: 20, vis: true, color: "666666", bCoef: 0 }, { v0: 20, v1: 21, vis: true, color: "666666", bCoef: 0 }, { v0: 21, v1: 22, vis: true, color: "666666", bCoef: 0 }, { v0: 22, v1: 23, vis: true, color: "666666", bCoef: 0 }, { v0: 23, v1: 19, vis: true, color: "666666", bCoef: 0 },
-            { v0: 24, v1: 25, vis: true, color: "666666", bCoef: 0 }, { v0: 25, v1: 26, vis: true, color: "666666", bCoef: 0 }, { v0: 26, v1: 27, vis: true, color: "666666", bCoef: 0 }, { v0: 27, v1: 28, vis: true, color: "666666", bCoef: 0 }, { v0: 28, v1: 24, vis: true, color: "666666", bCoef: 0 },
-            { v0: 29, v1: 30, vis: true, color: "666666", bCoef: 0 }, { v0: 30, v1: 31, vis: true, color: "666666", bCoef: 0 }, { v0: 31, v1: 32, vis: true, color: "666666", bCoef: 0 }, { v0: 32, v1: 33, vis: true, color: "666666", bCoef: 0 }, { v0: 33, v1: 29, vis: true, color: "666666", bCoef: 0 },
-            { v0: 34, v1: 35, vis: true, color: "666666", bCoef: 0 }, { v0: 35, v1: 36, vis: true, color: "666666", bCoef: 0 }, { v0: 36, v1: 37, vis: true, color: "666666", bCoef: 0 }, { v0: 37, v1: 38, vis: true, color: "666666", bCoef: 0 }, { v0: 38, v1: 34, vis: true, color: "666666", bCoef: 0 },
-            { v0: 39, v1: 40, vis: true, color: "666666", bCoef: 0 }, { v0: 40, v1: 41, vis: true, color: "666666", bCoef: 0 }, { v0: 41, v1: 42, vis: true, color: "666666", bCoef: 0 }, { v0: 42, v1: 43, vis: true, color: "666666", bCoef: 0 }, { v0: 43, v1: 39, vis: true, color: "666666", bCoef: 0 },
-            { v0: 44, v1: 45, vis: true, color: "666666", bCoef: 0 }, { v0: 45, v1: 46, vis: true, color: "666666", bCoef: 0 }, { v0: 46, v1: 47, vis: true, color: "666666", bCoef: 0 }, { v0: 47, v1: 48, vis: true, color: "666666", bCoef: 0 }, { v0: 48, v1: 44, vis: true, color: "666666", bCoef: 0 },
-            { v0: 49, v1: 50, vis: true, color: "666666", bCoef: 0 }, { v0: 50, v1: 51, vis: true, color: "666666", bCoef: 0 }, { v0: 51, v1: 52, vis: true, color: "666666", bCoef: 0 }, { v0: 52, v1: 53, vis: true, color: "666666", bCoef: 0 }, { v0: 53, v1: 49, vis: true, color: "666666", bCoef: 0 }
+            { v0: 13, v1: 6, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
+            // Starball Pattern (No collision with cMask: [])
+            { v0: 14, v1: 15, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 15, v1: 16, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 16, v1: 17, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 17, v1: 18, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 18, v1: 14, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 19, v1: 20, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 20, v1: 21, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 21, v1: 22, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 22, v1: 23, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 23, v1: 19, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 24, v1: 25, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 25, v1: 26, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 26, v1: 27, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 27, v1: 28, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 28, v1: 24, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 29, v1: 30, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 30, v1: 31, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 31, v1: 32, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 32, v1: 33, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 33, v1: 29, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 34, v1: 35, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 35, v1: 36, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 36, v1: 37, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 37, v1: 38, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 38, v1: 34, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 39, v1: 40, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 40, v1: 41, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 41, v1: 42, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 42, v1: 43, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 43, v1: 39, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 44, v1: 45, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 45, v1: 46, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 46, v1: 47, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 47, v1: 48, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 48, v1: 44, vis: true, color: "666666", bCoef: 0, cMask: [] },
+            { v0: 49, v1: 50, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 50, v1: 51, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 51, v1: 52, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 52, v1: 53, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 53, v1: 49, vis: true, color: "666666", bCoef: 0, cMask: [] }
         ],
         goals: [
             { p0: [-420, 55], p1: [-420, -55], team: "red" },
@@ -154,9 +154,7 @@ const STADIUMS = {
             { pos: [-420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
             { pos: [-420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
             { pos: [420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
-            { pos: [420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
-            // Center Spot
-            { pos: [0, 0], radius: 3, invMass: 0, bCoef: 0, color: "FFFFFF", cMask: [], cGroup: [] }
+            { pos: [420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] }
         ],
         planes: [
             { normal: [0, 1], dist: -260, bCoef: 0.1, cMask: ["all"] },
