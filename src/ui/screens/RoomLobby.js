@@ -42,9 +42,14 @@ export class RoomLobby {
           <div class="lobby-teams-grid">
             <!-- Red Team -->
             <div class="team-card team-column red" id="teamRed">
-              <div class="team-header red">
-                 <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
-                 <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed">Katıl</button>
+              <div class="team-header red" style="display:flex; justify-content:space-between; align-items:center;">
+                 <div style="display:flex; align-items:center; gap:10px;">
+                    <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
+                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed" style="padding: 2px 8px;">Katıl</button>
+                 </div>
+                 <button class="btn btn-xs team-clear-btn" id="btnClearRed" style="display:none; background:rgba(0,0,0,0.3); color:white; border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Kırmızı Takımı Boşalt">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                 </button>
               </div>
               <div class="player-list" id="redPlayers"></div>
             </div>
@@ -54,7 +59,7 @@ export class RoomLobby {
               <div class="team-header spectator">
                  <div class="team-title"><span class="team-icon">👁️</span> İzleyiciler</div>
                  <div style="display:flex; gap: 5px;">
-                   <button class="btn btn-xs team-join-btn" id="btnJoinAuto" style="background:#8e44ad; color:white; border:none; padding:4px 8px; border-radius:4px; font-weight:bold; cursor:pointer;" title="Rastgele/Otomatik yerleş">Rastgele</button>
+                   <button class="btn btn-xs" id="btnJoinAuto" style="display:none; background:linear-gradient(135deg, #FF9A9E, #FECFEF); color:#333; border:none; padding:4px 8px; border-radius:6px; font-size:16px; cursor:pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinSpectator">İzle</button>
                  </div>
               </div>
@@ -63,9 +68,14 @@ export class RoomLobby {
 
             <!-- Blue Team -->
             <div class="team-card team-column blue" id="teamBlue">
-              <div class="team-header blue">
-                 <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue">Katıl</button>
-                 <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
+              <div class="team-header blue" style="display:flex; justify-content:space-between; align-items:center; flex-direction:row-reverse;">
+                 <div style="display:flex; align-items:center; gap:10px; flex-direction:row-reverse;">
+                    <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
+                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue" style="padding: 2px 8px;">Katıl</button>
+                 </div>
+                 <button class="btn btn-xs team-clear-btn" id="btnClearBlue" style="display:none; background:rgba(0,0,0,0.3); color:white; border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Mavi Takımı Boşalt">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                 </button>
               </div>
               <div class="player-list" id="bluePlayers"></div>
             </div>
@@ -135,13 +145,7 @@ export class RoomLobby {
     // Update player list
     this._updatePlayers(data?.players || []);
     this._updateLockUI();
-
-    // Show admin panel if admin
-    const myPlayer = data?.players?.find(p => p.id === this.app.network.playerId);
-    if (myPlayer?.isAdmin) {
-      const panel = document.getElementById('adminPanel');
-      if (panel) panel.style.display = '';
-    }
+    this._updateAdminVisibility(data);
 
     // Leave button
     document.getElementById('btnLeave')?.addEventListener('click', () => {
@@ -173,22 +177,26 @@ export class RoomLobby {
 
     document.getElementById('btnJoinAuto')?.addEventListener('click', () => {
       if (this.teamsLocked) {
-        alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
+        alert('Takımlar kilitli! Önce kilidi açmalısınız.');
         return;
       }
-      
-      const players = this.roomData?.players || [];
-      const redCount = players.filter(p => p.team === 'red').length;
-      const blueCount = players.filter(p => p.team === 'blue').length;
-      
-      let targetTeam = 'red';
-      if (blueCount < redCount) {
-        targetTeam = 'blue';
-      } else if (redCount === blueCount) {
-        targetTeam = Math.random() < 0.5 ? 'red' : 'blue';
+      this.app.network.socket.emit('randomizeTeams');
+    });
+
+    document.getElementById('btnClearRed')?.addEventListener('click', () => {
+      if (this.teamsLocked) {
+        alert('Takımlar kilitli! Önce kilidi açmalısınız.');
+        return;
       }
-      
-      this.app.network.changeTeam(targetTeam);
+      this.app.network.socket.emit('clearTeam', 'red');
+    });
+
+    document.getElementById('btnClearBlue')?.addEventListener('click', () => {
+      if (this.teamsLocked) {
+        alert('Takımlar kilitli! Önce kilidi açmalısınız.');
+        return;
+      }
+      this.app.network.socket.emit('clearTeam', 'blue');
     });
 
     // Admin buttons
@@ -289,11 +297,9 @@ export class RoomLobby {
     });
 
     this._registerHandler('adminUpdate', (data) => {
+      this.roomData = { ...this.roomData, ...data };
       if (data.players) this._updatePlayers(data.players);
-      if (data.playerId === this.app.network.playerId && data.isAdmin) {
-        const panel = document.getElementById('adminPanel');
-        if (panel) panel.style.display = '';
-      }
+      this._updateAdminVisibility(this.roomData);
     });
 
     this._registerHandler('stadiumChanged', (data) => {
@@ -317,6 +323,8 @@ export class RoomLobby {
     });
 
     this._registerHandler('roomUpdate', (data) => {
+      this.roomData = { ...this.roomData, ...data };
+      this._updateAdminVisibility(this.roomData);
       if (data.scoreLimit !== undefined) {
         const info = document.getElementById('scoreLimitInfo');
         if (info) info.textContent = data.scoreLimit === 0 ? '∞' : data.scoreLimit;
@@ -339,6 +347,28 @@ export class RoomLobby {
         if (countSpan) countSpan.textContent = data.players.length;
       }
     });
+  }
+
+  _updateAdminVisibility(data) {
+    const myPlayer = data?.players?.find(p => p.id === this.app.network.playerId);
+    const isAdmin = myPlayer?.isAdmin;
+    
+    // Admin Panel
+    const panel = document.getElementById('adminPanel');
+    if (panel) panel.style.display = isAdmin ? '' : 'none';
+    
+    // Dice Button
+    const btnJoinAuto = document.getElementById('btnJoinAuto');
+    if (btnJoinAuto) btnJoinAuto.style.display = isAdmin ? '' : 'none';
+    
+    // Clear Arrows
+    const isStopped = !data.game || data.game.state === 'stopped' || data.game.state === 'ended';
+    
+    const btnClearRed = document.getElementById('btnClearRed');
+    if (btnClearRed) btnClearRed.style.display = (isAdmin && isStopped) ? '' : 'none';
+    
+    const btnClearBlue = document.getElementById('btnClearBlue');
+    if (btnClearBlue) btnClearBlue.style.display = (isAdmin && isStopped) ? '' : 'none';
   }
 
   onHide() {

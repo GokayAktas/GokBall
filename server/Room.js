@@ -253,6 +253,56 @@ export class Room {
     }
 
     /**
+     * Admin tools for team management
+     */
+    randomizeTeams(adminId) {
+        const admin = this.players.get(adminId);
+        if (!admin || !admin.isAdmin) return;
+
+        const allPlayers = Array.from(this.players.values());
+        
+        // Shuffle array
+        for (let i = allPlayers.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allPlayers[i], allPlayers[j]] = [allPlayers[j], allPlayers[i]];
+        }
+        
+        const teamSize = Math.floor(allPlayers.length / 2);
+        
+        for (let i = 0; i < allPlayers.length; i++) {
+            const p = allPlayers[i];
+            let targetTeam = 'spectator';
+            if (i < teamSize) targetTeam = 'red';
+            else if (i < teamSize * 2) targetTeam = 'blue';
+            
+            if (p.team !== targetTeam) {
+                this.adminMovePlayer(adminId, p.id, targetTeam);
+            }
+        }
+        this.broadcast('chatMessage', {
+            playerName: '[SİSTEM]',
+            message: '🎲 Takımlar rastgele karıştırıldı!',
+            team: 'spectator'
+        });
+    }
+
+    clearTeam(adminId, team) {
+        const admin = this.players.get(adminId);
+        if (!admin || !admin.isAdmin) return;
+
+        // "bu tuşa sadece maç başlamadan basılabilsin"
+        if (this.game.state !== 'stopped' && this.game.state !== 'ended') {
+            admin.socket.emit('roomError', { error: 'Takım boşaltma sadece maç oynanmıyorken yapılabilir!' });
+            return;
+        }
+
+        const playersInTeam = this.getTeamPlayers(team);
+        for (const p of playersInTeam) {
+            this.adminMovePlayer(adminId, p.id, 'spectator');
+        }
+    }
+
+    /**
      * Admin moves a player to a team (ignores lock)
      */
     adminMovePlayer(adminId, targetId, team) {

@@ -128,6 +128,16 @@ io.on('connection', (socket) => {
         if (room) room.changeTeam(socket.id, team);
     });
 
+    socket.on('randomizeTeams', () => {
+        const room = getPlayerRoom(socket.id);
+        if (room) room.randomizeTeams(socket.id);
+    });
+
+    socket.on('clearTeam', (team) => {
+        const room = getPlayerRoom(socket.id);
+        if (room) room.clearTeam(socket.id, team);
+    });
+
     // --- Game Input ---
     socket.on('input', (input) => {
         const room = getPlayerRoom(socket.id);
