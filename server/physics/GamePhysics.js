@@ -217,6 +217,9 @@ export class GamePhysics {
                 this.kickOffReset = false;
             }
 
+            // Change ball color to White on kick
+            if (this.ballDisc) this.ballDisc.color = 'FFFFFF';
+
             const nx = dx / dist;
             const ny = dy / dist;
             this.ballDisc.speed.x += nx * playerDisc.kickStrength;
@@ -333,6 +336,12 @@ export class GamePhysics {
         a.pos.y -= ny * overlap * (a.invMass / totalInvMass);
         b.pos.x += nx * overlap * (b.invMass / totalInvMass);
         b.pos.y += ny * overlap * (b.invMass / totalInvMass);
+
+        // Change ball color to White on touch
+        if (a === this.ballDisc || b === this.ballDisc) {
+            this.ballDisc.color = 'FFFFFF';
+        }
+
         const dvx = b.speed.x - a.speed.x;
         const dvy = b.speed.y - a.speed.y;
         const dvn = dvx * nx + dvy * ny;
@@ -481,6 +490,8 @@ export class GamePhysics {
 
     getState() {
         return {
+            kickOffReset: this.kickOffReset,
+            kickOffTeam: this.kickOffTeam,
             discs: this.discs.map(d => ({
                 x: Math.round(d.pos.x * 100) / 100,
                 y: Math.round(d.pos.y * 100) / 100,

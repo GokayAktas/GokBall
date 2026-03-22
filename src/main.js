@@ -405,7 +405,6 @@ class GokBallApp {
             if (myDisc) myDisc.input = inputState;
 
             // Admin runs full physics ONLY if game is actively playing
-            // During goal pauses or countdowns, we pause physics to respect server resets
             if (this._serverGameState === 'playing') {
                 this.physics.step();
             }
@@ -418,9 +417,10 @@ class GokBallApp {
                 time: this.scoreboard?.time || 0
             };
             this.network.socket.emit('authorityState', authorityState);
+        } else {
+            // Cloud mode and non-admin Local mode: Run local prediction
+            this.physics.stepLocalOnly(this.network.socket?.id);
         }
-        // Cloud mode and non-admin Local mode: do nothing here.
-        // All positions come from server via _handleGameState -> applyState.
 
         // Update camera
         this.camera.targetX = 0;

@@ -102,6 +102,11 @@ export class Game {
             if (disc) {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
+                if (this.teamColors && this.teamColors['red']) {
+                    disc.color = this.teamColors['red'].colors[0];
+                } else {
+                    disc.color = 'c70000'; // Default Red updated
+                }
             }
         }
 
@@ -119,7 +124,17 @@ export class Game {
             if (disc) {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
+                if (this.teamColors && this.teamColors['blue']) {
+                    disc.color = this.teamColors['blue'].colors[0];
+                } else {
+                    disc.color = '00008c'; // Default Blue updated
+                }
             }
+        }
+        
+        // Ensure ball color starts as FFB82E
+        if (this.physics.ballDisc) {
+            this.physics.ballDisc.color = 'FFB82E';
         }
     }
 
