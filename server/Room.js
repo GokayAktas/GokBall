@@ -88,8 +88,8 @@ const STADIUMS = {
             type: "grass", width: 420, height: 220, 
             kickOffRadius: 75, cornerRadius: 0, 
             color: "4A4A4A", stripeColor: "4A4A4A", bgColor: "3A3A3A",
-            lineColor: "FFFFFF", showCenterLine: false, showKickOffCircle: true,
-            useStarballImage: true
+            lineColor: "FFFFFF", showCenterLine: true, showKickOffCircle: true,
+            centerLineColor: "666666", useStarballImage: true
         },
         vertexes: [
             { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] }, // 0
@@ -117,8 +117,6 @@ const STADIUMS = {
             { v0: 2, v1: 3, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 4, v1: 5, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
             { v0: 6, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            // Middle Line (Gray)
-            { v0: 8, v1: 9, vis: true, color: "666666", bCoef: 0.1, cMask: ["all"] },
             // Goals (Gray Rectangular - Sharp Corners)
             { v0: 1, v1: 10, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
             { v0: 10, v1: 11, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },

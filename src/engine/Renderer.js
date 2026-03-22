@@ -133,10 +133,20 @@ export class Renderer {
 
         // Midfield Line (Optional)
         if (bg.showCenterLine !== false) {
+            ctx.save();
+            if (bg.centerLineColor) {
+                ctx.strokeStyle = '#' + bg.centerLineColor;
+            }
             ctx.beginPath();
+            const r = bg.kickOffRadius || 0;
+            // Draw upper part
             ctx.moveTo(0, -h);
+            ctx.lineTo(0, -r);
+            // Draw lower part
+            ctx.moveTo(0, r);
             ctx.lineTo(0, h);
             ctx.stroke();
+            ctx.restore();
         }
 
         // Starball Image or Kickoff Circle
