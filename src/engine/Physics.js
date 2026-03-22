@@ -114,12 +114,18 @@ export class Physics {
         this.predictionThreshold = 30; // New: Smoothing threshold
         this.ballDisc = null;
         this.myPlayerId = null; // Local player ID for self-highlighting
+        
+        // Kickoff state (mirrors server for prediction)
+        this.stadium = null;
+        this.kickOffReset = false;
+        this.kickOffTeam = null; 
     }
 
     /**
      * Load stadium data into the physics engine
      */
     loadStadium(stadium) {
+        this.stadium = stadium;
         this.vertexes = (stadium.vertexes || []).map(v => new Vertex({
             ...v,
             cMask: v.cMask ? parseCollisionFlag(v.cMask) : CollisionFlags.all,
@@ -247,6 +253,9 @@ export class Physics {
         disc.pos.y += disc.speed.y;
     }
 
+        // Apply KickOff Constraints (Prediction)
+        this._applyKickOffConstraints();
+
         // Disc-disc collisions
         for (let i = 0; i < this.discs.length; i++) {
             for (let j = i + 1; j < this.discs.length; j++) {
@@ -326,6 +335,9 @@ export class Physics {
         disc.pos.x += disc.speed.x;
         disc.pos.y += disc.speed.y;
 
+        // Apply KickOff Constraints (Prediction)
+        this._applyKickOffConstraints();
+
         // Boundary collisions (planes) for local player only
         for (const plane of this.planes) {
             if (!(disc.cMask & plane.cGroup) && !(plane.cMask & disc.cGroup)) continue;
@@ -344,7 +356,7 @@ export class Physics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -565,6 +577,69 @@ export class Physics {
         disc.speed.y -= (1 + bCoef) * vn * plane.normal.y;
     }
 
+    _applyKickOffConstraints() {
+        if (!this.kickOffReset || !this.kickOffTeam) return;
+
+        const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
+
+        for (const disc of this.discs) {
+            if (disc.isPlayer && disc.team) {
+                const isRed = disc.team === 'red';
+                const isDefending = disc.team !== this.kickOffTeam;
+                const dx = disc.pos.x;
+                const dy = disc.pos.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                const defendMinDist = kickOffRadius + disc.radius;
+
+                if (isDefending) {
+                    // 1. Defending team wall at mid-line
+                    if (isRed) {
+                        if (disc.pos.x > -disc.radius) {
+                            disc.pos.x = -disc.radius;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
+                        }
+                    } else {
+                        if (disc.pos.x < disc.radius) {
+                            disc.pos.x = disc.radius;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
+                        }
+                    }
+
+                    // 2. Defending team blocked from circle
+                    if (dist < defendMinDist && dist > 0) {
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        disc.pos.x = nx * defendMinDist;
+                        disc.pos.y = ny * defendMinDist;
+
+                        const dot = disc.speed.x * nx + disc.speed.y * ny;
+                        if (dot < 0) {
+                            disc.speed.x -= dot * nx;
+                            disc.speed.y -= dot * ny;
+                        }
+                    }
+                } else {
+                    // 3. Kickoff team (can enter entire circle but blocked outside)
+                    const inCircle = dist < kickOffRadius;
+                    if (!inCircle) {
+                        if (isRed) {
+                            if (disc.pos.x > -disc.radius) {
+                                disc.pos.x = -disc.radius;
+                                if (disc.speed.x > 0) disc.speed.x = 0;
+                            }
+                        } else {
+                            if (disc.pos.x < disc.radius) {
+                                disc.pos.x = disc.radius;
+                                if (disc.speed.x < 0) disc.speed.x = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     _checkGoals() {
         if (!this.ballDisc) return null;
 
@@ -623,9 +698,6 @@ export class Physics {
             this.discs.pop();
         }
 
-        // --- Direct Server State Application (Haxball Model) ---
-        // No lerp, no prediction. Server sends positions at 60fps, client displays them.
-        // This is exactly how Haxball works — no teleportation, no jitter.
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
@@ -645,13 +717,28 @@ export class Physics {
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
 
-
-
-            // Direct position set — no interpolation
-            disc.pos.x = sd.x;
-            disc.pos.y = sd.y;
-            disc.speed.x = sd.sx;
-            disc.speed.y = sd.sy;
+            // --- Smart Server State Application ---
+            const isMe = (disc.id === this.myPlayerId && this.myPlayerId !== null);
+            
+            if (isMe) {
+                // Reconciliation for local player: only snap if error is too large
+                const dx = sd.x - disc.pos.x;
+                const dy = sd.y - disc.pos.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq > this.predictionThreshold * this.predictionThreshold) {
+                    disc.pos.x = sd.x;
+                    disc.pos.y = sd.y;
+                }
+                // Always sync speed from server for physics stability
+                disc.speed.x = sd.sx;
+                disc.speed.y = sd.sy;
+            } else {
+                // For others (remote players and ball), snap to server position
+                disc.pos.x = sd.x;
+                disc.pos.y = sd.y;
+                disc.speed.x = sd.sx;
+                disc.speed.y = sd.sy;
+            }
         }
     }
 

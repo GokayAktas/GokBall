@@ -191,6 +191,9 @@ export class Room {
 
         const player = new Player(socket, name);
 
+        // Assign random avatar between 0-99
+        player.avatar = Math.floor(Math.random() * 100).toString();
+
         // First player becomes host/admin
         if (this.players.size === 0) {
             player.isAdmin = true;
@@ -204,6 +207,13 @@ export class Room {
             player: player.toJSON(),
             players: this.getPlayerList()
         }, player.id);
+
+        // Send private welcome message about avatar and colors
+        socket.emit('chatMessage', {
+            playerName: "SİSTEM",
+            message: `Hoş geldin! Rastgele no atandı: ${player.avatar}. Değiştirmek için "/avatar [kod]" yazabilirsin. Takım renkleri için haxcolors.com kodlarını kullanabilirsin (/colors red/blue [açı] [renk1 r2 r3]).`,
+            system: true
+        });
 
         return {
             roomId: this.id,
@@ -560,7 +570,42 @@ export class Room {
                     const discIdx = this.game.playerDiscs.get(player.id);
                     if (discIdx !== undefined) {
                         const disc = this.game.physics.discs[discIdx];
-                        if (disc) disc._avatar = player.avatar;
+                        if (disc) disc.avatar = player.avatar;
+                    }
+                }
+                break;
+            case '/colors':
+                if (player.isAdmin) {
+                    const team = parts[1]?.toLowerCase();
+                    if (team === 'red' || team === 'blue') {
+                        // Support HaxColors format: /colors red 60 FFFFFF 000000 444444
+                        const angle = parseInt(parts[2]) || 0;
+                        const colors = parts.slice(3).map(c => c.replace('#', ''));
+                        
+                        if (colors.length > 0) {
+                            if (!this.teamColors) this.teamColors = { red: null, blue: null };
+                            this.teamColors[team] = {
+                                angle,
+                                colors
+                            };
+                            
+                            // Broadcast update
+                            this.broadcast('chatMessage', {
+                                playerName: 'SİSTEM',
+                                message: `${team.toUpperCase()} takım renkleri güncellendi.`,
+                                system: true
+                            });
+
+                            // Apply to active players if game is running
+                            if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
+                                this.game.physics.discs.forEach(d => {
+                                    if (d.isPlayer && d.team === team) {
+                                        d.color = colors[0]; // Simplification for now: first color
+                                    }
+                                });
+                                this.broadcast('gameUpdate', this.game.physics.getState());
+                            }
+                        }
                     }
                 }
                 break;
