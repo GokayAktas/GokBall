@@ -349,6 +349,11 @@ export class Physics {
             if (!(disc.cMask & seg.cGroup) && !(seg.cMask & disc.cGroup)) continue;
             this._collideDiscSegment(disc, seg);
         }
+
+        // --- NEW: Local Player vs Ball Collision for Prediction ---
+        if (this.ballDisc) {
+            this._collideDiscs(disc, this.ballDisc);
+        }
     }
 
     _performKick(playerDisc) {
