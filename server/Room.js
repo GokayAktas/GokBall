@@ -92,19 +92,19 @@ const STADIUMS = {
         },
         vertexes: [
             { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] }, // 0
-            { x: -420, y: 55, bCoef: 0.1, cMask: ["ball"] },  // 1
-            { x: -420, y: -55, bCoef: 0.1, cMask: ["ball"] }, // 2
+            { x: -420, y: 75, bCoef: 0.1, cMask: ["ball"] },  // 1: Higher goal post
+            { x: -420, y: -75, bCoef: 0.1, cMask: ["ball"] }, // 2: Higher goal post
             { x: -420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 3
             { x: 420, y: 220, bCoef: 0.1, cMask: ["ball"] },  // 4
-            { x: 420, y: 55, bCoef: 0.1, cMask: ["ball"] },   // 5
-            { x: 420, y: -55, bCoef: 0.1, cMask: ["ball"] },  // 6
+            { x: 420, y: 75, bCoef: 0.1, cMask: ["ball"] },   // 5: Higher goal post
+            { x: 420, y: -75, bCoef: 0.1, cMask: ["ball"] },  // 6: Higher goal post
             { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 7
             { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
             { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
-            { x: -460, y: 55, bCoef: 0.1, cMask: ["ball"] },  // 10: Rectangular corner
-            { x: -460, y: -55, bCoef: 0.1, cMask: ["ball"] }, // 11: Rectangular corner
-            { x: 460, y: 55, bCoef: 0.1, cMask: ["ball"] },   // 12: Rectangular corner
-            { x: 460, y: -55, bCoef: 0.1, cMask: ["ball"] },  // 13: Rectangular corner
+            { x: -460, y: 75, bCoef: 0.1, cMask: ["ball"] },  // 10: Rectangular higher
+            { x: -460, y: -75, bCoef: 0.1, cMask: ["ball"] }, // 11: Rectangular higher
+            { x: 460, y: 75, bCoef: 0.1, cMask: ["ball"] },   // 12: Rectangular higher
+            { x: 460, y: -75, bCoef: 0.1, cMask: ["ball"] },  // 13: Rectangular higher
             // Starball Pattern (Auto-generated 8-point star pattern, non-colliding)
             { x: 92.5, y: 0.0, cMask: [], cGroup: [] }, { x: 74.5, y: -11.5, cMask: [], cGroup: [] }, { x: 67.5, y: 9.5, cMask: [], cGroup: [] }, { x: 91.5, y: 11.5, cMask: [], cGroup: [] }, { x: 84.5, y: -9.5, cMask: [], cGroup: [] },
             { x: 68.4, y: 68.4, cMask: [], cGroup: [] }, { x: 44.5, y: 65.5, cMask: [], cGroup: [] }, { x: 47.5, y: 44.5, cMask: [], cGroup: [] }, { x: 70.8, y: 36.6, cMask: [], cGroup: [] }, { x: 52.6, y: 61.3, cMask: [], cGroup: [] },
@@ -145,16 +145,16 @@ const STADIUMS = {
             { v0: 49, v1: 50, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 50, v1: 51, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 51, v1: 52, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 52, v1: 53, vis: true, color: "666666", bCoef: 0, cMask: [] }, { v0: 53, v1: 49, vis: true, color: "666666", bCoef: 0, cMask: [] }
         ],
         goals: [
-            { p0: [-420, 55], p1: [-420, -55], team: "red" },
-            { p0: [420, 55], p1: [420, -55], team: "blue" }
+            { p0: [-420, 75], p1: [-420, -75], team: "red" },
+            { p0: [420, 75], p1: [420, -75], team: "blue" }
         ],
         discs: [
             { pos: [0, 0], radius: 6, invMass: 1.6, bCoef: 0.4, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
             // Posts (Red/Blue Dots)
-            { pos: [-420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
-            { pos: [-420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
-            { pos: [420, 55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
-            { pos: [420, -55], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] }
+            { pos: [-420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
+            { pos: [-420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "E74C3C", cMask: ["all"] },
+            { pos: [420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] },
+            { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "3498DB", cMask: ["all"] }
         ],
         planes: [
             { normal: [0, 1], dist: -260, bCoef: 0.1, cMask: ["all"] },
