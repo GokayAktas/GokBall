@@ -364,6 +364,24 @@ export class Physics {
             if (other === disc) continue;
             this._collideDiscs(disc, other);
         }
+
+        // --- PREDICT BALL MOVEMENT LOCALLY ---
+        // Prevents the ball from feeling like an unmovable brick (heavy) until the server syncs it
+        if (this.ballDisc) {
+            this.ballDisc.speed.x *= this.ballDisc.damping;
+            this.ballDisc.speed.y *= this.ballDisc.damping;
+            this.ballDisc.pos.x += this.ballDisc.speed.x;
+            this.ballDisc.pos.y += this.ballDisc.speed.y;
+
+            for (const plane of this.planes) {
+                if (!(this.ballDisc.cMask & plane.cGroup) && !(plane.cMask & this.ballDisc.cGroup)) continue;
+                this._collideDiscPlane(this.ballDisc, plane);
+            }
+            for (const seg of this.segments) {
+                if (!(this.ballDisc.cMask & seg.cGroup) && !(seg.cMask & this.ballDisc.cGroup)) continue;
+                this._collideDiscSegment(this.ballDisc, seg);
+            }
+        }
     }
 
     _performKick(playerDisc) {
@@ -756,13 +774,16 @@ export class Physics {
 
             // --- Smart Server State Application ---
             const isMe = (disc.id === this.myPlayerId && this.myPlayerId !== null);
+            const isBall = (disc === this.ballDisc);
             
-            if (isMe) {
-                // Reconciliation for local player: only snap if error is too large
+            if (isMe || isBall) {
+                // Reconciliation for local player and predictably moved objects (ball)
                 const dx = sd.x - disc.pos.x;
                 const dy = sd.y - disc.pos.y;
                 const distSq = dx * dx + dy * dy;
-                if (distSq > this.predictionThreshold * this.predictionThreshold) {
+                // Ball uses a slightly larger threshold so it doesn't snap constantly if server goal checks vary
+                const thresh = isBall ? (this.predictionThreshold * 1.5) : this.predictionThreshold;
+                if (distSq > thresh * thresh) {
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
                     disc.speed.x = sd.sx;
