@@ -408,15 +408,18 @@ class GokBallApp {
 
         const stepSize = 1000 / 60; // Standard 60Hz physics
         while (this.accumulator >= stepSize) {
+            const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+            if (myDisc) myDisc.input = inputState; // CRUCIAL: Must update local input BEFORE prediction!
+
             if (isLocalMode && isAdmin) {
-                const myDisc = this.physics.discs.find(d => d.id === this.network.socket.id);
-                if (myDisc) myDisc.input = inputState;
                 if (this._serverGameState === 'playing') {
                     this.physics.step();
                 }
             } else {
                 // RUN PREDICTION AT FIXED 60HZ
-                this.physics.stepLocalOnly(this.network.socket?.id);
+                if (this._serverGameState === 'playing') {
+                    this.physics.stepLocalOnly(this.network.socket?.id);
+                }
             }
             this.accumulator -= stepSize;
         }
