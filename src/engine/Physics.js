@@ -693,6 +693,10 @@ export class Physics {
                 if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
                 
+                // CRUCIAL: Sync Colors!
+                if (sd.color !== undefined) disc.color = sd.color;
+                if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
+
                 // CRUCIAL: Sync physics parameters for prediction! 
                 // Missing this caused the desync/teleportation loop because client had wrong damping
                 if (sd.damping !== undefined) disc.damping = sd.damping;
@@ -761,6 +765,10 @@ export class Physics {
                 if (sd.name) disc._playerName = sd.name;
                 if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
+                
+                // CRUCIAL: Sync Colors!
+                if (sd.color !== undefined) disc.color = sd.color;
+                if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
                 
                 // Physics properties from server (crucial for local admin!)
                 if (sd.cMask !== undefined) disc.cMask = sd.cMask;

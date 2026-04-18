@@ -254,7 +254,7 @@ export class Renderer {
 
             // Avatar (Centered bold text)
             if (disc.avatar || disc.isPlayer) {
-                ctx.fillStyle = '#FFFFFF';
+                ctx.fillStyle = disc.avatarColor ? '#' + disc.avatarColor : '#FFFFFF';
                 ctx.font = `900 ${disc.radius * 1.1}px Inter, "Segoe UI", Tahoma, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
