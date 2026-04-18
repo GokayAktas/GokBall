@@ -222,23 +222,34 @@ export class Game {
             return;
         }
 
-        if (this.state !== 'playing') return;
-
-        // Advance physics
-        // NEW: If in local authority mode, server skips its own physics simulation
-        // and relies solely on authorityState packets from the Admin.
-        const isLocalMode = this.room.roomType === 'local';
-        let goalTeam = null;
-        
-        if (!isLocalMode) {
-            goalTeam = this.physics.step();
-        } else {
-            // In local mode, we still check some basics or just increment time
-            // but the actual positions are updated via applyAuthorityState
+        if (this.state !== 'playing') {
+            this.lastPhysTime = performance.now();
+            return;
         }
 
-        // Increment time
-        this.timeElapsed++;
+        // Fixed Timestep Accumulator for Server Physics (Matches Client exactly!)
+        const now = performance.now();
+        const dt = now - (this.lastPhysTime || now);
+        this.lastPhysTime = now;
+        
+        this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
+        const stepSize = 1000 / this.tickRate; // Exact 60Hz step
+
+        const isLocalMode = this.room.roomType === 'local';
+        let goalTeam = null;
+
+        while (this.accumulator >= stepSize) {
+            if (!isLocalMode) {
+                const result = this.physics.step();
+                if (result.goalTeam) goalTeam = result.goalTeam;
+            } else {
+                // Local mode handles physics via auth packets
+            }
+
+            // Increment time logic safely within loop
+            this.timeElapsed++;
+            this.accumulator -= stepSize;
+        }
 
         // Check goal
         if (goalTeam) {

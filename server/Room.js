@@ -138,8 +138,8 @@ const STADIUMS = {
             { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
         ],
         planes: [
-            { normal: [0, 1], dist: -236, bCoef: 0.1, cMask: ["all"] },
-            { normal: [0, -1], dist: -236, bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, 1], dist: -252, bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, -1], dist: -252, bCoef: 0.1, cMask: ["all"] },
             { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
             { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
         ],

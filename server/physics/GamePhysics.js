@@ -507,6 +507,7 @@ export class GamePhysics {
                     typing: d.typing, 
                     id: d.ownerId || d.id,
                     input: d.input,
+                    color: d.color,  // MUST sync color for custom team colors!
                     cMask: d.cMask,
                     cGroup: d.cGroup,
                     bCoef: d.bCoef,

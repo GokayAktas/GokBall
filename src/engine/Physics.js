@@ -111,7 +111,7 @@ export class Physics {
         this.planes = [];
         this.goals = [];
         this.isLocalAuthorityMode = false; // New: To skip server sync for Admin authority rooms
-        this.predictionThreshold = 30; // New: Smoothing threshold
+        this.predictionThreshold = 100; // Increased to prevent false snaps due to input latency
         this.ballDisc = null;
         this.myPlayerId = null; // Local player ID for self-highlighting
         
@@ -322,14 +322,23 @@ export class Physics {
                 ay /= len;
             }
 
-            const accel = disc.acceleration || 0.11;
+            // Kick logic
+            if (disc.input.kick && !disc.kicking) {
+                disc.kicking = true;
+                this._performKick(disc); // Optional for visual kick
+            } else if (!disc.input.kick) {
+                disc.kicking = false;
+            }
+
+            const accel = disc.kicking ? (disc.kickingAcceleration || 0.07) : (disc.acceleration || 0.1);
             disc.speed.x += ax * accel;
             disc.speed.y += ay * accel;
         }
 
         // Damping
-        disc.speed.x *= disc.damping;
-        disc.speed.y *= disc.damping;
+        const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
+        disc.speed.x *= damp;
+        disc.speed.y *= damp;
 
         // Move
         disc.pos.x += disc.speed.x;
