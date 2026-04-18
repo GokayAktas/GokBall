@@ -141,11 +141,23 @@ export class GamePhysics {
     step() {
         for (const disc of this.discs) {
             if (!disc.isPlayer) continue;
-            const accel = disc.kicking ? disc.kickingAcceleration : disc.acceleration;
-            if (disc.input.up) disc.speed.y -= accel;
-            if (disc.input.down) disc.speed.y += accel;
-            if (disc.input.left) disc.speed.x -= accel;
-            if (disc.input.right) disc.speed.x += accel;
+
+            let ax = 0, ay = 0;
+            if (disc.input.up) ay -= 1;
+            if (disc.input.down) ay += 1;
+            if (disc.input.left) ax -= 1;
+            if (disc.input.right) ax += 1;
+
+            const len = Math.sqrt(ax * ax + ay * ay);
+            if (len > 0) {
+                ax /= len;
+                ay /= len;
+            }
+
+            const accel = disc.kicking ? (disc.kickingAcceleration || 0.07) : (disc.acceleration || 0.1);
+            disc.speed.x += ax * accel;
+            disc.speed.y += ay * accel;
+
             if (disc.input.kick && !disc.kicking) {
                 disc.kicking = true;
                 this._performKick(disc);
@@ -156,7 +168,7 @@ export class GamePhysics {
 
         for (const disc of this.discs) {
             if (disc.invMass === 0) continue;
-            const damp = disc.isPlayer && disc.kicking ? disc.kickingDamping : disc.damping;
+            const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
             disc.speed.x *= damp;
             disc.speed.y *= damp;
             disc.pos.x += disc.speed.x;

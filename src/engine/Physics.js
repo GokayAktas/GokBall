@@ -229,7 +229,7 @@ export class Physics {
             // 2. Normalize diagonal movement (Haxball standard)
             const accelMag = Math.sqrt(ax * ax + ay * ay);
             if (accelMag > 0) {
-                const currentAccel = disc.acceleration || 0.11; // Haxball punchy value
+                const currentAccel = disc.kicking ? (disc.kickingAcceleration || 0.07) : (disc.acceleration || 0.1);
                 disc.speed.x += (ax / accelMag) * currentAccel;
                 disc.speed.y += (ay / accelMag) * currentAccel;
             }
@@ -246,9 +246,9 @@ export class Physics {
     // 4. Move and Damping
     for (const disc of this.discs) {
         if (disc.invMass === 0) continue;
-        // Haxball players use fixed damping regardless of kicking state
-        disc.speed.x *= disc.damping;
-        disc.speed.y *= disc.damping;
+        const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
+        disc.speed.x *= damp;
+        disc.speed.y *= damp;
         disc.pos.x += disc.speed.x;
         disc.pos.y += disc.speed.y;
     }
