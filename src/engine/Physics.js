@@ -358,6 +358,12 @@ export class Physics {
             if (!(disc.cMask & seg.cGroup) && !(seg.cMask & disc.cGroup)) continue;
             this._collideDiscSegment(disc, seg);
         }
+
+        // Disc-disc collisions for local player (Prevents phasing through ball AND other players!)
+        for (const other of this.discs) {
+            if (other === disc) continue;
+            this._collideDiscs(disc, other);
+        }
     }
 
     _performKick(playerDisc) {
