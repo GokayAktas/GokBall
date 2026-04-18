@@ -102,10 +102,12 @@ export class Game {
             if (disc) {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
-                if (this.teamColors && this.teamColors['red']) {
-                    disc.color = this.teamColors['red'].colors[0];
+                if (this.room.teamColors && this.room.teamColors['red']) {
+                    disc.color = this.room.teamColors['red'].colors[0];
+                    disc.avatarColor = this.room.teamColors['red'].textColor;
                 } else {
-                    disc.color = 'c70000'; // Default Red updated
+                    disc.color = 'c70000'; // Default Red
+                    disc.avatarColor = 'FFFFFF';
                 }
             }
         }
@@ -124,10 +126,12 @@ export class Game {
             if (disc) {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
-                if (this.teamColors && this.teamColors['blue']) {
-                    disc.color = this.teamColors['blue'].colors[0];
+                if (this.room.teamColors && this.room.teamColors['blue']) {
+                    disc.color = this.room.teamColors['blue'].colors[0];
+                    disc.avatarColor = this.room.teamColors['blue'].textColor;
                 } else {
-                    disc.color = '00008c'; // Default Blue updated
+                    disc.color = '00008c'; // Default Blue
+                    disc.avatarColor = 'FFFFFF';
                 }
             }
         }

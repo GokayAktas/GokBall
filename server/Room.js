@@ -585,20 +585,23 @@ export class Room {
                     const team = parts[1]?.toLowerCase();
                     if (team === 'red' || team === 'blue') {
                         // Support HaxColors format: /colors red 60 FFFFFF 000000 444444
+                        // parts[2]: angle, parts[3]: textColor, parts[4...]: colors
                         const angle = parseInt(parts[2]) || 0;
-                        const colors = parts.slice(3).map(c => c.replace('#', ''));
+                        const textColor = (parts[3] || 'FFFFFF').replace('#', '');
+                        const colors = parts.slice(4).map(c => c.replace('#', ''));
                         
                         if (colors.length > 0) {
                             if (!this.teamColors) this.teamColors = { red: null, blue: null };
                             this.teamColors[team] = {
                                 angle,
+                                textColor,
                                 colors
                             };
                             
                             // Broadcast update
                             this.broadcast('chatMessage', {
                                 playerName: 'SİSTEM',
-                                message: `${team.toUpperCase()} takım renkleri güncellendi.`,
+                                message: `${team.toUpperCase()} takım renkleri güncellendi (Yazı: ${textColor}, Forma: ${colors.join(', ')}).`,
                                 system: true
                             });
 
@@ -606,7 +609,8 @@ export class Room {
                             if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
                                 this.game.physics.discs.forEach(d => {
                                     if (d.isPlayer && d.team === team) {
-                                        d.color = colors[0]; // Simplification for now: first color
+                                        d.color = colors[0]; // Primary color
+                                        d.avatarColor = textColor;
                                     }
                                 });
                                 this.broadcast('gameUpdate', this.game.physics.getState());

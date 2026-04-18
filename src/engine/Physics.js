@@ -29,7 +29,8 @@ export class Disc {
         this.invMass = opts.invMass ?? 1;
         this.bCoef = opts.bCoef ?? 0.5;
         this.damping = opts.damping ?? 0.99;
-        this.color = opts.color || 'FFFFFF';
+        this.color = opts.color || null;
+        this.avatarColor = opts.avatarColor || null;
         this.cMask = opts.cMask ?? CollisionFlags.all;
         this.cGroup = opts.cGroup ?? CollisionFlags.all;
 
@@ -356,7 +357,7 @@ export class Physics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 10;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -378,7 +379,7 @@ export class Physics {
 
     _collideDiscs(a, b) {
         if (a.invMass === 0 && b.invMass === 0) return;
-        if (!(a.cMask & b.cGroup) && !(b.cMask & a.cGroup)) return;
+        if (!(a.cMask & b.cGroup) || !(b.cMask & a.cGroup)) return;
 
         const dx = b.pos.x - a.pos.x;
         const dy = b.pos.y - a.pos.y;
@@ -391,7 +392,7 @@ export class Physics {
         const ny = dy / dist;
 
         // Separate discs
-        const overlap = minDist - dist;
+        const overlap = (minDist - dist) + 0.01; // Small epsilon
         const totalInvMass = a.invMass + b.invMass;
         if (totalInvMass === 0) return;
 
@@ -739,11 +740,12 @@ export class Physics {
                 disc.isPlayer = sd.isPlayer;
                 disc.team = sd.team;
                 if (sd.name) disc._playerName = sd.name;
-                if (sd.avatar) disc.avatar = sd.avatar;
+                if (sd.avatar !== undefined) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
-            } else if (sd.color) {
-                disc.color = sd.color;
             }
+            // Always sync color and avatarColor for all disc types
+            if (sd.color !== undefined && sd.color !== null) disc.color = sd.color;
+            if (sd.avatarColor !== undefined && sd.avatarColor !== null) disc.avatarColor = sd.avatarColor;
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
@@ -812,6 +814,9 @@ export class Physics {
             } else if (sd.color) {
                 disc.color = sd.color;
             }
+            // Always sync color and avatarColor
+            if (sd.color !== undefined && sd.color !== null) disc.color = sd.color;
+            if (sd.avatarColor !== undefined && sd.avatarColor !== null) disc.avatarColor = sd.avatarColor;
             if (sd.radius) disc.radius = sd.radius;
             if (sd.typing !== undefined) disc.typing = sd.typing;
 

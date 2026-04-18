@@ -30,6 +30,9 @@ class Disc {
         this.isPlayer = opts.isPlayer || false;
         this.ownerId = opts.ownerId || null;
         this.team = opts.team || null;
+        this.avatar = opts.avatar || "";
+        this.color = opts.color || null;
+        this.avatarColor = opts.avatarColor || 'FFFFFF';
         this.kicking = false;
         this.typing = false;
         this.input = { up: false, down: false, left: false, right: false, kick: false };
@@ -209,7 +212,7 @@ export class GamePhysics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 10;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -347,7 +350,7 @@ export class GamePhysics {
         if (dist >= minDist || dist === 0) return;
         const nx = dx / dist;
         const ny = dy / dist;
-        const overlap = minDist - dist;
+        const overlap = (minDist - dist) + 0.01; // Small epsilon to prevent resticking
         const totalInvMass = a.invMass + b.invMass;
         if (totalInvMass === 0) return;
         a.pos.x -= nx * overlap * (a.invMass / totalInvMass);
@@ -525,6 +528,7 @@ export class GamePhysics {
                     typing: d.typing, 
                     id: d.ownerId || d.id,
                     color: d.color,
+                    avatarColor: d.avatarColor,
                     input: d.input,
                     cMask: d.cMask,
                     cGroup: d.cGroup,
@@ -535,7 +539,7 @@ export class GamePhysics {
                     kickingAcceleration: d.kickingAcceleration,
                     kickingDamping: d.kickingDamping,
                     kickStrength: d.kickStrength
-                } : { radius: d.radius, color: d.color })
+                } : { radius: d.radius, color: d.color, avatarColor: d.avatarColor })
             }))
         };
     }
