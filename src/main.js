@@ -416,9 +416,15 @@ class GokBallApp {
                     this.physics.step();
                 }
             } else {
-                // RUN PREDICTION AT FIXED 60HZ
+                // RUN FULL PREDICTION AT FIXED 60HZ
                 if (this._serverGameState === 'playing') {
-                    this.physics.stepLocalOnly(this.network.socket?.id);
+                    // Prevent remote players from endlessly moving locally based on last key press
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer && disc !== myDisc) {
+                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
+                        }
+                    }
+                    this.physics.step();
                 }
             }
             this.accumulator -= stepSize;

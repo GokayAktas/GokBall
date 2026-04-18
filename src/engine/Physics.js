@@ -295,97 +295,15 @@ export class Physics {
         return { goalTeam, kickHappened };
     }
 
-    /**
-     * Lightweight local-only prediction step.
-     * Only moves the local player's disc (applies input + damping + boundary collisions).
-     * Does NOT move other discs, ball, or check goals.
-     * This prevents double-simulation conflicts with the server.
-     */
-    stepLocalOnly(localPlayerId) {
-        if (!localPlayerId) return;
-        
-        const disc = this.discs.find(d => d.id === localPlayerId);
-        if (!disc || !disc.isPlayer) return;
-
-        // Apply input acceleration (same as full step)
-        if (disc.input) {
-            let ax = 0, ay = 0;
-            if (disc.input.up) ay -= 1;
-            if (disc.input.down) ay += 1;
-            if (disc.input.left) ax -= 1;
-            if (disc.input.right) ax += 1;
-
-            // Normalize diagonal
-            const len = Math.sqrt(ax * ax + ay * ay);
-            if (len > 0) {
-                ax /= len;
-                ay /= len;
-            }
-
-            // Kick logic
-            if (disc.input.kick && !disc.kicking) {
-                disc.kicking = true;
-                this._performKick(disc); // Optional for visual kick
-            } else if (!disc.input.kick) {
-                disc.kicking = false;
-            }
-
-            const accel = disc.kicking ? (disc.kickingAcceleration || 0.07) : (disc.acceleration || 0.1);
-            disc.speed.x += ax * accel;
-            disc.speed.y += ay * accel;
-        }
-
-        // Damping
-        const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
-        disc.speed.x *= damp;
-        disc.speed.y *= damp;
-
-        // Move
-        disc.pos.x += disc.speed.x;
-        disc.pos.y += disc.speed.y;
-
-        // Apply KickOff Constraints (Prediction)
-        this._applyKickOffConstraints();
-
-        // Boundary collisions (planes) for local player only
-        for (const plane of this.planes) {
-            if (!(disc.cMask & plane.cGroup) && !(plane.cMask & disc.cGroup)) continue;
-            this._collideDiscPlane(disc, plane);
-        }
-
-        // Segment collisions for local player
-        for (const seg of this.segments) {
-            if (!(disc.cMask & seg.cGroup) && !(seg.cMask & disc.cGroup)) continue;
-            this._collideDiscSegment(disc, seg);
-        }
-
-        // Disc-disc collisions for local player (Prevents phasing through ball AND other players!)
-        for (const other of this.discs) {
-            if (other === disc) continue;
-            this._collideDiscs(disc, other);
-        }
-
-        // --- PREDICT BALL MOVEMENT LOCALLY ---
-        // Prevents the ball from feeling like an unmovable brick (heavy) until the server syncs it
-        if (this.ballDisc) {
-            this.ballDisc.speed.x *= this.ballDisc.damping;
-            this.ballDisc.speed.y *= this.ballDisc.damping;
-            this.ballDisc.pos.x += this.ballDisc.speed.x;
-            this.ballDisc.pos.y += this.ballDisc.speed.y;
-
-            for (const plane of this.planes) {
-                if (!(this.ballDisc.cMask & plane.cGroup) && !(plane.cMask & this.ballDisc.cGroup)) continue;
-                this._collideDiscPlane(this.ballDisc, plane);
-            }
-            for (const seg of this.segments) {
-                if (!(this.ballDisc.cMask & seg.cGroup) && !(seg.cMask & this.ballDisc.cGroup)) continue;
-                this._collideDiscSegment(this.ballDisc, seg);
-            }
-        }
-    }
+    // Removed stepLocalOnly as we will now use full prediction via step()
 
     _performKick(playerDisc) {
         if (!this.ballDisc) return false;
+
+        // Kickoff rule: ONLY the kickoff team can kick the ball during reset
+        if (this.kickOffReset && playerDisc.team !== this.kickOffTeam) {
+            return false;
+        }
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -411,6 +329,25 @@ export class Physics {
 
     _collideDiscs(a, b) {
         if (a.invMass === 0 && b.invMass === 0) return;
+
+        // Kickoff rule handling: NO collision with ball for defending team
+        if (this.kickOffReset) {
+            const isBall = (a === this.ballDisc || b === this.ballDisc);
+            if (isBall) {
+                const playerDisc = a === this.ballDisc ? b : a;
+                if (playerDisc.isPlayer) {
+                    if (playerDisc.team === this.kickOffTeam) {
+                        const dist = Math.sqrt(Math.pow(b.pos.x - a.pos.x, 2) + Math.pow(b.pos.y - a.pos.y, 2));
+                        if (dist < a.radius + b.radius) {
+                            this.kickOffReset = false;
+                        }
+                    } else {
+                        return; // Non-kickoff team ignores collision completely (ghost ball)
+                    }
+                }
+            }
+        }
+
         if (!(a.cMask & b.cGroup) && !(b.cMask & a.cGroup)) return;
 
         const dx = b.pos.x - a.pos.x;
