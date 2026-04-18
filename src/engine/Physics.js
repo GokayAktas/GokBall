@@ -722,6 +722,16 @@ export class Physics {
                 if (sd.name) disc._playerName = sd.name;
                 if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
+                
+                // CRUCIAL: Sync physics parameters for prediction! 
+                // Missing this caused the desync/teleportation loop because client had wrong damping
+                if (sd.damping !== undefined) disc.damping = sd.damping;
+                if (sd.acceleration !== undefined) disc.acceleration = sd.acceleration;
+                if (sd.kickingAcceleration !== undefined) disc.kickingAcceleration = sd.kickingAcceleration;
+                if (sd.kickingDamping !== undefined) disc.kickingDamping = sd.kickingDamping;
+                if (sd.kickStrength !== undefined) disc.kickStrength = sd.kickStrength;
+                if (sd.bCoef !== undefined) disc.bCoef = sd.bCoef;
+                if (sd.invMass !== undefined) disc.invMass = sd.invMass;
             } else if (sd.color) {
                 disc.color = sd.color;
             }
