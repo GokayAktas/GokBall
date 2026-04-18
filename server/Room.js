@@ -130,7 +130,7 @@ const STADIUMS = {
             { p0: [420, 75], p1: [420, -75], team: "blue" }
         ],
         discs: [
-            { pos: [0, 0], radius: 6.5, invMass: 1.1, bCoef: 0.5, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
+            { pos: [0, 0], radius: 6.4, invMass: 1.6, bCoef: 0.4, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
             // Posts (Red/Blue Dots)
             { pos: [-420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
             { pos: [-420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
@@ -138,20 +138,14 @@ const STADIUMS = {
             { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
         ],
         planes: [
-            // Inner lines (Ball only: cMask: ["ball"])
-            { normal: [0, 1], dist: -260, bCoef: 0.1, cMask: ["ball"] },
-            { normal: [0, -1], dist: -260, bCoef: 0.1, cMask: ["ball"] },
-            { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["ball"], cGroup: ["all"] },
-            { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["ball"], cGroup: ["all"] },
-            // Outer wall (Players can go up to here)
-            { normal: [0, 1], dist: -350, bCoef: 0.1, cMask: ["all"] },
-            { normal: [0, -1], dist: -350, bCoef: 0.1, cMask: ["all"] },
-            { normal: [1, 0], dist: -600, bCoef: 0.1, cMask: ["all"] },
-            { normal: [-1, 0], dist: -600, bCoef: 0.1, cMask: ["all"] }
+            { normal: [0, 1], dist: -236, bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, -1], dist: -236, bCoef: 0.1, cMask: ["all"] },
+            { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
+            { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
         ],
         playerPhysics: {
-            radius: 18.0, bCoef: 0.5, invMass: 0.38, damping: 0.957,
-            acceleration: 0.105, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 3.8
+            radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+            acceleration: 0.1, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 5.0
         },
         ballPhysics: "disc0"
     },
@@ -585,23 +579,20 @@ export class Room {
                     const team = parts[1]?.toLowerCase();
                     if (team === 'red' || team === 'blue') {
                         // Support HaxColors format: /colors red 60 FFFFFF 000000 444444
-                        // parts[2]: angle, parts[3]: textColor, parts[4...]: colors
                         const angle = parseInt(parts[2]) || 0;
-                        const textColor = (parts[3] || 'FFFFFF').replace('#', '');
-                        const colors = parts.slice(4).map(c => c.replace('#', ''));
+                        const colors = parts.slice(3).map(c => c.replace('#', ''));
                         
                         if (colors.length > 0) {
                             if (!this.teamColors) this.teamColors = { red: null, blue: null };
                             this.teamColors[team] = {
                                 angle,
-                                textColor,
                                 colors
                             };
                             
                             // Broadcast update
                             this.broadcast('chatMessage', {
                                 playerName: 'SİSTEM',
-                                message: `${team.toUpperCase()} takım renkleri güncellendi (Yazı: ${textColor}, Forma: ${colors.join(', ')}).`,
+                                message: `${team.toUpperCase()} takım renkleri güncellendi.`,
                                 system: true
                             });
 
@@ -609,8 +600,7 @@ export class Room {
                             if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
                                 this.game.physics.discs.forEach(d => {
                                     if (d.isPlayer && d.team === team) {
-                                        d.color = colors[0]; // Primary color
-                                        d.avatarColor = textColor;
+                                        d.color = colors[0]; // Simplification for now: first color
                                     }
                                 });
                                 this.broadcast('gameUpdate', this.game.physics.getState());

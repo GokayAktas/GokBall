@@ -30,9 +30,6 @@ class Disc {
         this.isPlayer = opts.isPlayer || false;
         this.ownerId = opts.ownerId || null;
         this.team = opts.team || null;
-        this.avatar = opts.avatar || "";
-        this.color = opts.color || null;
-        this.avatarColor = opts.avatarColor || 'FFFFFF';
         this.kicking = false;
         this.typing = false;
         this.input = { up: false, down: false, left: false, right: false, kick: false };
@@ -212,7 +209,7 @@ export class GamePhysics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -276,37 +273,19 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (can enter entire circle but blocked outside opponent side)
+                    // 3. Kickoff team (the one who conceded)
+                    // They can enter the circle (even opponent's side), but blocked by midline OUTSIDE circle
                     const inCircle = dist < kickOffRadius;
-                    const inOpponentHalf = isRed ? (disc.pos.x > 0) : (disc.pos.x < 0);
-
-                    if (inOpponentHalf) {
-                        // While in opponent half, they MUST stay inside circle (Physical Wall)
-                        if (dist > (kickOffRadius - disc.radius)) {
-                            const nx = dx / dist;
-                            const ny = dy / dist;
-                            disc.pos.x = nx * (kickOffRadius - disc.radius);
-                            disc.pos.y = ny * (kickOffRadius - disc.radius);
-                            
-                            const dot = disc.speed.x * nx + disc.speed.y * ny;
-                            if (dot > 0) {
-                                disc.speed.x -= dot * nx;
-                                disc.speed.y -= dot * ny;
+                    if (!inCircle) {
+                        if (isRed) {
+                            if (disc.pos.x > -disc.radius) {
+                                disc.pos.x = -disc.radius;
+                                if (disc.speed.x > 0) disc.speed.x = 0;
                             }
-                        }
-                    } else {
-                        // In their own half, they are free except midline outside circle
-                        if (!inCircle) {
-                            if (isRed) {
-                                if (disc.pos.x > -disc.radius) {
-                                    disc.pos.x = -disc.radius;
-                                    if (disc.speed.x > 0) disc.speed.x = 0;
-                                }
-                            } else {
-                                if (disc.pos.x < disc.radius) {
-                                    disc.pos.x = disc.radius;
-                                    if (disc.speed.x < 0) disc.speed.x = 0;
-                                }
+                        } else { // blue is kickoff
+                            if (disc.pos.x < disc.radius) {
+                                disc.pos.x = disc.radius;
+                                if (disc.speed.x < 0) disc.speed.x = 0;
                             }
                         }
                     }
@@ -350,7 +329,7 @@ export class GamePhysics {
         if (dist >= minDist || dist === 0) return;
         const nx = dx / dist;
         const ny = dy / dist;
-        const overlap = (minDist - dist) + 0.01; // Small epsilon to prevent resticking
+        const overlap = minDist - dist;
         const totalInvMass = a.invMass + b.invMass;
         if (totalInvMass === 0) return;
         a.pos.x -= nx * overlap * (a.invMass / totalInvMass);
@@ -527,8 +506,6 @@ export class GamePhysics {
                     avatar: d._avatar, 
                     typing: d.typing, 
                     id: d.ownerId || d.id,
-                    color: d.color,
-                    avatarColor: d.avatarColor,
                     input: d.input,
                     cMask: d.cMask,
                     cGroup: d.cGroup,
@@ -539,7 +516,7 @@ export class GamePhysics {
                     kickingAcceleration: d.kickingAcceleration,
                     kickingDamping: d.kickingDamping,
                     kickStrength: d.kickStrength
-                } : { radius: d.radius, color: d.color, avatarColor: d.avatarColor })
+                } : { radius: d.radius, color: d.color })
             }))
         };
     }

@@ -220,44 +220,40 @@ export class Renderer {
             // Self-identifier: translucent white glow circle (always visible)
             if (isSelf) {
                 ctx.beginPath();
-                ctx.arc(disc.pos.x, disc.pos.y, disc.radius + 5, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                ctx.lineWidth = 2;
+                ctx.arc(disc.pos.x, disc.pos.y, disc.radius + 10, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.lineWidth = 3;
                 ctx.stroke();
             }
 
-            // Main disc - Stroke is drawn INSIDE the physics radius to prevent overlap "ghosting"
+            // Main disc
+            ctx.beginPath();
+            ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
+
             let fill, border, lw;
             if (disc.isPlayer) {
-                // Priority: Custom Color (from /colors) -> Default Team Color
-                // Exclude FFFFFF/null/undefined so we always fall back to team color
-                const c = disc.color;
-                const hasCustomColor = c && typeof c === 'string' && c.length >= 3 && c !== 'null' && c !== 'FFFFFF';
-                if (hasCustomColor) {
-                    fill = '#' + c;
+                // Priority: Custom Color -> Default Team Color
+                if (disc.color) {
+                    fill = '#' + disc.color;
                 } else {
                     fill = disc.team === 'red' ? '#c70000' : '#00008c';
                 }
                 border = disc.kicking ? '#FFFFFF' : '#000000';
                 lw = 2.5;
             } else {
-                // Ball: valid color or golden yellow default
-                const bc = disc.color;
-                fill = '#' + ((bc && bc !== 'null') ? bc : 'FFB82E');
+                fill = '#' + (disc.color || 'FFB82E'); // Default to target yellow
                 border = '#000000';
-                lw = 3; 
+                lw = 3; // Thicker outline for ball per request
             }
 
-            ctx.beginPath();
-            ctx.arc(disc.pos.x, disc.pos.y, Math.max(0.1, disc.radius - lw / 2), 0, Math.PI * 2);
             ctx.fillStyle = fill;
             ctx.fill();
             ctx.strokeStyle = border;
             ctx.lineWidth = lw;
             ctx.stroke();
 
-            // Avatar number — ALWAYS WHITE for visibility on team-colored jersey
-            if (disc.avatar || (disc.isPlayer && disc.avatar !== "")) {
+            // Avatar (Centered bold text)
+            if (disc.avatar || disc.isPlayer) {
                 ctx.fillStyle = '#FFFFFF';
                 ctx.font = `900 ${disc.radius * 1.1}px Inter, "Segoe UI", Tahoma, sans-serif`;
                 ctx.textAlign = 'center';

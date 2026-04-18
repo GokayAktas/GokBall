@@ -29,8 +29,7 @@ export class Disc {
         this.invMass = opts.invMass ?? 1;
         this.bCoef = opts.bCoef ?? 0.5;
         this.damping = opts.damping ?? 0.99;
-        this.color = opts.color || null;
-        this.avatarColor = opts.avatarColor || null;
+        this.color = opts.color || 'FFFFFF';
         this.cMask = opts.cMask ?? CollisionFlags.all;
         this.cGroup = opts.cGroup ?? CollisionFlags.all;
 
@@ -357,7 +356,7 @@ export class Physics {
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 4;
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
         if (dist < minDist && dist > 0) {
             // Kickoff team touched via kick
@@ -379,7 +378,7 @@ export class Physics {
 
     _collideDiscs(a, b) {
         if (a.invMass === 0 && b.invMass === 0) return;
-        if (!(a.cMask & b.cGroup) || !(b.cMask & a.cGroup)) return;
+        if (!(a.cMask & b.cGroup) && !(b.cMask & a.cGroup)) return;
 
         const dx = b.pos.x - a.pos.x;
         const dy = b.pos.y - a.pos.y;
@@ -392,7 +391,7 @@ export class Physics {
         const ny = dy / dist;
 
         // Separate discs
-        const overlap = (minDist - dist) + 0.01; // Small epsilon
+        const overlap = minDist - dist;
         const totalInvMass = a.invMass + b.invMass;
         if (totalInvMass === 0) return;
 
@@ -629,37 +628,18 @@ export class Physics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (can enter entire circle but blocked outside opponent side)
+                    // 3. Kickoff team (can enter entire circle but blocked outside)
                     const inCircle = dist < kickOffRadius;
-                    const inOpponentHalf = isRed ? (disc.pos.x > 0) : (disc.pos.x < 0);
-
-                    if (inOpponentHalf) {
-                        // While in opponent half, they MUST stay inside circle (Physical Wall)
-                        if (dist > (kickOffRadius - disc.radius)) {
-                            const nx = dx / dist;
-                            const ny = dy / dist;
-                            disc.pos.x = nx * (kickOffRadius - disc.radius);
-                            disc.pos.y = ny * (kickOffRadius - disc.radius);
-                            
-                            const dot = disc.speed.x * nx + disc.speed.y * ny;
-                            if (dot > 0) {
-                                disc.speed.x -= dot * nx;
-                                disc.speed.y -= dot * ny;
+                    if (!inCircle) {
+                        if (isRed) {
+                            if (disc.pos.x > -disc.radius) {
+                                disc.pos.x = -disc.radius;
+                                if (disc.speed.x > 0) disc.speed.x = 0;
                             }
-                        }
-                    } else {
-                        // In their own half, they are free except midline outside circle
-                        if (!inCircle) {
-                            if (isRed) {
-                                if (disc.pos.x > -disc.radius) {
-                                    disc.pos.x = -disc.radius;
-                                    if (disc.speed.x > 0) disc.speed.x = 0;
-                                }
-                            } else {
-                                if (disc.pos.x < disc.radius) {
-                                    disc.pos.x = disc.radius;
-                                    if (disc.speed.x < 0) disc.speed.x = 0;
-                                }
+                        } else {
+                            if (disc.pos.x < disc.radius) {
+                                disc.pos.x = disc.radius;
+                                if (disc.speed.x < 0) disc.speed.x = 0;
                             }
                         }
                     }
@@ -740,12 +720,11 @@ export class Physics {
                 disc.isPlayer = sd.isPlayer;
                 disc.team = sd.team;
                 if (sd.name) disc._playerName = sd.name;
-                if (sd.avatar !== undefined) disc.avatar = sd.avatar;
+                if (sd.avatar) disc.avatar = sd.avatar;
                 if (sd.id) disc.id = sd.id;
+            } else if (sd.color) {
+                disc.color = sd.color;
             }
-            // Always sync color and avatarColor for all disc types
-            if (sd.color !== undefined && sd.color !== null) disc.color = sd.color;
-            if (sd.avatarColor !== undefined && sd.avatarColor !== null) disc.avatarColor = sd.avatarColor;
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
@@ -761,10 +740,9 @@ export class Physics {
                 if (distSq > this.predictionThreshold * this.predictionThreshold) {
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
+                    disc.speed.x = sd.sx;
+                    disc.speed.y = sd.sy;
                 }
-                // Always sync speed from server for physics stability
-                disc.speed.x = sd.sx;
-                disc.speed.y = sd.sy;
             } else {
                 // For others (remote players and ball), snap to server position
                 disc.pos.x = sd.x;
@@ -814,9 +792,6 @@ export class Physics {
             } else if (sd.color) {
                 disc.color = sd.color;
             }
-            // Always sync color and avatarColor
-            if (sd.color !== undefined && sd.color !== null) disc.color = sd.color;
-            if (sd.avatarColor !== undefined && sd.avatarColor !== null) disc.avatarColor = sd.avatarColor;
             if (sd.radius) disc.radius = sd.radius;
             if (sd.typing !== undefined) disc.typing = sd.typing;
 
