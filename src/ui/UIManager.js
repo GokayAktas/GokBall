@@ -30,6 +30,9 @@ export class UIManager {
     }
 
     hideAll() {
+        if (this.currentScreen && this.screens[this.currentScreen]?.onHide) {
+            this.screens[this.currentScreen].onHide();
+        }
         this.app.innerHTML = '';
         this.app.style.display = 'none';
     }

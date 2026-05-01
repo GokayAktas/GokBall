@@ -481,7 +481,7 @@ export class GamePhysics {
     }
 
     _checkGoals() {
-        if (!this.ballDisc) return null;
+        if (!this.ballDisc) return { goalTeam: null };
         for (const goal of this.goals) {
             const gx = (goal.p0.x + goal.p1.x) / 2;
             const gy0 = Math.min(goal.p0.y, goal.p1.y);
@@ -492,12 +492,12 @@ export class GamePhysics {
 
             // Full ball entry check: entire ball must cross the goal line (gx)
             if (gx < 0) { // Left Goal (Red defending, Blue scoring)
-                if (this.ballDisc.pos.x < gx - this.ballDisc.radius) return goal.team;
+                if (this.ballDisc.pos.x < gx - this.ballDisc.radius) return { goalTeam: goal.team };
             } else { // Right Goal (Blue defending, Red scoring)
-                if (this.ballDisc.pos.x > gx + this.ballDisc.radius) return goal.team;
+                if (this.ballDisc.pos.x > gx + this.ballDisc.radius) return { goalTeam: goal.team };
             }
         }
-        return null;
+        return { goalTeam: null };
     }
 
     getState() {
