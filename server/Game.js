@@ -104,9 +104,13 @@ export class Game {
                 disc._avatar = p.avatar;
                 if (this.room.teamColors && this.room.teamColors['red']) {
                     disc.color = this.room.teamColors['red'].colors[0];
+                    disc.colors = this.room.teamColors['red'].colors;
+                    disc.colorAngle = this.room.teamColors['red'].angle;
                     disc.avatarColor = this.room.teamColors['red'].textColor;
                 } else {
                     disc.color = 'c70000'; // Default Red
+                    disc.colors = ['c70000'];
+                    disc.colorAngle = 0;
                     disc.avatarColor = 'FFFFFF';
                 }
             }
@@ -128,9 +132,13 @@ export class Game {
                 disc._avatar = p.avatar;
                 if (this.room.teamColors && this.room.teamColors['blue']) {
                     disc.color = this.room.teamColors['blue'].colors[0];
+                    disc.colors = this.room.teamColors['blue'].colors;
+                    disc.colorAngle = this.room.teamColors['blue'].angle;
                     disc.avatarColor = this.room.teamColors['blue'].textColor;
                 } else {
                     disc.color = '00008c'; // Default Blue
+                    disc.colors = ['00008c'];
+                    disc.colorAngle = 0;
                     disc.avatarColor = 'FFFFFF';
                 }
             }

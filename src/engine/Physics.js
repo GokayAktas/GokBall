@@ -695,6 +695,8 @@ export class Physics {
                 
                 // CRUCIAL: Sync Colors!
                 if (sd.color !== undefined) disc.color = sd.color;
+                if (sd.colors !== undefined) disc.colors = sd.colors;
+                if (sd.colorAngle !== undefined) disc.colorAngle = sd.colorAngle;
                 if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
 
                 // CRUCIAL: Sync physics parameters for prediction! 
@@ -768,6 +770,8 @@ export class Physics {
                 
                 // CRUCIAL: Sync Colors!
                 if (sd.color !== undefined) disc.color = sd.color;
+                if (sd.colors !== undefined) disc.colors = sd.colors;
+                if (sd.colorAngle !== undefined) disc.colorAngle = sd.colorAngle;
                 if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
                 
                 // Physics properties from server (crucial for local admin!)

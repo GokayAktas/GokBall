@@ -226,28 +226,46 @@ export class Renderer {
                 ctx.stroke();
             }
 
-            // Main disc
-            ctx.beginPath();
-            ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
+            let border, lw;
+            let colors = [];
+            let angle = 0;
 
-            let fill, border, lw;
             if (disc.isPlayer) {
-                // Priority: Custom Color -> Default Team Color
-                if (disc.color) {
-                    fill = '#' + disc.color;
+                // Priority: Colors Array -> Single Custom Color -> Default Team Color
+                if (disc.colors && disc.colors.length > 0) {
+                    colors = disc.colors;
+                    angle = disc.colorAngle || 0;
+                } else if (disc.color) {
+                    colors = [disc.color];
                 } else {
-                    fill = disc.team === 'red' ? '#c70000' : '#00008c';
+                    colors = [disc.team === 'red' ? 'c70000' : '00008c'];
                 }
                 border = disc.kicking ? '#FFFFFF' : '#000000';
                 lw = 2.5;
             } else {
-                fill = '#' + (disc.color || 'FFB82E'); // Default to target yellow
+                colors = [disc.color || 'FFB82E']; // Default to target yellow
                 border = '#000000';
                 lw = 3; // Thicker outline for ball per request
             }
 
-            ctx.fillStyle = fill;
-            ctx.fill();
+            // Draw sectors
+            const radAngle = angle * Math.PI / 180;
+            const numColors = colors.length;
+            const sectorAngle = (Math.PI * 2) / numColors;
+
+            for (let i = 0; i < numColors; i++) {
+                ctx.beginPath();
+                ctx.moveTo(disc.pos.x, disc.pos.y);
+                const startAngle = radAngle + i * sectorAngle;
+                const endAngle = startAngle + sectorAngle;
+                ctx.arc(disc.pos.x, disc.pos.y, disc.radius, startAngle, endAngle);
+                ctx.fillStyle = '#' + colors[i];
+                ctx.fill();
+            }
+
+            // Draw border
+            ctx.beginPath();
+            ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
             ctx.strokeStyle = border;
             ctx.lineWidth = lw;
             ctx.stroke();
