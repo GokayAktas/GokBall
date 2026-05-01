@@ -314,6 +314,17 @@ export class Room {
                     disc._playerName = player.name;
                     disc._avatar = player.avatar;
                     disc.ownerId = socketId;
+                    if (this.teamColors && this.teamColors[team]) {
+                        disc.color = this.teamColors[team].colors[0];
+                        disc.colors = this.teamColors[team].colors;
+                        disc.colorAngle = this.teamColors[team].angle;
+                        disc.avatarColor = this.teamColors[team].textColor;
+                    } else {
+                        disc.color = team === 'red' ? 'c70000' : '00008c';
+                        disc.colors = [disc.color];
+                        disc.colorAngle = 0;
+                        disc.avatarColor = 'FFFFFF';
+                    }
                 }
             } else {
                 player.discIndex = -1;
@@ -414,6 +425,17 @@ export class Room {
                     disc._playerName = target.name;
                     disc._avatar = target.avatar;
                     disc.ownerId = targetId; // Critical for proper sync
+                    if (this.teamColors && this.teamColors[team]) {
+                        disc.color = this.teamColors[team].colors[0];
+                        disc.colors = this.teamColors[team].colors;
+                        disc.colorAngle = this.teamColors[team].angle;
+                        disc.avatarColor = this.teamColors[team].textColor;
+                    } else {
+                        disc.color = team === 'red' ? 'c70000' : '00008c';
+                        disc.colors = [disc.color];
+                        disc.colorAngle = 0;
+                        disc.avatarColor = 'FFFFFF';
+                    }
                 }
             } else {
                 target.discIndex = -1; // Explicitly set spectator index
