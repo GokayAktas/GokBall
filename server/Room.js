@@ -285,9 +285,10 @@ export class Room {
 
         if (!['red', 'blue', 'spectator'].includes(team)) return;
 
-        // Check team lock (non-admins can't change if locked)
-        if (this.teamsLocked && !player.isAdmin) {
-            player.socket.emit('roomError', { error: 'Takımlar kilitli!' });
+        // Check team lock (non-admins can't change if locked OR game is running)
+        const isGameRunning = this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal';
+        if ((this.teamsLocked || isGameRunning) && !player.isAdmin) {
+            player.socket.emit('roomError', { error: 'Oyun devam ederken veya takımlar kilitliyken geçiş yapamazsınız!' });
             return;
         }
 

@@ -406,13 +406,13 @@ export class RoomLobby {
     const btnClearBlue = document.getElementById('btnClearBlue');
     if (btnClearBlue) btnClearBlue.style.display = (isAdmin && isStopped) ? '' : 'none';
 
-    // Disable Join buttons for non-admins if game is playing
-    const canJoin = isAdmin || isStopped;
+    // Disable Join buttons for non-admins if game is playing or teams are locked
+    const canJoin = isAdmin || (isStopped && !data.teamsLocked);
     const btnJoinRed = document.getElementById('btnJoinRed');
     if (btnJoinRed) btnJoinRed.style.display = canJoin ? '' : 'none';
     const btnJoinBlue = document.getElementById('btnJoinBlue');
     if (btnJoinBlue) btnJoinBlue.style.display = canJoin ? '' : 'none';
-    const btnJoinSpectator = document.getElementById('btnJoinSpectator');
+    const btnJoinSpectator = document.getElementById('btnJoinSpec');
     if (btnJoinSpectator) btnJoinSpectator.style.display = canJoin ? '' : 'none';
   }
 

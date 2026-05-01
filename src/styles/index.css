@@ -791,6 +791,7 @@ select.input option {
   font-size: var(--font-xs);
   line-height: 1.4;
   padding: 2px 0;
+  white-space: pre-wrap;
 }
 
 .chat-message-system {

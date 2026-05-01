@@ -59,6 +59,10 @@ export class Game {
         // Reset physics
         this.physics.loadStadium(this.stadiumData);
 
+        // Lock teams when game starts
+        this.room.teamsLocked = true;
+        this.room.broadcast('teamLockChanged', { locked: true });
+
         // Add player discs
         this._spawnPlayers();
 
