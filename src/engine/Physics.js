@@ -708,6 +708,8 @@ export class Physics {
                 if (sd.kickStrength !== undefined) disc.kickStrength = sd.kickStrength;
                 if (sd.bCoef !== undefined) disc.bCoef = sd.bCoef;
                 if (sd.invMass !== undefined) disc.invMass = sd.invMass;
+                if (sd.cMask !== undefined) disc.cMask = sd.cMask;
+                if (sd.cGroup !== undefined) disc.cGroup = sd.cGroup;
             } else if (sd.color) {
                 disc.color = sd.color;
             }

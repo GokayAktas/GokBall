@@ -22,6 +22,8 @@ export class InGameMenu {
         const blueTeam = players.filter(p => p.team === 'blue');
         const specs = players.filter(p => p.team === 'spectator');
 
+        const isMatchRunning = roomData.game && (roomData.game.state === 'playing' || roomData.game.state === 'countdown' || roomData.game.state === 'goal');
+
         this.container.innerHTML = `
             <div class="room-mgmt-menu">
                 <div class="room-mgmt-header">
@@ -49,7 +51,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamRed">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--red-team); font-weight:bold;">🔴 Kırmızı</span>
-                            ${(!roomData.teamsLocked || isAdmin) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
                         </div>
                         <div class="player-list" id="redPlayers" style="min-height:100px;">
                             ${redTeam.map(p => `
@@ -67,7 +69,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamSpectator">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--text-muted); font-weight:bold;">👁️ İzleyiciler</span>
-                            ${(!roomData.teamsLocked || isAdmin) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
+                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
                         </div>
                         <div class="player-list" id="spectatorPlayers" style="min-height:100px;">
                             ${specs.map(p => `
@@ -84,7 +86,7 @@ export class InGameMenu {
 
                     <div class="mgmt-column" id="teamBlue">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            ${(!roomData.teamsLocked || isAdmin) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
                             <span style="color:var(--blue-team); font-weight:bold;">🔵 Mavi</span>
                         </div>
                         <div class="player-list" id="bluePlayers" style="min-height:100px;">
@@ -125,10 +127,10 @@ export class InGameMenu {
     _bindEvents(isAdmin) {
         this.container.querySelector('#btnResumeGame')?.addEventListener('click', () => this.hide());
         this.container.querySelector('#btnLeaveRoom')?.addEventListener('click', () => {
-            if (confirm('Odadan ayrılmak istediğinize emin misiniz?')) {
+            this.app.ui.showConfirm('Odadan ayrılmak istediğinize emin misiniz?', () => {
                 this.app.leaveRoom();
                 this.hide();
-            }
+            });
         });
 
         this.container.querySelector('#btnJoinRed')?.addEventListener('click', () => this.app.network.changeTeam('red'));
@@ -147,9 +149,9 @@ export class InGameMenu {
             this.container.querySelectorAll('.kick-btn').forEach(btn => {
                 btn.onclick = () => {
                     const id = btn.dataset.id;
-                    if (confirm('Bu oyuncuyu atmak istediğinize emin misiniz?')) {
+                    this.app.ui.showConfirm('Bu oyuncuyu atmak istediğinize emin misiniz?', () => {
                         this.app.network.kickPlayer(id, 'Kicked by admin');
-                    }
+                    });
                 };
             });
 

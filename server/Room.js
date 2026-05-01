@@ -647,6 +647,24 @@ export class Room {
                     }
                 }
                 break; // Added missing break
+            case '/komut':
+            case '/komutlar':
+                let helpText = "📜 Komutlar:\n";
+                helpText += "👤 /avatar [yazı] - Formandaki yazıyı/emojiyi değiştirir (Max 2 harf)\n";
+                helpText += "🧼 /clear_avatar - Formandaki yazıyı siler\n";
+                
+                if (player.isAdmin) {
+                    helpText += "\n👑 Admin Komutları:\n";
+                    helpText += "🎨 /colors [red|blue] [açı] [yazı_rengi] [renk1] [renk2] - Takım renklerini değiştirir\n";
+                    helpText += "🔓 /clear_bans - Tüm yasaklamaları (banları) kaldırır\n";
+                }
+
+                player.socket.emit('chatMessage', {
+                    playerName: 'SİSTEM',
+                    message: helpText,
+                    system: true
+                });
+                break;
             case '/clear_bans':
                 if (player.isAdmin) {
                     this.bannedIPs.clear();
