@@ -297,50 +297,38 @@ export class Renderer {
 
     _drawTypingBubble(x, y) {
         const ctx = this.ctx;
-        const now = Date.now();
-        const w = 28;
-        const h = 18;
-        const r = 8;
+        const w = 24;
+        const h = 14;
+        const r = 5;
 
         ctx.save();
         ctx.translate(x, y - h - 10);
 
-        // Shadow for premium feel
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 3;
-
-        // Bubble body
+        // Simple Bubble body
         ctx.beginPath();
         this._roundRect(ctx, -w / 2, 0, w, h, r);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+        ctx.fillStyle = 'white';
         ctx.fill();
-        
-        ctx.shadowColor = 'transparent'; // Disable shadow for strokes
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        // Pointer (Triangle)
+        // Pointer
         ctx.beginPath();
-        ctx.moveTo(-5, h);
-        ctx.lineTo(0, h + 6);
-        ctx.lineTo(5, h);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+        ctx.moveTo(-4, h);
+        ctx.lineTo(0, h + 4);
+        ctx.lineTo(4, h);
+        ctx.fillStyle = 'white';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.strokeStyle = '#000';
         ctx.stroke();
 
-        // Animated Dots
-        const dotRadius = 1.8;
-        const spacing = 6;
+        // Static Dots (three small black squares or dots as in image)
+        const dotSize = 2;
+        const spacing = 5;
+        ctx.fillStyle = '#000';
         for (let i = 0; i < 3; i++) {
-            const bounce = Math.sin((now / 150) - (i * 1.2)) * 2.5;
-            ctx.beginPath();
-            ctx.arc((i - 1) * spacing, h / 2 + bounce, dotRadius, 0, Math.PI * 2);
-            ctx.fillStyle = '#222';
-            ctx.fill();
+            ctx.fillRect((i - 1) * spacing - dotSize/2, h / 2 - dotSize/2, dotSize, dotSize);
         }
 
         ctx.restore();

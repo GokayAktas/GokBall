@@ -110,8 +110,8 @@ export class Physics {
         this.segments = [];
         this.planes = [];
         this.goals = [];
-        this.isLocalAuthorityMode = false; // New: To skip server sync for Admin authority rooms
-        this.predictionThreshold = 100; // Increased to prevent false snaps due to input latency
+        this.isLocalAuthorityMode = false;
+        this.predictionThreshold = 10; // Lower threshold = more frequent but smaller corrections
         this.ballDisc = null;
         this.myPlayerId = null; // Local player ID for self-highlighting
         
@@ -720,22 +720,44 @@ export class Physics {
             // --- Smart Server State Application ---
             const isMe = (disc.id === this.myPlayerId && this.myPlayerId !== null);
             const isBall = (disc === this.ballDisc);
-            
-            if (isMe || isBall) {
-                // Reconciliation for local player and predictably moved objects (ball)
+            if (isMe) {
+                // Reconciliation for local player
                 const dx = sd.x - disc.pos.x;
                 const dy = sd.y - disc.pos.y;
                 const distSq = dx * dx + dy * dy;
-                // Ball uses a slightly larger threshold so it doesn't snap constantly if server goal checks vary
-                const thresh = isBall ? (this.predictionThreshold * 1.5) : this.predictionThreshold;
+                
+                // If the error is large, snap. If it's small, we'll slowly blend it or ignore.
+                const thresh = this.predictionThreshold;
                 if (distSq > thresh * thresh) {
                     disc.pos.x = sd.x;
                     disc.pos.y = sd.y;
                     disc.speed.x = sd.sx;
                     disc.speed.y = sd.sy;
+                } else {
+                    // Small correction: blend position slightly to reduce drift over time
+                    disc.pos.x = disc.pos.x * 0.9 + sd.x * 0.1;
+                    disc.pos.y = disc.pos.y * 0.9 + sd.y * 0.1;
+                }
+            } else if (isBall) {
+                // Ball reconciliation: Use a slightly higher threshold to allow server-side goal physics to settle
+                const dx = sd.x - disc.pos.x;
+                const dy = sd.y - disc.pos.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq > 20 * 20) {
+                    disc.pos.x = sd.x;
+                    disc.pos.y = sd.y;
+                    disc.speed.x = sd.sx;
+                    disc.speed.y = sd.sy;
+                } else {
+                    // Smooth ball corrections
+                    disc.pos.x = disc.pos.x * 0.8 + sd.x * 0.2;
+                    disc.pos.y = disc.pos.y * 0.8 + sd.y * 0.2;
+                    disc.speed.x = sd.sx;
+                    disc.speed.y = sd.sy;
                 }
             } else {
-                // For others (remote players and ball), snap to server position
+                // For others, we snap. To make it smoother, we could interpolate, 
+                // but snapping is standard for low-latency feel in Haxball logic.
                 disc.pos.x = sd.x;
                 disc.pos.y = sd.y;
                 disc.speed.x = sd.sx;

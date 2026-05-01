@@ -65,10 +65,10 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
             { pos: [fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] }
         ],
         planes: [
-            { normal: [0, 1], dist: -(fieldH + 60), bCoef: 0.2, cMask: ["all"] },
-            { normal: [0, -1], dist: -(fieldH + 60), bCoef: 0.2, cMask: ["all"] },
-            { normal: [1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.2, cMask: ["all"] },
-            { normal: [-1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.2, cMask: ["all"] }
+            { normal: [0, 1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, -1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ["all"] },
+            { normal: [1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ["all"] },
+            { normal: [-1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ["all"] }
         ],
         playerPhysics: {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
@@ -138,8 +138,8 @@ const STADIUMS = {
             { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
         ],
         planes: [
-            { normal: [0, 1], dist: -284, bCoef: 0.1, cMask: ["all"] },
-            { normal: [0, -1], dist: -284, bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, 1], dist: -250, bCoef: 0.1, cMask: ["all"] }, // 220 + 2*15 (approx)
+            { normal: [0, -1], dist: -250, bCoef: 0.1, cMask: ["all"] },
             { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
             { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
         ],
@@ -593,7 +593,10 @@ export class Room {
                     const discIdx = this.game.playerDiscs.get(player.id);
                     if (discIdx !== undefined) {
                         const disc = this.game.physics.discs[discIdx];
-                        if (disc) disc.avatar = player.avatar;
+                        if (disc) {
+                            disc.avatar = player.avatar;
+                            disc._avatar = player.avatar; // Handle both properties just in case
+                        }
                     }
                 }
                 break;
@@ -644,7 +647,10 @@ export class Room {
                     const discIdx = this.game.playerDiscs.get(player.id);
                     if (discIdx !== undefined) {
                         const disc = this.game.physics.discs[discIdx];
-                        if (disc) disc._avatar = '';
+                        if (disc) {
+                            disc.avatar = '';
+                            disc._avatar = '';
+                        }
                     }
                 }
                 break; // Added missing break
