@@ -285,7 +285,7 @@ export class Game {
 
         // Broadcast state (only in cloud mode — local mode is handled by applyAuthorityState)
         if (!isLocalMode) {
-            this.room.broadcastVolatile('gameState', this._getGameState());
+            this.room.broadcast('gameState', this._getGameState());
         }
     }
 

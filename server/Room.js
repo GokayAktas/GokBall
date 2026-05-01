@@ -545,14 +545,6 @@ export class Room {
         }
     }
 
-    broadcastVolatile(event, data, excludeId) {
-        for (const [id, player] of this.players) {
-            if (id !== excludeId) {
-                player.socket.volatile.emit(event, data);
-            }
-        }
-    }
-
     /**
      * Send chat message (broadcasts to ALL players including sender)
      */

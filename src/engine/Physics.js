@@ -598,19 +598,16 @@ export class Physics {
                         }
                     }
                 } else {
-                    // 3. Kickoff team (can enter entire circle but blocked outside)
-                    const inCircle = dist < kickOffRadius;
-                    if (!inCircle) {
-                        if (isRed) {
-                            if (disc.pos.x > -disc.radius) {
-                                disc.pos.x = -disc.radius;
-                                if (disc.speed.x > 0) disc.speed.x = 0;
-                            }
-                        } else {
-                            if (disc.pos.x < disc.radius) {
-                                disc.pos.x = disc.radius;
-                                if (disc.speed.x < 0) disc.speed.x = 0;
-                            }
+                    // 3. Kicking team: Restricted to their half (x=0 boundary to reach ball)
+                    if (isRed) {
+                        if (disc.pos.x > 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
+                        }
+                    } else {
+                        if (disc.pos.x < 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
                 }

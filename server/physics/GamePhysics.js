@@ -285,16 +285,15 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // Kickoff team (the one who conceded)
-                    // They were previously allowed in the whole circle, but user wants them blocked by midline
+                    // 3. Kicking team: Restricted to their half (x=0 boundary to reach ball)
                     if (isRed) {
-                        if (disc.pos.x > -disc.radius) {
-                            disc.pos.x = -disc.radius;
+                        if (disc.pos.x > 0) {
+                            disc.pos.x = 0;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
-                    } else { // blue is kickoff
-                        if (disc.pos.x < disc.radius) {
-                            disc.pos.x = disc.radius;
+                    } else {
+                        if (disc.pos.x < 0) {
+                            disc.pos.x = 0;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
@@ -502,24 +501,33 @@ export class GamePhysics {
             kickOffReset: this.kickOffReset,
             kickOffTeam: this.kickOffTeam,
             discs: this.discs.map(d => ({
-                x: d.pos.x,
-                y: d.pos.y,
-                sx: d.speed.x,
-                sy: d.speed.y,
+                x: Math.round(d.pos.x * 100) / 100,
+                y: Math.round(d.pos.y * 100) / 100,
+                sx: Math.round(d.speed.x * 100) / 100,
+                sy: Math.round(d.speed.y * 100) / 100,
                 kicking: d.kicking,
                 isPlayer: d.isPlayer,
                 ...(d.isPlayer ? { 
                     team: d.team, 
-                    radius: d.radius,
+                    radius: d.radius, 
+                    name: d._playerName, 
                     avatar: d._avatar, 
                     typing: d.typing, 
                     id: d.ownerId || d.id,
+                    input: d.input,
+                    color: d.color,  // MUST sync color for custom team colors!
+                    colors: d.colors, // For multiple colors (Haxcolors)
+                    colorAngle: d.colorAngle, // For multiple colors angle
+                    avatarColor: d.avatarColor, // MUST sync for custom text colors!
                     cMask: d.cMask,
                     cGroup: d.cGroup,
-                    color: d.color,
-                    colors: d.colors,
-                    colorAngle: d.colorAngle,
-                    avatarColor: d.avatarColor
+                    bCoef: d.bCoef,
+                    invMass: d.invMass,
+                    damping: d.damping,
+                    acceleration: d.acceleration,
+                    kickingAcceleration: d.kickingAcceleration,
+                    kickingDamping: d.kickingDamping,
+                    kickStrength: d.kickStrength
                 } : { radius: d.radius, color: d.color })
             }))
         };
