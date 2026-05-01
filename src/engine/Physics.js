@@ -267,7 +267,7 @@ export class Physics {
         for (const disc of this.discs) {
             if (disc.invMass === 0) continue;
             for (const v of this.vertexes) {
-                if (!(disc.cMask & v.cGroup) && !(v.cMask & disc.cGroup)) continue;
+                if (!(disc.cMask & v.cGroup) || !(v.cMask & disc.cGroup)) continue;
                 this._collideDiscVertex(disc, v);
             }
         }
@@ -276,7 +276,7 @@ export class Physics {
         for (const disc of this.discs) {
             if (disc.invMass === 0) continue;
             for (const seg of this.segments) {
-                if (!(disc.cMask & seg.cGroup) && !(seg.cMask & disc.cGroup)) continue;
+                if (!(disc.cMask & seg.cGroup) || !(seg.cMask & disc.cGroup)) continue;
                 this._collideDiscSegment(disc, seg);
             }
         }
@@ -285,7 +285,7 @@ export class Physics {
         for (const disc of this.discs) {
             if (disc.invMass === 0) continue;
             for (const plane of this.planes) {
-                if (!(disc.cMask & plane.cGroup) && !(plane.cMask & disc.cGroup)) continue;
+                if (!(disc.cMask & plane.cGroup) || !(plane.cMask & disc.cGroup)) continue;
                 this._collideDiscPlane(disc, plane);
             }
         }
@@ -348,7 +348,7 @@ export class Physics {
             }
         }
 
-        if (!(a.cMask & b.cGroup) && !(b.cMask & a.cGroup)) return;
+        if (!(a.cMask & b.cGroup) || !(b.cMask & a.cGroup)) return;
 
         const dx = b.pos.x - a.pos.x;
         const dy = b.pos.y - a.pos.y;
