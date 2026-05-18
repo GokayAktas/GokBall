@@ -97,8 +97,17 @@ export class CreateRoom {
           </div>
         </div>
 
-        <input type="hidden" id="roomType" value="cloud" />
-
+        <div class="input-group">
+          <label for="roomType">Sunucu Modu (Bağlantı Türü)</label>
+          <select id="roomType" class="input">
+            <option value="cloud" selected>Bulut Sunucu (Standart Çevrimiçi)</option>
+            <option value="local">Yerel Sunucu (LAN - Aynı Wi-Fi / P2P Gecikmesiz)</option>
+          </select>
+          <span id="roomTypeDesc" style="color: var(--text-muted); font-size: var(--font-xs); margin-top: var(--space-xs); display: block; line-height: 1.4;">
+            Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.
+          </span>
+        </div>
+ 
         <button class="btn btn-primary btn-lg btn-block" id="btnCreate">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           Oda Oluştur
@@ -113,6 +122,17 @@ export class CreateRoom {
 
     document.getElementById('btnBack')?.addEventListener('click', () => {
       this.app.ui.showScreen('mainMenu');
+    });
+
+    // Room Type selection dynamic description
+    const roomTypeSelect = document.getElementById('roomType');
+    const roomTypeDesc = document.getElementById('roomTypeDesc');
+    roomTypeSelect?.addEventListener('change', () => {
+      if (roomTypeSelect.value === 'local') {
+        roomTypeDesc.textContent = 'Yerel Sunucu (LAN): Aynı Wi-Fi ağındaki oyuncular için ev sahibinin bilgisayarını (Host) kullanarak sıfır ping ve aşırı yüksek akıcılık sağlar.';
+      } else {
+        roomTypeDesc.textContent = 'Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.';
+      }
     });
 
     // Slider value display
