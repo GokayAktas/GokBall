@@ -23,7 +23,7 @@ export class NetworkManager {
             console.log('[Network] Connecting to:', serverUrl || 'Current Host');
             
             this.socket = io(serverUrl, {
-                transports: ['websocket', 'polling'],
+                transports: ['websocket'],
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionAttempts: 10

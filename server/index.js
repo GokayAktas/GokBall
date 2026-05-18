@@ -14,7 +14,7 @@ const io = new SocketServer(httpServer, {
         origin: '*',
         methods: ['GET', 'POST']
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket']
 });
 
 app.get('/', (req, res) => {
