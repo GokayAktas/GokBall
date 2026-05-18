@@ -1,11 +1,12 @@
-/**
- * GokBall Game Server
- * Express + Socket.io with room management
- */
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { Room } from './Room.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
@@ -17,8 +18,15 @@ const io = new SocketServer(httpServer, {
     transports: ['websocket']
 });
 
+// Serve static client files if built
+app.use(express.static(path.join(__dirname, '../dist')));
+
 app.get('/', (req, res) => {
-    res.send('<h1>GokBall Server is running!</h1><p>Use Vite (port 3000) for the game client.</p>');
+    res.sendFile(path.join(__dirname, '../dist/index.html'), (err) => {
+        if (err) {
+            res.send('<h1>GokBall Server is running!</h1><p>Use Vite (port 3000) for the game client or run "npm run build" to serve local client files.</p>');
+        }
+    });
 });
 
 // ============================================
