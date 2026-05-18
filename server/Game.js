@@ -285,7 +285,10 @@ export class Game {
 
         // Broadcast state (only in cloud mode — local mode is handled by applyAuthorityState)
         if (!isLocalMode) {
-            this.room.broadcast('gameState', this._getGameState());
+            this._broadcastCounter = (this._broadcastCounter || 0) + 1;
+            if (this._broadcastCounter % 2 === 0) {
+                this.room.broadcast('gameState', this._getGameState());
+            }
         }
     }
 
