@@ -214,11 +214,9 @@ export class Room {
         }, player.id);
 
         // Send a private command hint only to the joining player.
-        socket.emit('chatMessage', {
-            playerName: 'SISTEM',
-            message: '📜 Komutları görmek için /komut yazın',
-            system: true
-        });
+        // NOTE: Return a private join hint so the client UI can display it
+        // at the right moment (after lobby UI has initialized).
+        const joinHint = '📜 Komutları görmek için /komut yazın';
 
         return {
             roomId: this.id,
@@ -230,6 +228,7 @@ export class Room {
             stadium: this.stadium,
             game: this.game.getInfo(),
             teamsLocked: this.teamsLocked
+            , joinHint
         };
     }
 

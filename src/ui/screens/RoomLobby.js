@@ -148,6 +148,10 @@ export class RoomLobby {
 
     // Update player list
     this._updatePlayers(data?.players || []);
+    // Show join hint (private message) if provided in server response
+    if (data?.joinHint) {
+      this._addChatMessage({ message: data.joinHint, system: true });
+    }
     this._updateLockUI();
     this._updateAdminVisibility(data);
 

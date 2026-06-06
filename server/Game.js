@@ -54,7 +54,8 @@ export class Game {
         this.scoreBlue = 0;
         this.timeElapsed = 0;
         this.state = 'countdown';
-        this.countdownTicks = 0; // Starts immediately without waiting
+        // Give a short 3 second countdown before entering `playing` state
+        this.countdownTicks = 3 * this.tickRate;
 
         // Reset physics
         this.physics.loadStadium(this.stadiumData);
@@ -261,7 +262,10 @@ export class Game {
             }
 
             // Increment time logic safely within loop
-            this.timeElapsed++;
+            // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
+            if (!this.physics.kickOffReset) {
+                this.timeElapsed++;
+            }
             this.accumulator -= stepSize;
         }
 
@@ -338,7 +342,29 @@ export class Game {
         // Sync score and time
         if (state.scoreRed !== undefined) this.scoreRed = state.scoreRed;
         if (state.scoreBlue !== undefined) this.scoreBlue = state.scoreBlue;
-        if (state.time !== undefined) this.timeElapsed = state.time * (this.tickRate || 60);
+        // Only accept remote time updates when kickoff has already happened.
+        // In local (authority) mode the admin may be running a countdown or kickoff reset;
+        // prevent the match clock from advancing before the kickoff touch.
+        if (state.time !== undefined) {
+            const kickReset = state.physics ? !!state.physics.kickOffReset : false;
+            if (!kickReset) {
+                this.timeElapsed = state.time * (this.tickRate || 60);
+            }
+        }
+
+        // Sync kickoff flags from authoritative client
+        if (state.physics) {
+            if (state.physics.kickOffTeam !== undefined) this.physics.kickOffTeam = state.physics.kickOffTeam;
+            if (state.physics.kickOffReset !== undefined) this.physics.kickOffReset = !!state.physics.kickOffReset;
+        }
+
+        // In local mode, detect goals from the authoritative physics snapshot
+        if (this.room.roomType === 'local') {
+            const g = this.physics._checkGoals && this.physics._checkGoals();
+            if (g && g.goalTeam) {
+                this._handleGoal(g.goalTeam);
+            }
+        }
 
         // Broadcast to others immediately
         this.room.broadcast('gameState', this._getGameState());

@@ -553,7 +553,20 @@ export class GamePhysics {
             
             // Admin also controls kicking state since Admin simulates collision
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
+            // Sync visual metadata that clients need (colors, team, owner)
+            if (sd.color !== undefined) disc.color = sd.color;
+            if (sd.colors !== undefined) disc.colors = sd.colors;
+            if (sd.colorAngle !== undefined) disc.colorAngle = sd.colorAngle;
+            if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
+            if (sd.team !== undefined) disc.team = sd.team;
+            if (sd.id !== undefined) disc.ownerId = sd.id;
         }
+        // Sync kickoff flags if provided by admin
+        if (state.kickOffReset !== undefined) this.kickOffReset = !!state.kickOffReset;
+        if (state.kickOffTeam !== undefined) this.kickOffTeam = state.kickOffTeam;
+
+        // Ensure ballDisc reference is up-to-date (usually disc 0)
+        this.ballDisc = this.discs.length > 0 ? this.discs[0] : null;
     }
 
     resetPositions() {
