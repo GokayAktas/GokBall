@@ -286,15 +286,19 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // 3. Kicking team: Restricted to their half (x=0 boundary to reach ball)
+                    // 3. Kicking team: Allow them to occupy the kickoff circle area
+                    // and a small buffer up to `kickOffRadius` into center, but
+                    // prevent them from crossing far into opponent half.
                     if (isRed) {
-                        if (disc.pos.x > 0) {
-                            disc.pos.x = 0;
+                        const maxX = kickOffRadius; // allow red up to +kickOffRadius
+                        if (disc.pos.x > maxX) {
+                            disc.pos.x = maxX;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
                     } else {
-                        if (disc.pos.x < 0) {
-                            disc.pos.x = 0;
+                        const minX = -kickOffRadius; // allow blue down to -kickOffRadius
+                        if (disc.pos.x < minX) {
+                            disc.pos.x = minX;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }

@@ -242,16 +242,16 @@ export class Game {
             return;
         }
 
-        // Fixed Timestep Accumulator for Server Physics (Matches Client exactly!)
-        const now = performance.now();
-        const dt = now - (this.lastPhysTime || now);
+        // Start immediately
+        this.state = 'playing';
+        this.countdownTicks = 0;
         this.lastPhysTime = now;
         
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
         const stepSize = 1000 / this.tickRate; // Exact 60Hz step
 
-        const isLocalMode = this.room.roomType === 'local';
-        let goalTeam = null;
+        // Do NOT lock teams automatically on start per user request
+        // Add player discs
 
         while (this.accumulator >= stepSize) {
             if (!isLocalMode) {
@@ -260,6 +260,13 @@ export class Game {
             } else {
                 // Local mode handles physics via auth packets
             }
+        // Broadcast immediate start to clients
+        this.room.broadcast('gameStarted', {
+            scoreRed: this.scoreRed,
+            scoreBlue: this.scoreBlue,
+            roomData: this.room.getRoomData(),
+            state: this._getGameState()
+        });
 
             // Increment time logic safely within loop
             // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
@@ -299,6 +306,9 @@ export class Game {
     }
 
     _handleGoal(scoredOnTeam) {
+        // Avoid double-counting if we're already in goal pause
+        if (this.state === 'goal') return;
+
         // The team that was scored ON loses, opposite team scores
         if (scoredOnTeam === 'red') {
             this.scoreBlue++;
@@ -311,6 +321,8 @@ export class Game {
 
         // The team conceded the goal gets the next kick-off
         this.physics.setKickOffTeam(scoredOnTeam);
+        // Ensure kickoff reset so clock doesn't advance
+        this.physics.kickOffReset = true;
 
         this.room.broadcast('goalScored', {
             team: scoredOnTeam === 'red' ? 'blue' : 'red',
