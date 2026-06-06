@@ -197,7 +197,9 @@ export class Game {
                 this.state = 'playing';
                 this.room.broadcast('gameStarted', {
                     scoreRed: this.scoreRed,
-                    scoreBlue: this.scoreBlue
+                    scoreBlue: this.scoreBlue,
+                    roomData: this.room.getRoomData(),
+                    state: this._getGameState()
                 });
             } else {
                 const secondsLeft = Math.ceil(this.countdownTicks / this.tickRate);

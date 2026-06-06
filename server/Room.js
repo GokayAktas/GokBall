@@ -7,8 +7,11 @@ import { Game } from './Game.js';
 
 // Stadium Generator
 function createStadium(name, fieldW, fieldH, spawnDist = 170) {
-    const goalDepth = 40;
-    const goalWidth = 64;
+    const classicFieldW = 370;
+    const classicFieldH = 170;
+    const goalDepth = Math.round(fieldW * (40 / classicFieldW));
+    const goalWidth = Math.round(fieldH * (64 / classicFieldH));
+    const goalBackWidth = Math.round(goalWidth * (44 / 64));
 
     return {
         name,
@@ -28,10 +31,10 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
             { x: 0, y: fieldH, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
             { x: 0, y: -fieldH, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
             // Goal Netting Points (U-Shape with rounded corners)
-            { x: -(fieldW + goalDepth), y: 44, bCoef: 0.1, cMask: ["ball"] },  // 10
-            { x: -(fieldW + goalDepth), y: -44, bCoef: 0.1, cMask: ["ball"] }, // 11
-            { x: (fieldW + goalDepth), y: 44, bCoef: 0.1, cMask: ["ball"] },   // 12
-            { x: (fieldW + goalDepth), y: -44, bCoef: 0.1, cMask: ["ball"] }   // 13
+            { x: -(fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ["ball"] },  // 10
+            { x: -(fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ["ball"] }, // 11
+            { x: (fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ["ball"] },   // 12
+            { x: (fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ["ball"] }   // 13
         ],
         segments: [
             // Pitch Lines
@@ -193,8 +196,7 @@ export class Room {
 
         const player = new Player(socket, name);
 
-        // Assign random avatar between 0-99
-        player.avatar = Math.floor(Math.random() * 100).toString();
+        player.avatar = this._randomAvatar();
 
         // First player becomes host/admin and creator
         if (this.players.size === 0) {
@@ -211,10 +213,10 @@ export class Room {
             players: this.getPlayerList()
         }, player.id);
 
-        // Send private welcome message about avatar and colors
+        // Send a private command hint only to the joining player.
         socket.emit('chatMessage', {
-            playerName: "SİSTEM",
-            message: `Hoş geldin! Rastgele no atandı: ${player.avatar}. Değiştirmek için "/avatar [kod]" yazabilirsin. Takım renkleri için haxcolors.com kodlarını kullanabilirsin (/colors red/blue [açı] [renk1 r2 r3]).`,
+            playerName: 'SISTEM',
+            message: '📜 Komutları görmek için /komut yazın',
             system: true
         });
 
@@ -605,36 +607,63 @@ export class Room {
         });
     }
 
+    _randomAvatar() {
+        return (Math.floor(Math.random() * 99) + 1).toString();
+    }
+
+    _normalizeColor(value) {
+        const cleaned = (value || '').replace('#', '').trim().toUpperCase();
+        return /^[0-9A-F]{6}$/.test(cleaned) ? cleaned : null;
+    }
+
+    _applyAvatarToDisc(player) {
+        if (this.game.state !== 'playing' && this.game.state !== 'countdown' && this.game.state !== 'goal') return;
+
+        const discIdx = this.game.playerDiscs.get(player.id);
+        if (discIdx === undefined) return;
+
+        const disc = this.game.physics.discs[discIdx];
+        if (disc) {
+            disc.avatar = player.avatar;
+            disc._avatar = player.avatar;
+        }
+    }
+
     _handleCommand(player, cmd) {
         const parts = cmd.split(' ');
         const command = parts[0].toLowerCase();
 
         switch (command) {
             case '/avatar':
-                player.avatar = parts.slice(1).join(' ').substring(0, 2);
-                this.broadcast('roomUpdate', { players: this.getPlayerList() });
-                // If game is running, update the disc
-                if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-                    const discIdx = this.game.playerDiscs.get(player.id);
-                    if (discIdx !== undefined) {
-                        const disc = this.game.physics.discs[discIdx];
-                        if (disc) {
-                            disc.avatar = player.avatar;
-                            disc._avatar = player.avatar; // Handle both properties just in case
-                        }
-                    }
+                if (parts[1]?.toLowerCase() === 'random') {
+                    player.avatar = this._randomAvatar();
+                } else {
+                    player.avatar = parts.slice(1).join(' ').substring(0, 2);
                 }
+                this.broadcast('roomUpdate', { players: this.getPlayerList() });
+                this._applyAvatarToDisc(player);
                 break;
             case '/colors':
                 if (player.isAdmin) {
-                    const team = parts[1]?.toLowerCase();
+                    const teamArg = parts[1]?.toLowerCase();
+                    const team = teamArg === 'kirmizi' || teamArg === 'kırmızı' ? 'red'
+                        : teamArg === 'mavi' ? 'blue'
+                            : teamArg;
                     if (team === 'red' || team === 'blue') {
-                        // Support HaxColors format: /colors red 60 FFFFFF 000000 444444
-                        const angle = parseInt(parts[2]) || 0;
-                        const textColor = parts[3]?.replace('#', '') || 'FFFFFF';
-                        const colors = parts.slice(4).map(c => c.replace('#', ''));
+                        if (parts.length !== 7) {
+                            player.socket.emit('chatMessage', {
+                                playerName: 'SISTEM',
+                                message: 'Kullanım: /colors (takım) (açı) (yazı rengi) (renk1) (renk2) (renk3)',
+                                system: true
+                            });
+                            break;
+                        }
+
+                        const angle = Number.parseInt(parts[2], 10);
+                        const textColor = this._normalizeColor(parts[3]);
+                        const colors = parts.slice(4, 7).map(c => this._normalizeColor(c));
                         
-                        if (colors.length > 0) {
+                        if (Number.isFinite(angle) && textColor && colors.every(Boolean)) {
                             if (!this.teamColors) this.teamColors = { red: null, blue: null };
                             this.teamColors[team] = {
                                 angle,
@@ -659,35 +688,27 @@ export class Room {
                                         d.avatarColor = textColor;
                                     }
                                 });
-                                this.broadcast('gameUpdate', this.game.physics.getState());
+                                this.broadcast('gameState', this.game._getGameState());
                             }
+                        } else {
+                            player.socket.emit('chatMessage', {
+                                playerName: 'SISTEM',
+                                message: 'Renk kodları 6 haneli HEX olmalı. Örnek: /colors red 60 FFFFFF C70000 FF5555 AA0000',
+                                system: true
+                            });
                         }
                     }
                 }
                 break;
-            case '/clear_avatar':
-                player.avatar = '';
-                this.broadcast('roomUpdate', { players: this.getPlayerList() });
-                if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-                    const discIdx = this.game.playerDiscs.get(player.id);
-                    if (discIdx !== undefined) {
-                        const disc = this.game.physics.discs[discIdx];
-                        if (disc) {
-                            disc.avatar = '';
-                            disc._avatar = '';
-                        }
-                    }
-                }
-                break; // Added missing break
             case '/komut':
             case '/komutlar':
                 let helpText = "📜 Komutlar:\n";
                 helpText += "👤 /avatar [yazı] - Formandaki yazıyı/emojiyi değiştirir (Max 2 harf)\n";
-                helpText += "🧼 /clear_avatar - Formandaki yazıyı siler\n";
+                helpText += "🎲 /avatar random - 1 ile 99 arasında rastgele forma numarası verir\n";
                 
                 if (player.isAdmin) {
                     helpText += "\n👑 Admin Komutları:\n";
-                    helpText += "🎨 /colors [red|blue] [açı] [yazı_rengi] [renk1] [renk2] - Takım renklerini değiştirir\n";
+                    helpText += "🎨 /colors (takım) (açı) (yazı rengi) (renk1) (renk2) (renk3) - Takım renklerini değiştirir\n";
                     helpText += "🔓 /clear_bans - Tüm yasaklamaları (banları) kaldırır\n";
                 }
 

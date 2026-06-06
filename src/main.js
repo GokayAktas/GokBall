@@ -128,10 +128,10 @@ class GokBallApp {
 
         // Room Update -> Update InGameMenu if visible
         this.network.on('roomUpdate', (data) => {
-            this.currentRoomData = data;
+            this.currentRoomData = this.currentRoomData ? { ...this.currentRoomData, ...data } : data;
             if (data.name) this.scoreboard.updateRoomName(data.name);
             if (this.inGameMenu.isVisible) {
-                this.inGameMenu.render(data);
+                this.inGameMenu.render(this.currentRoomData);
             }
         });
 
@@ -230,7 +230,14 @@ class GokBallApp {
 
         // Game started -> enter game
         this.network.on('gameStarted', (data) => {
+            if (data?.roomData) {
+                this.currentRoomData = data.roomData;
+                this.stadiumData = data.roomData.stadium || this.stadiumData;
+            }
             this.startGame(this.currentRoomData);
+            if (data?.state) {
+                this._handleGameState(data.state);
+            }
         });
 
         // Game state update (during game)
@@ -436,6 +443,15 @@ class GokBallApp {
                 }
             }
             this.accumulator -= stepSize;
+        }
+
+        if (isLocalMode && isAdmin && this._serverGameState === 'playing') {
+            this._authoritySendCounter = (this._authoritySendCounter || 0) + 1;
+            if (this._authoritySendCounter % 2 === 0) {
+                this.network.socket?.emit('authorityState', {
+                    physics: this.physics.getState()
+                });
+            }
         }
 
         // Update camera

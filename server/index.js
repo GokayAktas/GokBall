@@ -43,8 +43,10 @@ io.on('connection', (socket) => {
 
     // --- Room Listing ---
     socket.on('listRooms', () => {
+        const ip = socket.handshake.address;
         const roomList = [...rooms.values()]
             .filter(r => !r.isEmpty())
+            .filter(r => !r.bannedIPs.has(ip))
             .map(r => r.getInfo());
         socket.emit('roomList', roomList);
     });

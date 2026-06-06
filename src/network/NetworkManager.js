@@ -55,6 +55,7 @@ export class NetworkManager {
             this.socket.on('playerJoined', (data) => this._trigger('playerJoined', data));
             this.socket.on('playerLeft', (data) => this._trigger('playerLeft', data));
             this.socket.on('teamChanged', (data) => this._trigger('teamChanged', data));
+            this.socket.on('teamLockChanged', (data) => this._trigger('teamLockChanged', data));
             this.socket.on('gameState', (state) => this._trigger('gameState', state));
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));

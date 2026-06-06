@@ -57,6 +57,7 @@ export class GamePhysics {
     }
 
     loadStadium(stadium) {
+        this.stadium = stadium;
         this.vertexes = (stadium.vertexes || []).map(v => ({
             x: v.x || 0, y: v.y || 0,
             bCoef: v.bCoef ?? 1,

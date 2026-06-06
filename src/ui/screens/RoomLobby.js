@@ -95,7 +95,7 @@ export class RoomLobby {
             <!-- Admin Tools -->
             <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap; align-items: center; justify-content: center; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px;">
               <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="display:flex; align-items:center; gap:6px;">
-                 <span id="lockIcon"></span> <span id="lockText">Takım Kilitle</span>
+                 <span id="lockIcon"></span> <span id="lockText">Takımları Kilitle</span>
               </button>
               <select id="lobbyStadiumSelect" class="input" style="padding: 4px 8px; font-size: 11px; height: 32px; min-width: 100px;">
                  <option value="small">Küçük (1v1)</option>
@@ -208,6 +208,9 @@ export class RoomLobby {
       this.app.network.startGame();
     });
     document.getElementById('btnToggleLock')?.addEventListener('click', () => {
+      this.teamsLocked = !this.teamsLocked;
+      this.roomData = { ...this.roomData, teamsLocked: this.teamsLocked };
+      this._updateLockUI();
       this.app.network.socket.emit('toggleTeamLock');
     });
 
@@ -500,7 +503,12 @@ export class RoomLobby {
           </div>
           <span class="team-player-name" style="${isSelf ? 'font-weight:bold;' : ''} color:${nameColor};">${this._esc(p.name)} ${isSelf ? '(Ben)' : ''}</span>
           ${p.isAdmin ? '<span class="team-player-admin">👑</span>' : ''}
-          ${isAdmin && !p.isAdmin ? `<button class="btn-icon btn-kick" data-kick-id="${p.id}" title="Oyuncuyu at" style="margin-left:auto; padding:2px 4px; font-size:10px;">✕</button>` : ''}
+          ${isAdmin && !p.isAdmin ? `
+            <div style="margin-left:auto; display:flex; gap:4px;">
+              <button class="btn-icon btn-ban" data-ban-id="${p.id}" title="Oyuncuyu banla" style="padding:2px 4px; font-size:10px;">✕</button>
+              <button class="btn-icon btn-kick" data-kick-id="${p.id}" title="Oyuncuyu odadan at" style="padding:2px 4px; font-size:12px;">🦵</button>
+            </div>
+          ` : ''}
         </div>
       `;
     }).join('');
@@ -571,17 +579,26 @@ export class RoomLobby {
   }
 
   _setupKickButtons() {
+    document.querySelectorAll('.btn-ban').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const playerId = btn.dataset.banId;
+        this.app.ui.showConfirm('Bu oyuncuyu banlamak istediğinize emin misiniz?', () => {
+          this.app.network.banPlayer(playerId, 'Banned by admin');
+        });
+      });
+    });
+
     document.querySelectorAll('.btn-kick').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const playerId = btn.dataset.kickId;
-        this.app.ui.showConfirm('Bu oyuncuyu atmak istediğinize emin misiniz?', () => {
+        this.app.ui.showConfirm('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', () => {
           this.app.network.kickPlayer(playerId, 'Kicked by admin');
         });
       });
     });
   }
-
   _sendChat() {
     const input = document.getElementById('lobbyChatInput');
     if (!input) return;

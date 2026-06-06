@@ -23,6 +23,12 @@ export class InGameMenu {
         const specs = players.filter(p => p.team === 'spectator');
 
         const isMatchRunning = roomData.game && (roomData.game.state === 'playing' || roomData.game.state === 'countdown' || roomData.game.state === 'goal');
+        const adminActions = (p) => isAdmin && p.id !== this.app.network.playerId ? `
+            <div style="display:flex; gap:4px;">
+                <button class="kick-btn ban-btn" data-ban-id="${p.id}" title="Oyuncuyu banla">✕</button>
+                <button class="kick-btn" data-id="${p.id}" title="Oyuncuyu odadan at">🦵</button>
+            </div>
+        ` : '';
 
         this.container.innerHTML = `
             <div class="room-mgmt-menu">
@@ -38,6 +44,7 @@ export class InGameMenu {
                     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' :
                     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>'
                 }
+                                <span>${roomData.teamsLocked ? 'Kilidi Aç' : 'Takımları Kilitle'}</span>
                             </button>
                         ` : ''}
                         <button class="btn btn-danger btn-sm" id="btnLeaveRoom" style="display:flex; align-items:center; gap:6px; font-weight:700;">
@@ -60,7 +67,7 @@ export class InGameMenu {
                                         <div class="mini-avatar" style="background:var(--red-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
                                     </div>
-                                    ${isAdmin && p.id !== this.app.network.playerId ? `<button class="kick-btn" data-id="${p.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                                    ${adminActions(p)}
                                 </div>
                             `).join('') || '<div style="color:rgba(255,255,255,0.2); font-size:11px; text-align:center; padding:10px;">Boş</div>'}
                         </div>
@@ -78,7 +85,7 @@ export class InGameMenu {
                                         <div class="mini-avatar" style="background:var(--text-muted);">${p.avatar || p.name[0]}</div>
                                         <span style="color:var(--text-muted);">${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
                                     </div>
-                                    ${isAdmin && p.id !== this.app.network.playerId ? `<button class="kick-btn" data-id="${p.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                                    ${adminActions(p)}
                                 </div>
                             `).join('') || '<div style="color:rgba(255,255,255,0.2); font-size:11px; text-align:center; padding:10px;">Boş</div>'}
                         </div>
@@ -96,7 +103,7 @@ export class InGameMenu {
                                         <div class="mini-avatar" style="background:var(--blue-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
                                     </div>
-                                    ${isAdmin && p.id !== this.app.network.playerId ? `<button class="kick-btn" data-id="${p.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                                    ${adminActions(p)}
                                 </div>
                             `).join('') || '<div style="color:rgba(255,255,255,0.2); font-size:11px; text-align:center; padding:10px;">Boş</div>'}
                         </div>
@@ -135,7 +142,7 @@ export class InGameMenu {
 
         this.container.querySelector('#btnJoinRed')?.addEventListener('click', () => this.app.network.changeTeam('red'));
         this.container.querySelector('#btnJoinBlue')?.addEventListener('click', () => this.app.network.changeTeam('blue'));
-        this.container.querySelector('#btnJoinSpec')?.addEventListener('click', () => this.app.network.changeTeam('spec'));
+        this.container.querySelector('#btnJoinSpec')?.addEventListener('click', () => this.app.network.changeTeam('spectator'));
 
         if (isAdmin) {
             this.container.querySelector('#btnStopGame')?.addEventListener('click', () => this.app.network.stopGame());
@@ -143,18 +150,32 @@ export class InGameMenu {
             this.container.querySelector('#btnPauseGame')?.addEventListener('click', () => this.app.network.socket.emit('pauseGame'));
 
             this.container.querySelector('#btnToggleLock')?.addEventListener('click', () => {
+                const nextLocked = !this.app.currentRoomData?.teamsLocked;
+                if (this.app.currentRoomData) {
+                    this.app.currentRoomData.teamsLocked = nextLocked;
+                    this.render(this.app.currentRoomData);
+                }
                 this.app.network.socket.emit('toggleTeamLock');
             });
 
-            this.container.querySelectorAll('.kick-btn').forEach(btn => {
+            this.container.querySelectorAll('.ban-btn').forEach(btn => {
                 btn.onclick = () => {
-                    const id = btn.dataset.id;
-                    this.app.ui.showConfirm('Bu oyuncuyu atmak istediğinize emin misiniz?', () => {
-                        this.app.network.kickPlayer(id, 'Kicked by admin');
+                    const id = btn.dataset.banId;
+                    this.app.ui.showConfirm('Bu oyuncuyu banlamak istediğinize emin misiniz?', () => {
+                        this.app.network.banPlayer(id, 'Banned by admin');
                     });
                 };
             });
 
+            this.container.querySelectorAll('.kick-btn').forEach(btn => {
+                if (btn.classList.contains('ban-btn')) return;
+                btn.onclick = () => {
+                    const id = btn.dataset.id;
+                    this.app.ui.showConfirm('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', () => {
+                        this.app.network.kickPlayer(id, 'Kicked by admin');
+                    });
+                };
+            });
             // Drag patterns
             const columns = this.container.querySelectorAll('.mgmt-column');
             columns.forEach(col => {
