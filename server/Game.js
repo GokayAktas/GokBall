@@ -172,13 +172,20 @@ export class Game {
      * Update player input
      */
     setPlayerInput(playerId, input) {
+        // Server-side guard: ignore inputs from non-playing players (spectators)
+        const player = this.room.players.get(playerId);
+        if (!player) return;
+        if (player.team !== 'red' && player.team !== 'blue') return;
+
         const discIdx = this.playerDiscs.get(playerId);
         if (discIdx === undefined) return;
 
         const disc = this.physics.discs[discIdx];
-        if (disc) {
-            disc.input = input;
-        }
+        // Extra safety: ensure the disc actually belongs to this player
+        if (!disc || disc.ownerId !== playerId) return;
+
+        // Apply input
+        disc.input = input;
     }
 
     _startLoop() {
