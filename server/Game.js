@@ -53,25 +53,29 @@ export class Game {
         this.scoreRed = 0;
         this.scoreBlue = 0;
         this.timeElapsed = 0;
-        this.state = 'countdown';
-        // Give a short 3 second countdown before entering `playing` state
-        this.countdownTicks = 3 * this.tickRate;
 
-        // Reset physics
+        // Start immediately without countdown
+        this.state = 'playing';
+
+        // Reset physics and spawn players
         this.physics.loadStadium(this.stadiumData);
-
-        // Lock teams when game starts
-        this.room.teamsLocked = true;
-        this.room.broadcast('teamLockChanged', { locked: true });
-
-        // Add player discs
         this._spawnPlayers();
 
-        // Red team starts the game
+        // Set kickoff team (red by default)
         this.physics.setKickOffTeam('red');
+
+        // Do NOT automatically lock teams on start - keep current room.teamsLocked state
 
         // Start game loop
         this._startLoop();
+
+        // Broadcast start immediately to clients
+        this.room.broadcast('gameStarted', {
+            scoreRed: this.scoreRed,
+            scoreBlue: this.scoreBlue,
+            roomData: this.room.getRoomData(),
+            state: this._getGameState()
+        });
 
         return { scoreRed: 0, scoreBlue: 0 };
     }
@@ -91,38 +95,30 @@ export class Game {
         const spawnDist = this.stadiumData.spawnDistance || 170;
 
         const redPlayers = this.room.getTeamPlayers('red');
-        // Start immediately
-        this.state = 'playing';
-        this.countdownTicks = 0;
+        const bluePlayers = this.room.getTeamPlayers('blue');
+
+        // Spawn red team
         const redSpacing = 40;
         for (let i = 0; i < redPlayers.length; i++) {
-        try {
-            this.physics.loadStadium(this.stadiumData);
+            const p = redPlayers[i];
+            const y = (i - (redPlayers.length - 1) / 2) * redSpacing;
+            const discIdx = this.physics.addPlayerDisc(playerPhysics, 'red', -spawnDist, y, p.id);
+            this.playerDiscs.set(p.id, discIdx);
+            p.discIndex = discIdx;
 
-            // Do NOT lock teams automatically on start per user request
-            // Add player discs
-            this._spawnPlayers();
-
-            // Red team starts the game
-            this.physics.setKickOffTeam('red');
-
-            // Start game loop
-            this._startLoop();
-
-            // Broadcast immediate start to clients
-            this.room.broadcast('gameStarted', {
-                scoreRed: this.scoreRed,
-                scoreBlue: this.scoreBlue,
-                roomData: this.room.getRoomData(),
-                state: this._getGameState()
-            });
-        } catch (err) {
-            console.error('[Game] Failed to start game:', err);
-            // Try to revert to stopped state safely
-            try { this._stopLoop(); } catch (e) {}
-            this.state = 'stopped';
-            throw err; // let caller handle notification
-        }
+            // Assign name/avatar for client rendering
+            const disc = this.physics.discs[discIdx];
+            if (disc) {
+                disc._playerName = p.name;
+                disc._avatar = p.avatar;
+                if (this.room.teamColors && this.room.teamColors['red']) {
+                    disc.color = this.room.teamColors['red'].colors[0];
+                    disc.colors = this.room.teamColors['red'].colors;
+                    disc.colorAngle = this.room.teamColors['red'].angle;
+                    disc.avatarColor = this.room.teamColors['red'].textColor;
+                } else {
+                    disc.color = 'c70000'; // Default Red
+                    disc.colors = ['c70000'];
                     disc.colorAngle = 0;
                     disc.avatarColor = 'FFFFFF';
                 }
@@ -250,16 +246,16 @@ export class Game {
             return;
         }
 
-        // Start immediately
-        this.state = 'playing';
-        this.countdownTicks = 0;
+        // Fixed Timestep Accumulator for Server Physics (Matches Client exactly!)
+        const now = performance.now();
+        const dt = now - (this.lastPhysTime || now);
         this.lastPhysTime = now;
         
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
         const stepSize = 1000 / this.tickRate; // Exact 60Hz step
 
-        // Do NOT lock teams automatically on start per user request
-        // Add player discs
+        const isLocalMode = this.room.roomType === 'local';
+        let goalTeam = null;
 
         while (this.accumulator >= stepSize) {
             if (!isLocalMode) {
@@ -268,13 +264,6 @@ export class Game {
             } else {
                 // Local mode handles physics via auth packets
             }
-        // Broadcast immediate start to clients
-        this.room.broadcast('gameStarted', {
-            scoreRed: this.scoreRed,
-            scoreBlue: this.scoreBlue,
-            roomData: this.room.getRoomData(),
-            state: this._getGameState()
-        });
 
             // Increment time logic safely within loop
             // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
