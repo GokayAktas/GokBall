@@ -113,6 +113,10 @@ export class RoomList {
           <div class="room-card-meta">
             <span class="room-card-stadium">${this._escapeHtml(room.stadiumName)}</span>
             <span class="room-card-divider">•</span>
+            ${room.roomType === 'local' 
+              ? '<span class="room-card-badge local" title="Yerel Sunucu - Kurucu çıkarsa oda kapanır">🖥️ Yerel</span>' 
+              : '<span class="room-card-badge cloud" title="Bulut Sunucu">☁️ Bulut</span>'}
+            <span class="room-card-divider">•</span>
             ${isPlaying 
               ? '<span class="room-card-status playing">Oyunda</span>' 
               : '<span class="room-card-status waiting">Bekliyor</span>'}

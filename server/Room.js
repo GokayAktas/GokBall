@@ -165,7 +165,9 @@ export class Room {
         this.players = new Map(); // socketId -> Player
         this.bannedIPs = new Set();
         this.hostId = null;
+        this.creatorId = null; // The original room creator (important for local mode)
         this.teamsLocked = false;
+        this._closing = false; // Flag to prevent recursive cleanup
 
         // Stadium Selection
         if (options.stadium && typeof options.stadium === 'string') {
@@ -194,10 +196,11 @@ export class Room {
         // Assign random avatar between 0-99
         player.avatar = Math.floor(Math.random() * 100).toString();
 
-        // First player becomes host/admin
+        // First player becomes host/admin and creator
         if (this.players.size === 0) {
             player.isAdmin = true;
             this.hostId = player.id;
+            this.creatorId = player.id;
         }
 
         this.players.set(player.id, player);
@@ -218,6 +221,8 @@ export class Room {
         return {
             roomId: this.id,
             roomName: this.name,
+            roomType: this.roomType,
+            creatorId: this.creatorId,
             player: player.toJSON(),
             players: this.getPlayerList(),
             stadium: this.stadium,
@@ -233,6 +238,26 @@ export class Room {
         const player = this.players.get(socketId);
         if (!player) return;
 
+        // === LOCAL MODE: If the creator leaves, close the entire room ===
+        if (this.roomType === 'local' && socketId === this.creatorId && !this._closing) {
+            this._closing = true;
+            this.game.stop();
+
+            // Kick all remaining players with a message
+            for (const [id, p] of this.players) {
+                if (id !== socketId) {
+                    p.socket.emit('playerKicked', {
+                        reason: 'Oda kurucusu ayrıldığı için oda kapatıldı.',
+                        hostLeft: true
+                    });
+                    p.socket.disconnect();
+                }
+            }
+
+            this.players.clear();
+            return 0; // Signal to delete this room
+        }
+
         // Remove player disc from game if playing
         if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
             const discIdx = this.game.playerDiscs.get(socketId);
@@ -245,7 +270,7 @@ export class Room {
 
         this.players.delete(socketId);
 
-        // Transfer admin if host left
+        // Transfer admin if host left (only for cloud mode — local mode creator exit already handled above)
         if (this.hostId === socketId && this.players.size > 0) {
             const newHost = this.players.values().next().value;
             newHost.isAdmin = true;
@@ -722,7 +747,8 @@ export class Room {
             stadiumName: this.stadium.name || 'Classic',
             gameState: this.game.state,
             scoreRed: this.game.scoreRed,
-            scoreBlue: this.game.scoreBlue
+            scoreBlue: this.game.scoreBlue,
+            roomType: this.roomType
         };
     }
 

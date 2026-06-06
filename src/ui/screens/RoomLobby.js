@@ -27,6 +27,7 @@ export class RoomLobby {
             <div class="header-titles">
               <h2 id="roomTitle">${this._esc(data?.roomName || 'Oda')}</h2>
               <div class="header-sub">${this._esc(data?.stadium?.name || 'Klasik')} • <span id="playerCount">${data?.players?.length || 0}</span> Oyuncu</div>
+              ${data?.roomType === 'local' ? '<div id="localModeBanner" style="display:flex; align-items:center; gap:6px; margin-top:6px; padding:4px 10px; background:rgba(155,89,182,0.15); border:1px solid rgba(155,89,182,0.3); border-radius:8px; font-size:11px; color:#bb86fc;">🖥️ Yerel Sunucu — Kurucu çıkarsa oda kapanır</div>' : ''}
             </div>
             <button class="btn btn-danger btn-sm" id="btnLeave" style="font-weight: 700; display:flex; gap:6px; align-items:center; border-radius: 20px; padding: 6px 16px;">
                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

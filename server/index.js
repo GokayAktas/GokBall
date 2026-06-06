@@ -303,14 +303,36 @@ function leaveCurrentRoom(socket) {
 
     const room = rooms.get(roomId);
     if (room) {
-        const remaining = room.removePlayer(socket.id);
-        socket.leave(roomId);
+        // For local rooms: if creator leaves, Room.removePlayer kicks everyone
+        // We need to clean up all those players' entries from playerRooms
+        const isLocalCreator = room.roomType === 'local' && socket.id === room.creatorId;
 
-        // Delete empty rooms
-        if (remaining === 0) {
+        if (isLocalCreator) {
+            // Collect all player socket IDs before removal
+            const allPlayerIds = [...room.players.keys()];
+
+            const remaining = room.removePlayer(socket.id);
+            socket.leave(roomId);
+
+            // Clean up playerRooms for all players in the closed room
+            for (const pid of allPlayerIds) {
+                playerRooms.delete(pid);
+            }
+
+            // Always delete the room since creator left
             room.game.stop();
             rooms.delete(roomId);
-            console.log(`[Server] Room deleted: ${roomId}`);
+            console.log(`[Server] Local room closed (host left): ${roomId}`);
+        } else {
+            const remaining = room.removePlayer(socket.id);
+            socket.leave(roomId);
+
+            // Delete empty rooms
+            if (remaining === 0) {
+                room.game.stop();
+                rooms.delete(roomId);
+                console.log(`[Server] Room deleted: ${roomId}`);
+            }
         }
     }
 

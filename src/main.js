@@ -147,6 +147,8 @@ class GokBallApp {
         // Room created -> go to lobby
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
+            this.currentRoomData.roomType = data.roomType || 'cloud';
+            this.currentRoomData.creatorId = data.creatorId;
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
             this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
@@ -156,6 +158,8 @@ class GokBallApp {
         // Room joined -> go to lobby
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
+            this.currentRoomData.roomType = data.roomType || 'cloud';
+            this.currentRoomData.creatorId = data.creatorId;
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
             this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
@@ -283,7 +287,11 @@ class GokBallApp {
         // Player kicked
         this.network.on('playerKicked', (data) => {
             this.stopGame();
-            alert(data.reason || 'Odadan atıldınız');
+            if (data.hostLeft) {
+                alert('Oda kurucusu ayrıldığı için oda kapatıldı.');
+            } else {
+                alert(data.reason || 'Odadan atıldınız');
+            }
             this.ui.showScreen('mainMenu');
         });
 

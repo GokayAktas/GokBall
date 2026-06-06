@@ -100,11 +100,14 @@ export class CreateRoom {
         <div class="input-group">
           <label for="roomType">Sunucu Modu (Bağlantı Türü)</label>
           <select id="roomType" class="input">
-            <option value="cloud" selected>Bulut Sunucu (Standart Çevrimiçi)</option>
-            <option value="local">Yerel Sunucu (LAN - Aynı Wi-Fi / P2P Gecikmesiz)</option>
+            <option value="cloud" selected>☁️ Bulut Sunucu (Standart Çevrimiçi)</option>
+            <option value="local">🖥️ Yerel Sunucu (Host = Odayı Kuran Oyuncu)</option>
           </select>
           <span id="roomTypeDesc" style="color: var(--text-muted); font-size: var(--font-xs); margin-top: var(--space-xs); display: block; line-height: 1.4;">
             Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.
+          </span>
+          <span id="roomTypeWarning" class="hidden" style="color: var(--warning); font-size: var(--font-xs); margin-top: var(--space-xs); display: block; line-height: 1.4;">
+            ⚠️ DİKKAT: Yerel sunucu modunda odayı kuran kişi odadan çıkarsa oda otomatik olarak kapanır!
           </span>
         </div>
  
@@ -127,11 +130,14 @@ export class CreateRoom {
     // Room Type selection dynamic description
     const roomTypeSelect = document.getElementById('roomType');
     const roomTypeDesc = document.getElementById('roomTypeDesc');
+    const roomTypeWarning = document.getElementById('roomTypeWarning');
     roomTypeSelect?.addEventListener('change', () => {
       if (roomTypeSelect.value === 'local') {
-        roomTypeDesc.textContent = 'Yerel Sunucu (LAN): Aynı Wi-Fi ağındaki oyuncular için ev sahibinin bilgisayarını (Host) kullanarak sıfır ping ve aşırı yüksek akıcılık sağlar.';
+        roomTypeDesc.textContent = 'Yerel Sunucu: Odanın sunucusu, odayı kuran oyuncunun bilgisayarıdır. Aynı ağdaki oyuncular için sıfıra yakın gecikme sağlar. Kurucu odadan çıkarsa oda kapanır.';
+        roomTypeWarning?.classList.remove('hidden');
       } else {
         roomTypeDesc.textContent = 'Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.';
+        roomTypeWarning?.classList.add('hidden');
       }
     });
 
