@@ -182,7 +182,12 @@ io.on('connection', (socket) => {
             return;
         }
 
-        room.game.start();
+        try {
+            room.game.start();
+        } catch (err) {
+            console.error('[Server] Error starting game:', err);
+            socket.emit('roomError', { error: 'Oyun başlatılırken bir hata oluştu.' });
+        }
     });
 
     socket.on('stopGame', () => {

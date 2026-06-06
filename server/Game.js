@@ -91,30 +91,38 @@ export class Game {
         const spawnDist = this.stadiumData.spawnDistance || 170;
 
         const redPlayers = this.room.getTeamPlayers('red');
-        const bluePlayers = this.room.getTeamPlayers('blue');
-
-        // Spawn red team
+        // Start immediately
+        this.state = 'playing';
+        this.countdownTicks = 0;
         const redSpacing = 40;
         for (let i = 0; i < redPlayers.length; i++) {
-            const p = redPlayers[i];
-            const y = (i - (redPlayers.length - 1) / 2) * redSpacing;
-            const discIdx = this.physics.addPlayerDisc(playerPhysics, 'red', -spawnDist, y, p.id);
-            this.playerDiscs.set(p.id, discIdx);
-            p.discIndex = discIdx;
+        try {
+            this.physics.loadStadium(this.stadiumData);
 
-            // Assign name/avatar for client rendering
-            const disc = this.physics.discs[discIdx];
-            if (disc) {
-                disc._playerName = p.name;
-                disc._avatar = p.avatar;
-                if (this.room.teamColors && this.room.teamColors['red']) {
-                    disc.color = this.room.teamColors['red'].colors[0];
-                    disc.colors = this.room.teamColors['red'].colors;
-                    disc.colorAngle = this.room.teamColors['red'].angle;
-                    disc.avatarColor = this.room.teamColors['red'].textColor;
-                } else {
-                    disc.color = 'c70000'; // Default Red
-                    disc.colors = ['c70000'];
+            // Do NOT lock teams automatically on start per user request
+            // Add player discs
+            this._spawnPlayers();
+
+            // Red team starts the game
+            this.physics.setKickOffTeam('red');
+
+            // Start game loop
+            this._startLoop();
+
+            // Broadcast immediate start to clients
+            this.room.broadcast('gameStarted', {
+                scoreRed: this.scoreRed,
+                scoreBlue: this.scoreBlue,
+                roomData: this.room.getRoomData(),
+                state: this._getGameState()
+            });
+        } catch (err) {
+            console.error('[Game] Failed to start game:', err);
+            // Try to revert to stopped state safely
+            try { this._stopLoop(); } catch (e) {}
+            this.state = 'stopped';
+            throw err; // let caller handle notification
+        }
                     disc.colorAngle = 0;
                     disc.avatarColor = 'FFFFFF';
                 }
