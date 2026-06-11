@@ -419,6 +419,11 @@ export class Game {
                     this.physics.setKickOffTeam(goalTeam === 'red' ? 'blue' : 'red');
                     this.physics.kickOffReset = true;
 
+                    // Ensure ball and players are reset to their spawn (kickoff) positions
+                    if (this.physics.resetPositions) {
+                        this.physics.resetPositions();
+                    }
+
                     // Set cooldown to avoid immediate re-processing
                     this._goalCooldownUntil = this.timeElapsed + 60; // 1 second @60Hz
 
