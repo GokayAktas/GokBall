@@ -248,18 +248,36 @@ export class Renderer {
                 lw = 3; // Thicker outline for ball per request
             }
 
-            // Draw sectors
-            const radAngle = angle * Math.PI / 180;
-            const numColors = colors.length;
-            const sectorAngle = (Math.PI * 2) / numColors;
+            // Draw player color stripes (horizontal stripes rotated by colorAngle)
+            if (disc.isPlayer && colors.length > 1) {
+                ctx.save();
+                ctx.translate(disc.pos.x, disc.pos.y);
+                // Rotate so that colorAngle represents rotation of the stripes
+                const rot = (angle - 90) * Math.PI / 180; // align 0deg to top
+                ctx.rotate(rot);
 
-            for (let i = 0; i < numColors; i++) {
+                // Clip to circle
                 ctx.beginPath();
-                ctx.moveTo(disc.pos.x, disc.pos.y);
-                const startAngle = radAngle + i * sectorAngle;
-                const endAngle = startAngle + sectorAngle;
-                ctx.arc(disc.pos.x, disc.pos.y, disc.radius, startAngle, endAngle);
-                ctx.fillStyle = '#' + colors[i];
+                ctx.arc(0, 0, disc.radius, 0, Math.PI * 2);
+                ctx.clip();
+
+                const w = disc.radius * 2;
+                const h = disc.radius * 2;
+                const num = colors.length;
+                const stripeW = w / num;
+
+                for (let i = 0; i < num; i++) {
+                    ctx.fillStyle = '#' + colors[i];
+                    const x = -disc.radius + i * stripeW;
+                    ctx.fillRect(x, -disc.radius, stripeW + 1, h);
+                }
+
+                ctx.restore();
+            } else {
+                // Single color: simple filled circle
+                ctx.beginPath();
+                ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#' + colors[0];
                 ctx.fill();
             }
 

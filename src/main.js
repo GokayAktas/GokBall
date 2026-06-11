@@ -123,7 +123,28 @@ class GokBallApp {
         // Ping update listener
         this.network.on('pingUpdate', (data) => {
             const pingEl = document.getElementById('pingValue');
-            if (pingEl) pingEl.textContent = data.ping;
+            if (!pingEl) return;
+
+            // If we're in a local room and I'm the creator/admin, broadcast my ping as hostPing
+            if (this.currentRoomData?.roomType === 'local' && this.network.socket?.id === this.currentRoomData?.creatorId) {
+                pingEl.textContent = data.ping;
+                this.network.socket?.emit('hostPing', { ping: data.ping });
+                return;
+            }
+
+            // If we're in local room but not the host, wait for hostPing from server
+            if (this.currentRoomData?.roomType === 'local') return;
+
+            // Default behavior: show own measured ping
+            pingEl.textContent = data.ping;
+        });
+
+        // Host ping listener: server will broadcast host's ping for local rooms
+        this.network.on('hostPing', (data) => {
+            if (this.currentRoomData?.roomType === 'local') {
+                const pingEl = document.getElementById('pingValue');
+                if (pingEl) pingEl.textContent = data.ping;
+            }
         });
 
         // Room Update -> Update InGameMenu if visible

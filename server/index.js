@@ -56,6 +56,16 @@ io.on('connection', (socket) => {
         socket.emit('pong');
     });
 
+    // --- Host Ping Broadcast (for Local rooms)
+    socket.on('hostPing', (payload) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        // Only accept host pings from the room creator/admin
+        if (socket.id !== room.creatorId && socket.id !== room.adminId) return;
+        // Broadcast host ping to everyone in room (including sender for sync)
+        io.to(room.id).emit('hostPing', { ping: payload.ping });
+    });
+
     // --- Create Room ---
     socket.on('createRoom', (options = {}) => {
         const roomName = (options.name || 'GokBall Room').trim();

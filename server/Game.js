@@ -8,6 +8,8 @@ export class Game {
     constructor(room) {
         this.room = room;
         this.physics = new GamePhysics();
+        this._goalCooldownUntil = 0; // tick count until we ignore further goals
+        this._forceKickOffIgnoreUntil = 0; // timestamp to ignore incoming kickOffTeam from admin right after start
         this.state = 'stopped'; // 'stopped' | 'countdown' | 'playing' | 'goal' | 'ended'
         this.scoreRed = 0;
         this.scoreBlue = 0;
@@ -68,6 +70,9 @@ export class Game {
 
         // Start game loop
         this._startLoop();
+
+        // Ignore incoming kick-off team updates briefly to avoid race with restart
+        this._forceKickOffIgnoreUntil = Date.now() + 600; // 600ms
 
         // Broadcast start immediately to clients
         this.room.broadcast('gameStarted', {
@@ -274,15 +279,28 @@ export class Game {
 
             // Increment time logic safely within loop
             // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
+            // Auto-release kickoff reset if ball moves (in case client missed the touch)
+            if (this.physics.kickOffReset && this.physics.ballDisc) {
+                const b = this.physics.ballDisc;
+                const speed = Math.sqrt((b.speed.x || 0) ** 2 + (b.speed.y || 0) ** 2);
+                const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
+                const dist = Math.sqrt((b.pos.x || 0) * (b.pos.x || 0) + (b.pos.y || 0) * (b.pos.y || 0));
+                if (speed > 0.5 || dist > (kickOffRadius + (b.radius || 0))) {
+                    this.physics.kickOffReset = false;
+                }
+            }
+
             if (!this.physics.kickOffReset) {
                 this.timeElapsed++;
             }
             this.accumulator -= stepSize;
         }
 
-        // Check goal
+        // Check goal (guard against rapid re-triggering)
         if (goalTeam) {
-            this._handleGoal(goalTeam);
+            if (this.timeElapsed > this._goalCooldownUntil) {
+                this._handleGoal(goalTeam);
+            }
         }
 
         // Check time limit
@@ -310,15 +328,21 @@ export class Game {
     }
 
     _handleGoal(scoredOnTeam) {
-        // Avoid double-counting if we're already in goal pause
-        if (this.state === 'goal') return;
 
-        // The team that was scored ON loses, opposite team scores
-        if (scoredOnTeam === 'red') {
-            this.scoreBlue++;
-        } else {
-            this.scoreRed++;
-        }
+        // Basic scoring handler
+        // Prevent duplicate handling: ignore if we've recently handled a goal
+        const nowTicks = this.timeElapsed;
+        if (nowTicks <= this._goalCooldownUntil) return;
+
+        if (scoredOnTeam === 'red') this.scoreRed++;
+        else this.scoreBlue++;
+        this.state = 'goal';
+        this.physics.kickOffReset = true;
+        // set cooldown until we allow next goal to be counted (score pause length in ticks)
+        const pauseTicks = 60; // 1 second at 60Hz to avoid double counting
+        this._goalCooldownUntil = this.timeElapsed + pauseTicks;
+        // Broadcast goal
+        this.room.broadcast('goalScored', { team: scoredOnTeam === 'red' ? 'blue' : 'red', scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
 
         this.state = 'goal';
         this.goalPauseTicks = 2 * this.tickRate; // 2 second pause
@@ -327,12 +351,6 @@ export class Game {
         this.physics.setKickOffTeam(scoredOnTeam);
         // Ensure kickoff reset so clock doesn't advance
         this.physics.kickOffReset = true;
-
-        this.room.broadcast('goalScored', {
-            team: scoredOnTeam === 'red' ? 'blue' : 'red',
-            scoreRed: this.scoreRed,
-            scoreBlue: this.scoreBlue
-        });
     }
 
     _checkGameEnd() {
@@ -368,9 +386,14 @@ export class Game {
             }
         }
 
-        // Sync kickoff flags from authoritative client
+        // Sync kickoff flags from authoritative client, but avoid accepting kickoff-team changes
+        // immediately after a local restart (to prevent flip-flopping ownership)
         if (state.physics) {
-            if (state.physics.kickOffTeam !== undefined) this.physics.kickOffTeam = state.physics.kickOffTeam;
+            if (state.physics.kickOffTeam !== undefined) {
+                if (Date.now() > this._forceKickOffIgnoreUntil) {
+                    this.physics.kickOffTeam = state.physics.kickOffTeam;
+                }
+            }
             if (state.physics.kickOffReset !== undefined) this.physics.kickOffReset = !!state.physics.kickOffReset;
         }
 
