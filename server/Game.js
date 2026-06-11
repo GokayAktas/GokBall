@@ -401,6 +401,7 @@ export class Game {
         // In local mode, detect goals from the authoritative physics snapshot
         if (this.room.roomType === 'local') {
             const g = this.physics._checkGoals && this.physics._checkGoals();
+            console.log('[Game] applyAuthorityState detected goal:', g);
             const goalTeam = g && g.goalTeam ? g.goalTeam : null;
             // Only handle a goal when it transitions from no-goal to a specific goalTeam
             if (goalTeam && this._lastGoalTeam !== goalTeam) {
