@@ -401,12 +401,33 @@ export class Game {
         // In local mode, detect goals from the authoritative physics snapshot
         if (this.room.roomType === 'local') {
             const g = this.physics._checkGoals && this.physics._checkGoals();
-            console.log('[Game] applyAuthorityState detected goal:', g);
             const goalTeam = g && g.goalTeam ? g.goalTeam : null;
             // Only handle a goal when it transitions from no-goal to a specific goalTeam
             if (goalTeam && this._lastGoalTeam !== goalTeam) {
                 this._lastGoalTeam = goalTeam;
-                this._handleGoal(goalTeam);
+
+                // If the authoritative state already contains updated scores, accept them
+                // and avoid incrementing again on the server to prevent double-counting.
+                if (state.scoreRed !== undefined && state.scoreBlue !== undefined) {
+                    // Apply authoritative scores
+                    this.scoreRed = state.scoreRed;
+                    this.scoreBlue = state.scoreBlue;
+
+                    // Enter goal state on server (pause and kickoff reset) but DO NOT increment
+                    this.state = 'goal';
+                    this.goalPauseTicks = 2 * this.tickRate;
+                    this.physics.setKickOffTeam(goalTeam === 'red' ? 'blue' : 'red');
+                    this.physics.kickOffReset = true;
+
+                    // Set cooldown to avoid immediate re-processing
+                    this._goalCooldownUntil = this.timeElapsed + 60; // 1 second @60Hz
+
+                    // Broadcast goal event so non-admin clients see it
+                    this.room.broadcast('goalScored', { team: goalTeam, scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
+                } else {
+                    // No authoritative score provided — perform local increment
+                    this._handleGoal(goalTeam);
+                }
             } else if (!goalTeam) {
                 this._lastGoalTeam = null;
             }
