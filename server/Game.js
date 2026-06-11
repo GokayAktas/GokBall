@@ -10,6 +10,7 @@ export class Game {
         this.physics = new GamePhysics();
         this._goalCooldownUntil = 0; // tick count until we ignore further goals
         this._forceKickOffIgnoreUntil = 0; // timestamp to ignore incoming kickOffTeam from admin right after start
+        this._lastGoalTeam = null; // track last detected goal team from authority to avoid duplicates
         this.state = 'stopped'; // 'stopped' | 'countdown' | 'playing' | 'goal' | 'ended'
         this.scoreRed = 0;
         this.scoreBlue = 0;
@@ -400,8 +401,13 @@ export class Game {
         // In local mode, detect goals from the authoritative physics snapshot
         if (this.room.roomType === 'local') {
             const g = this.physics._checkGoals && this.physics._checkGoals();
-            if (g && g.goalTeam) {
-                this._handleGoal(g.goalTeam);
+            const goalTeam = g && g.goalTeam ? g.goalTeam : null;
+            // Only handle a goal when it transitions from no-goal to a specific goalTeam
+            if (goalTeam && this._lastGoalTeam !== goalTeam) {
+                this._lastGoalTeam = goalTeam;
+                this._handleGoal(goalTeam);
+            } else if (!goalTeam) {
+                this._lastGoalTeam = null;
             }
         }
 
