@@ -341,6 +341,45 @@ class GokBallApp {
         this.network.on('stadiumChanged', (data) => {
             this.stadiumData = data.stadium;
         });
+
+        // Team colors updated by admin -> update CSS vars and local disc colors
+        this.network.on('teamColorsUpdated', (data) => {
+            try {
+                if (!data) return;
+
+                // If server sent allTeamColors, prefer that
+                const all = data.allTeamColors || (data.team ? { [data.team]: data.teamColors } : null);
+                if (!all) return;
+
+                // Apply CSS variables for red and blue if present
+                if (all.red && all.red.colors && all.red.colors[0]) {
+                    document.documentElement.style.setProperty('--red-team', '#' + all.red.colors[0]);
+                }
+                if (all.blue && all.blue.colors && all.blue.colors[0]) {
+                    document.documentElement.style.setProperty('--blue-team', '#' + all.blue.colors[0]);
+                }
+
+                // Apply to local physics discs immediately for instant visual feedback
+                if (this.gameRunning && this.physics && this.physics.discs) {
+                    for (const disc of this.physics.discs) {
+                        if (!disc.isPlayer) continue;
+                        const tc = all[disc.team];
+                        if (tc && tc.colors && tc.colors.length > 0) {
+                            disc.color = tc.colors[0];
+                            disc.colors = tc.colors.slice();
+                            disc.colorAngle = tc.angle || 0;
+                            disc.avatarColor = tc.textColor || disc.avatarColor;
+                        }
+                    }
+                }
+
+                // Let UI components re-render if needed (scoreboard/inGameMenu use CSS vars)
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+                if (this.scoreboard) this.scoreboard.render && this.scoreboard.render();
+            } catch (e) {
+                console.error('Error applying teamColorsUpdated', e);
+            }
+        });
     }
 
     // ============================================

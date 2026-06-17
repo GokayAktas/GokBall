@@ -85,6 +85,7 @@ export class NetworkManager {
             this.socket.on('roomUpdate', (data) => this._trigger('roomUpdate', data));
             this.socket.on('countdown', (data) => this._trigger('countdown', data));
             this.socket.on('playerTyping', (data) => this._trigger('playerTyping', data));
+            this.socket.on('teamColorsUpdated', (data) => this._trigger('teamColorsUpdated', data));
         });
     }
 
