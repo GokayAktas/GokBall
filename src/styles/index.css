@@ -1204,6 +1204,42 @@ select.input option {
   -webkit-text-fill-color: transparent;
 }
 
+/* Settings modal specific overrides (used by SettingsModal.js) */
+.settings-modal {
+  width: 100%;
+  max-width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.settings-modal .room-mgmt-header {
+  margin-bottom: 20px;
+}
+.settings-modal .room-mgmt-title {
+  font-size: 24px;
+}
+.settings-modal .controls-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-modal .settings-section.padded {
+  padding: 15px;
+}
+.settings-modal .settings-section .settings-section-title {
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+.settings-modal .control-label-inline {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.settings-modal .key-bind-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  min-width: 70px;
+}
+
 .room-mgmt-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

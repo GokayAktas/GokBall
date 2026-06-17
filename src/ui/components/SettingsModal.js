@@ -15,19 +15,19 @@ export class SettingsModal {
         const bindings = this.app.input.bindings;
 
         this.container.innerHTML = `
-            <div class="settings-modal card" style="width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto;">
-                <div class="room-mgmt-header" style="margin-bottom: 20px;">
-                    <span class="room-mgmt-title" style="font-size: 24px;">AYARLAR</span>
+            <div class="settings-modal card">
+                <div class="room-mgmt-header">
+                    <span class="room-mgmt-title">AYARLAR</span>
                     <button class="btn btn-secondary btn-sm" id="btnSettingsClose">Kapat</button>
                 </div>
                 
                 <div class="settings-list">
                     <!-- Kontroller -->
-                    <div class="settings-section">
-                        <div class="settings-section-title" style="font-size: 18px;">
+                        <div class="settings-section padded">
+                        <div class="settings-section-title">
                             <span>🎮</span> Kontroller
                         </div>
-                        <div class="controls-grid" style="display: flex; flex-direction: column; gap: 4px;">
+                        <div class="controls-grid">
                             ${[
                 { id: 'up', label: 'Yukarı', icon: '⬆️' },
                 { id: 'down', label: 'Aşağı', icon: '⬇️' },
@@ -36,8 +36,8 @@ export class SettingsModal {
                 { id: 'kick', label: 'Vuruş', icon: '🦵' }
             ].map(item => `
                                 <div class="control-item" style="padding: 6px 0;">
-                                    <div class="control-label" style="font-size: 14px;">${item.label}</div>
-                                    <button class="control-key key-bind-btn" data-action="${item.id}" style="padding: 2px 8px; font-size: 12px; min-width: 70px;">
+                                    <div class="control-label control-label-inline">${item.label}</div>
+                                    <button class="control-key key-bind-btn" data-action="${item.id}">
                                         ${(bindings[item.id] || []).map(k => k.replace('Key', '').replace('Arrow', '')).join(' / ')}
                                     </button>
                                 </div>
@@ -46,8 +46,8 @@ export class SettingsModal {
                     </div>
 
                     <!-- Ses -->
-                    <div class="settings-section" style="padding: 15px;">
-                        <div class="settings-section-title" style="font-size: 18px; margin-bottom: 10px;">
+                    <div class="settings-section padded">
+                        <div class="settings-section-title">
                             <span>🔊</span> Ses
                         </div>
                         <div class="slider-group">
@@ -60,8 +60,8 @@ export class SettingsModal {
                     </div>
 
                     <!-- Görüntü -->
-                    <div class="settings-section" style="padding: 15px;">
-                        <div class="settings-section-title" style="font-size: 18px; margin-bottom: 10px;">
+                    <div class="settings-section padded">
+                        <div class="settings-section-title">
                             <span>🔍</span> Görüntü
                         </div>
                         <div class="slider-group">
