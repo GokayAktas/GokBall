@@ -170,6 +170,61 @@ io.on('connection', (socket) => {
         if (room) room.changeTeam(socket.id, team);
     });
 
+    // --- Admin: Set Team Colors at runtime ---
+    // Payload: { team: 'red'|'blue', angle?: number, textColor?: 'FFFFFF', colors: ['C70000','FF5555'] }
+    socket.on('setTeamColors', (payload) => {
+        try {
+            const room = getPlayerRoom(socket.id);
+            if (!room) return;
+
+            const player = room.players.get(socket.id);
+            if (!player || !player.isAdmin) {
+                socket.emit('roomError', { error: 'Yetkisiz: Bu komutu yalnızca adminler kullanabilir.' });
+                return;
+            }
+
+            const team = (payload.team || '').toLowerCase();
+            if (!['red', 'blue'].includes(team)) return;
+
+            const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : 0;
+            const textColor = (payload.textColor || '').replace('#','').trim().toUpperCase() || 'FFFFFF';
+            const colors = Array.isArray(payload.colors) ? payload.colors.map(c => (c||'').replace('#','').trim().toUpperCase()).filter(Boolean) : [];
+            if (colors.length === 0) {
+                socket.emit('roomError', { error: 'En az bir renk sağlanmalıdır.' });
+                return;
+            }
+
+            if (!room.teamColors) room.teamColors = { red: null, blue: null };
+            room.teamColors[team] = {
+                angle,
+                textColor,
+                colors
+            };
+
+            // Apply to active discs if game running
+            if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
+                room.game.physics.discs.forEach(d => {
+                    if (d.isPlayer && d.team === team) {
+                        d.color = colors[0];
+                        d.colors = colors;
+                        d.colorAngle = angle;
+                        d.avatarColor = textColor;
+                    }
+                });
+                // Notify clients with updated game state for immediate sync
+                io.to(room.id).emit('gameState', room.game._getGameState());
+            }
+
+            // Broadcast team colors update to room so UIs can update CSS vars
+            io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
+
+            // Inform room via chat
+            io.to(room.id).emit('chatMessage', { playerName: 'SİSTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
+        } catch (e) {
+            console.error('[Server] setTeamColors error', e);
+        }
+    });
+
     socket.on('randomizeTeams', () => {
         const room = getPlayerRoom(socket.id);
         if (room) room.randomizeTeams(socket.id);
