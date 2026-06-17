@@ -179,6 +179,13 @@ export class Room {
             this.stadium = options.stadium || STADIUMS.classic;
         }
 
+        // Default team colors aligned with frontend "champions" theme.
+        // Colors stored without # to be compatible with existing code paths.
+        this.teamColors = options.teamColors || {
+            red: { angle: 0, textColor: 'FFFFFF', colors: ['D32F2F'] },
+            blue: { angle: 0, textColor: 'FFFFFF', colors: ['1565C0'] }
+        };
+
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);
@@ -226,6 +233,7 @@ export class Room {
             player: player.toJSON(),
             players: this.getPlayerList(),
             stadium: this.stadium,
+            teamColors: this.teamColors,
             game: this.game.getInfo(),
             teamsLocked: this.teamsLocked
             , joinHint
@@ -752,6 +760,7 @@ export class Room {
             players: this.getPlayerList(),
             teamsLocked: this.teamsLocked,
             stadium: this.stadium,
+            teamColors: this.teamColors,
             roomType: this.roomType,
             game: this.game.getInfo()
         };

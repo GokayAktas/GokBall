@@ -22,6 +22,15 @@ export class Renderer {
         this.starballImg = new Image();
         this.starballImg.src = '/assets/starball.png';
         this.starballImg.onload = () => { this._stadiumDirty = true; };
+
+        // Theme cache (populated each render)
+        this._theme = {
+            bgPrimary: '#000000',
+            bgSecondary: '#000000',
+            redTeam: 'c70000',
+            blueTeam: '00008c',
+            textPrimary: '#FFFFFF'
+        };
     }
 
     resize() {
@@ -35,8 +44,11 @@ export class Renderer {
     render(camera, stadium, physics, gameState) {
         const ctx = this.ctx;
 
-        // Clear screen with a solid color instead of clearRect (faster on some browsers)
-        ctx.fillStyle = '#000';
+        // Keep theme in sync with CSS variables (allows runtime theme switching)
+        this._updateTheme();
+
+        // Clear screen with theme background
+        ctx.fillStyle = this._theme.bgPrimary || '#000';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         ctx.save();
@@ -82,7 +94,9 @@ export class Renderer {
         const h = bg.height;
 
         // Outer area color
-        ctx.fillStyle = '#' + (bg.bgColor || '718d5a');
+        // Prefer stadium-provided color, otherwise use theme secondary/background
+        if (bg && bg.bgColor) ctx.fillStyle = '#' + bg.bgColor;
+        else ctx.fillStyle = this._theme.bgSecondary || '#071022';
         ctx.fillRect(-2000, -2000, 4000, 4000);
 
         // Inner field stripes
@@ -95,11 +109,11 @@ export class Renderer {
         }
         ctx.clip();
 
-        ctx.fillStyle = '#' + (bg.color || '718C5A');
+        ctx.fillStyle = bg && bg.color ? '#' + bg.color : (this._theme.bgPrimary || '#071022');
         ctx.fill();
 
         // Diagonal stripes (Matching image pattern)
-        ctx.fillStyle = '#' + (bg.stripeColor || '779461');
+        ctx.fillStyle = bg && bg.stripeColor ? '#' + bg.stripeColor : (this._theme.bgSecondary || '#0d2540');
         ctx.save();
         ctx.rotate(Math.PI / 4);
         const stripeWidth = 50;
@@ -120,8 +134,9 @@ export class Renderer {
         if (bg.lineColor) {
             ctx.strokeStyle = '#' + bg.lineColor;
         } else {
-            const isDark = bg.color === '404040' || bg.color === '333333';
-            ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.4)';
+            // Use theme text color for high-visibility lines
+            const tp = this._theme.textPrimary || '#FFFFFF';
+            ctx.strokeStyle = tp && tp.startsWith('rgb') ? tp.replace('rgb', 'rgba').replace(')', ', 0.6)') : 'rgba(255,255,255,0.6)';
         }
         
         ctx.lineWidth = 2.5;
@@ -150,7 +165,7 @@ export class Renderer {
         }
 
         // Starball Image or Kickoff Circle
-        if (bg.kickOffRadius > 0) {
+            if (bg.kickOffRadius > 0) {
             if (bg.useStarballImage && this.starballImg && this.starballImg.complete) {
                 // Draw Starball image
                 const r = bg.kickOffRadius;
@@ -238,9 +253,10 @@ export class Renderer {
                 } else if (disc.color) {
                     colors = [disc.color];
                 } else {
-                    colors = [disc.team === 'red' ? 'c70000' : '00008c'];
+                    // Fallback to theme team colors
+                    colors = [disc.team === 'red' ? (this._theme.redTeam || 'c70000') : (this._theme.blueTeam || '00008c')];
                 }
-                border = disc.kicking ? '#FFFFFF' : '#000000';
+                border = disc.kicking ? (this._theme.textPrimary || '#FFFFFF') : '#000000';
                 lw = 2.5;
             } else {
                 colors = [disc.color || 'FFB82E']; // Default to target yellow
@@ -277,7 +293,8 @@ export class Renderer {
                 // Single color: simple filled circle
                 ctx.beginPath();
                 ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
-                ctx.fillStyle = '#' + colors[0];
+                // colors[] may already be '#xxxxxx' or 'xxxxxx'
+                ctx.fillStyle = colors[0].startsWith('#') ? colors[0] : '#' + colors[0];
                 ctx.fill();
             }
 
@@ -325,9 +342,9 @@ export class Renderer {
         // Simple Bubble body
         ctx.beginPath();
         this._roundRect(ctx, -w / 2, 0, w, h, r);
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = this._theme.textPrimary || '#FFFFFF';
         ctx.fill();
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = this._theme.bgPrimary ? this._theme.bgPrimary : '#000';
         ctx.lineWidth = 1.2;
         ctx.stroke();
 
@@ -344,7 +361,7 @@ export class Renderer {
         // Static Dots (three small black squares or dots as in image)
         const dotSize = 2;
         const spacing = 5;
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = this._theme.bgPrimary ? this._theme.bgPrimary : '#000';
         for (let i = 0; i < 3; i++) {
             ctx.fillRect((i - 1) * spacing - dotSize/2, h / 2 - dotSize/2, dotSize, dotSize);
         }
@@ -366,9 +383,42 @@ export class Renderer {
 
     drawGoalEffect(team, progress) {
         const alpha = Math.sin(progress * Math.PI) * 0.3;
-        const color = team === 'red' ? `rgba(231, 76, 60, ${alpha})` : `rgba(52, 152, 219, ${alpha})`;
+        // Use theme team colors (converted to rgba)
+        const base = team === 'red' ? (this._theme.redTeam || 'c70000') : (this._theme.blueTeam || '00008c');
+        const color = this._hexToRgba(base, alpha);
         this.ctx.fillStyle = color;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    _updateTheme() {
+        try {
+            const s = getComputedStyle(document.documentElement);
+            const pick = v => (s.getPropertyValue(v) || '').trim();
+            const bgPrimary = pick('--bg-primary') || pick('--deep-navy') || '#000000';
+            const bgSecondary = pick('--bg-secondary') || bgPrimary;
+            const red = pick('--red-team') || 'c70000';
+            const blue = pick('--blue-team') || '00008c';
+            const textPrimary = pick('--text-primary') || '#FFFFFF';
+
+            // Normalize hashes
+            this._theme.bgPrimary = bgPrimary.replace(/"/g, '');
+            this._theme.bgSecondary = bgSecondary.replace(/"/g, '');
+            this._theme.redTeam = red.replace('#', '').trim();
+            this._theme.blueTeam = blue.replace('#', '').trim();
+            this._theme.textPrimary = textPrimary.replace(/"/g, '');
+        } catch (e) {
+            // Not in browser or getComputedStyle failed — keep defaults
+        }
+    }
+
+    _hexToRgba(hex, alpha) {
+        if (!hex) return `rgba(0,0,0,${alpha})`;
+        const h = hex.replace('#', '').trim();
+        if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
+        const r = parseInt(h.substring(0,2),16);
+        const g = parseInt(h.substring(2,4),16);
+        const b = parseInt(h.substring(4,6),16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
     show() {
