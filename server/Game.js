@@ -73,7 +73,12 @@ export class Game {
         this._startLoop();
 
         // Ignore incoming kick-off team updates briefly to avoid race with restart
-        this._forceKickOffIgnoreUntil = Date.now() + 600; // 600ms
+        // Increase window to avoid accepting stale client-authoritative kickoff team
+        this._forceKickOffIgnoreUntil = Date.now() + 2000; // 2s
+
+        // Clear last goal tracker so local-authority goal detection from previous match
+        // cannot leak into the new match
+        this._lastGoalTeam = null;
 
         // Broadcast start immediately to clients
         this.room.broadcast('gameStarted', {
