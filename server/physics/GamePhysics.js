@@ -176,6 +176,8 @@ export class GamePhysics {
             disc.pos.y += disc.speed.y;
         }
 
+        // Enforce kickoff constraints before collision resolution so initial
+        // movement can't immediately violate kickoff rules.
         this._applyKickOffConstraints();
 
         for (let i = 0; i < this.discs.length; i++) {
@@ -207,6 +209,11 @@ export class GamePhysics {
                 this._collideDiscPlane(disc, plane);
             }
         }
+
+        // Re-apply kickoff constraints after all collision resolution to
+        // guarantee no player ends up inside restricted areas due to collision
+        // responses or numerical drift.
+        this._applyKickOffConstraints();
 
         return this._checkGoals();
     }
@@ -259,15 +266,19 @@ export class GamePhysics {
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // 1. Defending team strictly in their half (wall behavior)
+                    // 1. Defending team strictly kept behind a half-plane boundary
+                    // positioned just outside the center circle to avoid clipping
+                    // through the kickoff barrier. We use kickOffRadius + disc.radius
+                    // as conservative boundary.
+                    const defendMaxX = isRed ? -defendMinDist : defendMinDist;
                     if (isRed) {
-                        if (disc.pos.x > -disc.radius) {
-                            disc.pos.x = -disc.radius;
+                        if (disc.pos.x > defendMaxX) {
+                            disc.pos.x = defendMaxX;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
-                    } else { // blue is defending
-                        if (disc.pos.x < disc.radius) {
-                            disc.pos.x = disc.radius;
+                    } else {
+                        if (disc.pos.x < defendMaxX) {
+                            disc.pos.x = defendMaxX;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
@@ -279,26 +290,32 @@ export class GamePhysics {
                         disc.pos.x = nx * defendMinDist;
                         disc.pos.y = ny * defendMinDist;
 
+                        // Remove any inward velocity component so they can't re-enter
+                        // the circle on the next integration step.
                         const dot = disc.speed.x * nx + disc.speed.y * ny;
                         if (dot < 0) {
                             disc.speed.x -= dot * nx;
                             disc.speed.y -= dot * ny;
+                        }
+                        // Also clamp small residual speeds to avoid tunneling
+                        if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
+                            disc.speed.x = 0;
+                            disc.speed.y = 0;
                         }
                     }
                 } else {
                     // 3. Kicking team: Allow them to occupy the kickoff circle area
                     // and a small buffer up to `kickOffRadius` into center, but
                     // prevent them from crossing far into opponent half.
+                    const allowMaxX = isRed ? kickOffRadius : -kickOffRadius;
                     if (isRed) {
-                        const maxX = kickOffRadius; // allow red up to +kickOffRadius
-                        if (disc.pos.x > maxX) {
-                            disc.pos.x = maxX;
+                        if (disc.pos.x > allowMaxX) {
+                            disc.pos.x = allowMaxX;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
                     } else {
-                        const minX = -kickOffRadius; // allow blue down to -kickOffRadius
-                        if (disc.pos.x < minX) {
-                            disc.pos.x = minX;
+                        if (disc.pos.x < allowMaxX) {
+                            disc.pos.x = allowMaxX;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
