@@ -201,6 +201,16 @@ export class Game {
 
     _startLoop() {
         this._stopLoop();
+
+        // In `local` roomType, the Admin/client is authoritative and will
+        // send `authorityState` packets. In that mode we avoid running the
+        // server-side physics tick to prevent conflicting updates.
+        if (this.room && this.room.roomType === 'local') {
+            // Still ensure kickoff team default is red for the initial state
+            this.physics.setKickOffTeam('red'); // Red gets the first kickoff
+            return;
+        }
+
         this.physics.setKickOffTeam('red'); // Red gets the first kickoff
         const interval = 1000 / this.tickRate;
         this.tickInterval = setInterval(() => this._tick(), interval);
