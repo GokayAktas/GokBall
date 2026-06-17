@@ -16,114 +16,68 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
     return {
         name,
         width: fieldW + goalDepth + 10,
-            case '/colors':
-            case '/color':
-                if (!player.isAdmin) break;
-
-                // Normalize team argument
-                const teamArg = parts[1]?.toLowerCase();
-                const team = teamArg === 'kirmizi' || teamArg === 'kırmızı' ? 'red'
-                    : teamArg === 'mavi' ? 'blue'
-                        : teamArg;
-                if (team !== 'red' && team !== 'blue') {
-                    player.socket.emit('chatMessage', { playerName: 'SISTEM', message: 'Takım belirtilmedi veya geçersiz. Örnek: /color red ...', system: true });
-                    break;
-                }
-
-                // Reconstruct remainder (flexible formats allowed)
-                let remainder = parts.slice(2).join(' ').trim();
-                if (!remainder) {
-                    player.socket.emit('chatMessage', { playerName: 'SISTEM', message: 'Kullanım örneği: /color red 60 FFFFFF C70000,FF5555 or /color red C70000,FF5555:60', system: true });
-                    break;
-                }
-
-                let angle = null;
-                let textColor = null;
-                let colors = [];
-
-                // Support formats like: "60 FFFFFF C70000 FF5555" or "C70000,FF5555:60" or "C70000" etc.
-                // If there's a trailing ":<angle>" extract it
-                const colonParts = remainder.split(':');
-                if (colonParts.length > 1) {
-                    const maybeAngle = colonParts.pop().trim();
-                    if (/^\d+$/.test(maybeAngle)) angle = parseInt(maybeAngle, 10);
-                    remainder = colonParts.join(':').trim();
-                }
-
-                // Tokenize by whitespace
-                const tokens = remainder.split(/\s+/).filter(Boolean);
-                // If first token is a number, it's an angle
-                if (tokens.length > 0 && /^\d+$/.test(tokens[0])) {
-                    angle = parseInt(tokens.shift(), 10);
-                }
-
-                // If next token is a 6-hex, treat as textColor
-                if (tokens.length > 0 && this._normalizeColor(tokens[0])) {
-                    // If this token seems like the only color and there are commas, defer to comma-splitting
-                    const candidate = tokens.shift();
-                    // If there are still tokens left, use candidate as textColor
-                    if (tokens.length >= 1) {
-                        textColor = this._normalizeColor(candidate);
-                    } else {
-                        // Single token left — could be colors comma-separated
-                        // Put it back to tokens and treat as colors
-                        tokens.unshift(candidate);
-                        textColor = null;
-                    }
-                }
-
-                // Now parse colors from remaining tokens (support comma-separated lists)
-                if (tokens.length === 0) {
-                    // Nothing left — invalid
-                    player.socket.emit('chatMessage', { playerName: 'SISTEM', message: 'Renk belirtilmedi. Örnek: /color red C70000 or /color red 60 FFFFFF C70000,FF5555', system: true });
-                    break;
-                }
-
-                // Join tokens and split by commas or whitespace
-                const colorCandidates = tokens.join(' ').split(/[,\s]+/).filter(Boolean);
-                for (const c of colorCandidates) {
-                    const norm = this._normalizeColor(c);
-                    if (norm) colors.push(norm);
-                }
-
-                if (colors.length === 0) {
-                    player.socket.emit('chatMessage', { playerName: 'SISTEM', message: 'Renk kodları 6 haneli HEX olmalı. Örnek: /color red 60 FFFFFF C70000,FF5555', system: true });
-                    break;
-                }
-
-                // Clamp to maximum 3 colors (Haxcolors supports 1..3)
-                if (colors.length > 3) colors = colors.slice(0, 3);
-
-                // Defaults
-                if (angle === null) angle = 0;
-                if (!textColor) textColor = 'FFFFFF';
-
-                // Save to room.teamColors
-                if (!this.teamColors) this.teamColors = { red: null, blue: null };
-                this.teamColors[team] = {
-                    angle,
-                    textColor,
-                    colors
-                };
-
-                // Inform room via chat and broadcast update
-                this.broadcast('chatMessage', { playerName: 'SISTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
-                // Apply to active discs if game running
-                if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-                    this.game.physics.discs.forEach(d => {
-                        if (d.isPlayer && d.team === team) {
-                            d.color = colors[0];
-                            d.colors = colors;
-                            d.colorAngle = angle;
-                            d.avatarColor = textColor;
-                        }
-                    });
-                    this.broadcast('gameState', this.game._getGameState());
-                }
-
-                // Broadcast team colors update to UIs
-                this.broadcast('teamColorsUpdated', { team, teamColors: this.teamColors[team], allTeamColors: this.teamColors });
-                break;
+        height: fieldH + 30,
+        spawnDistance: spawnDist,
+        bg: {
+            type: "grass", width: fieldW, height: fieldH,
+            kickOffRadius: 75, cornerRadius: 0,
+            color: "718C5A", stripeColor: "6B8954", bgColor: "59854C",
+            lineColor: "C7E6BD", showCenterLine: true, showKickOffCircle: true
+        },
+        vertexes: [
+            { x: -fieldW, y: fieldH, bCoef: 0.1, cMask: ["ball"] }, // 0: TL
+            { x: -fieldW, y: goalWidth, bCoef: 0.1, cMask: ["ball"] },  // 1: Red Post T
+            { x: -fieldW, y: -goalWidth, bCoef: 0.1, cMask: ["ball"] }, // 2: Red Post B
+            { x: -fieldW, y: -fieldH, bCoef: 0.1, cMask: ["ball"] }, // 3: BL
+            { x: fieldW, y: fieldH, bCoef: 0.1, cMask: ["ball"] },  // 4: TR
+            { x: fieldW, y: goalWidth, bCoef: 0.1, cMask: ["ball"] },   // 5: Blue Post T
+            { x: fieldW, y: -goalWidth, bCoef: 0.1, cMask: ["ball"] },  // 6: Blue Post B
+            { x: fieldW, y: -fieldH, bCoef: 0.1, cMask: ["ball"] }, // 7: BR
+            { x: 0, y: fieldH, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
+            { x: 0, y: -fieldH, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
+            // Goal Netting Points (U-Shape with rounded corners)
+            { x: -(fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ["ball"] },  // 10
+            { x: -(fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ["ball"] }, // 11
+            { x: (fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ["ball"] },   // 12
+            { x: (fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ["ball"] }   // 13
+        ],
+        segments: [
+            // Pitch Lines
+            { v0: 0, v1: 8, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 8, v1: 4, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 3, v1: 9, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 9, v1: 7, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 0, v1: 1, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 2, v1: 3, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 4, v1: 5, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            { v0: 6, v1: 7, curve: 0, vis: true, color: "C7E6BD", bCoef: 1, cMask: ["ball"] },
+            // Red Goal (Pure U-Shape)
+            { v0: 1, v1: 10, curve: 90, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 10, v1: 11, curve: 0, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 11, v1: 2, curve: 90, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] },
+            // Blue Goal (Pure U-Shape)
+            { v0: 5, v1: 12, curve: -90, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 12, v1: 13, curve: 0, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] },
+            { v0: 13, v1: 6, curve: -90, vis: true, color: "000000", bCoef: 0.1, cMask: ["ball"] }
+        ],
+        goals: [
+            { p0: [-fieldW, goalWidth], p1: [-fieldW, -goalWidth], team: "red" },
+            { p0: [fieldW, goalWidth], p1: [fieldW, -goalWidth], team: "blue" }
+        ],
+        discs: [
+            { pos: [0, 0], radius: 10, invMass: 1, bCoef: 0.5, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
+            // Posts
+            { pos: [-fieldW, goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] },
+            { pos: [-fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] },
+            { pos: [fieldW, goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] },
+            { pos: [fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] }
+        ],
+        planes: [
+            { normal: [0, 1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ["all"] },
+            { normal: [0, -1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ["all"] },
+            { normal: [1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ["all"] },
+            { normal: [-1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ["all"] }
+        ],
         playerPhysics: {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
             acceleration: 0.08, kickingAcceleration: 0.05, kickingDamping: 0.96, kickStrength: 5
