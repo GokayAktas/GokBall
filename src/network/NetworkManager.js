@@ -151,6 +151,13 @@ export class NetworkManager {
         this.socket.emit('changeStadium', stadiumData);
     }
 
+    // === Admin: Update team colors at runtime ===
+    setTeamColors(payload) {
+        // payload: { team: 'red'|'blue', angle, textColor, colors: [] }
+        if (!this.socket) return;
+        this.socket.emit('setTeamColors', payload);
+    }
+
     setScoreLimit(limit) {
         this.socket.emit('setScoreLimit', limit);
     }

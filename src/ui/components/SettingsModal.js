@@ -20,6 +20,32 @@ export class SettingsModal {
                     <span class="room-mgmt-title">AYARLAR</span>
                     <button class="btn btn-secondary btn-sm" id="btnSettingsClose">Kapat</button>
                 </div>
+                <!-- Admin Team Colors (visible to admins) -->
+                <div class="settings-section padded admin-team-colors hidden" id="adminTeamColorsSection">
+                    <div class="settings-section-title">
+                        <span>🎨</span> Takım Renkleri (Admin)
+                    </div>
+                    <div class="team-color-row">
+                        <label>Red primary</label>
+                        <input type="text" id="adminRedPrimary" placeholder="D32F2F" />
+                        <label>Extras (comma)</label>
+                        <input type="text" id="adminRedExtras" placeholder="FF6B6B,FFCDD2" />
+                        <label>Açı</label>
+                        <input type="number" id="adminRedAngle" value="0" />
+                    </div>
+                    <div class="team-color-row">
+                        <label>Blue primary</label>
+                        <input type="text" id="adminBluePrimary" placeholder="1565C0" />
+                        <label>Extras (comma)</label>
+                        <input type="text" id="adminBlueExtras" placeholder="4FA3FF,82B1FF" />
+                        <label>Açı</label>
+                        <input type="number" id="adminBlueAngle" value="0" />
+                    </div>
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        <button class="btn btn-primary" id="btnApplyTeamColors">Uygula</button>
+                        <button class="btn btn-secondary" id="btnFetchTeamColors">Sunucudan Yükle</button>
+                    </div>
+                </div>
                 
                 <div class="settings-list">
                     <!-- Kontroller -->
@@ -129,6 +155,50 @@ export class SettingsModal {
         this.container.onclick = (e) => {
             if (e.target === this.container) this.hide();
         };
+
+        // Admin team colors UI
+        const adminSection = this.container.querySelector('#adminTeamColorsSection');
+        const isAdmin = this.app.network.socket?.id === this.app.currentRoomData?.adminId;
+        if (adminSection) {
+            if (isAdmin) adminSection.classList.remove('hidden');
+            else adminSection.classList.add('hidden');
+
+            const btnApply = this.container.querySelector('#btnApplyTeamColors');
+            const btnFetch = this.container.querySelector('#btnFetchTeamColors');
+
+            btnApply?.addEventListener('click', () => {
+                const redPrimary = (this.container.querySelector('#adminRedPrimary')?.value || '').replace('#','').trim();
+                const redExtras = (this.container.querySelector('#adminRedExtras')?.value || '').split(',').map(s => s.replace('#','').trim()).filter(Boolean);
+                const redAngle = parseInt(this.container.querySelector('#adminRedAngle')?.value || '0', 10) || 0;
+
+                const bluePrimary = (this.container.querySelector('#adminBluePrimary')?.value || '').replace('#','').trim();
+                const blueExtras = (this.container.querySelector('#adminBlueExtras')?.value || '').split(',').map(s => s.replace('#','').trim()).filter(Boolean);
+                const blueAngle = parseInt(this.container.querySelector('#adminBlueAngle')?.value || '0', 10) || 0;
+
+                // Prepare payloads and emit via network manager
+                if (redPrimary) {
+                    this.app.network.setTeamColors({ team: 'red', angle: redAngle, textColor: 'FFFFFF', colors: [redPrimary, ...redExtras] });
+                }
+                if (bluePrimary) {
+                    this.app.network.setTeamColors({ team: 'blue', angle: blueAngle, textColor: 'FFFFFF', colors: [bluePrimary, ...blueExtras] });
+                }
+            });
+
+            btnFetch?.addEventListener('click', () => {
+                // Request current room data from server to populate fields
+                const rc = this.app.currentRoomData?.teamColors || (this.app.currentRoomData ? this.app.currentRoomData.teamColors : null);
+                if (rc && rc.red) {
+                    this.container.querySelector('#adminRedPrimary').value = rc.red.colors?.[0] || '';
+                    this.container.querySelector('#adminRedExtras').value = (rc.red.colors || []).slice(1).join(',');
+                    this.container.querySelector('#adminRedAngle').value = rc.red.angle || 0;
+                }
+                if (rc && rc.blue) {
+                    this.container.querySelector('#adminBluePrimary').value = rc.blue.colors?.[0] || '';
+                    this.container.querySelector('#adminBlueExtras').value = (rc.blue.colors || []).slice(1).join(',');
+                    this.container.querySelector('#adminBlueAngle').value = rc.blue.angle || 0;
+                }
+            });
+        }
     }
 
     toggle() {

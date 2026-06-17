@@ -440,3 +440,43 @@ const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
     console.log(`[GokBall Server] Running on port ${PORT}`);
 });
+
+// --- Optional Admin HTTP Endpoint to change team colors (requires ADMIN_SECRET header) ---
+// POST /admin/rooms/:id/teamColors
+// Body: { team: 'red'|'blue', angle, textColor, colors: [] }
+app.post('/admin/rooms/:id/teamColors', express.json(), (req, res) => {
+    const secret = req.header('X-Admin-Secret') || req.header('x-admin-secret');
+    if (!process.env.ADMIN_SECRET || !secret || secret !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const room = rooms.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const payload = req.body;
+    const team = (payload.team || '').toLowerCase();
+    if (!['red','blue'].includes(team)) return res.status(400).json({ error: 'Invalid team' });
+    const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : 0;
+    const textColor = (payload.textColor || 'FFFFFF').replace('#','').trim().toUpperCase();
+    const colors = Array.isArray(payload.colors) ? payload.colors.map(c => (c||'').replace('#','').trim().toUpperCase()).filter(Boolean) : [];
+    if (!colors.length) return res.status(400).json({ error: 'At least one color required' });
+
+    if (!room.teamColors) room.teamColors = { red: null, blue: null };
+    room.teamColors[team] = { angle, textColor, colors };
+
+    // apply and broadcast similar to socket handler
+    if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
+        room.game.physics.discs.forEach(d => {
+            if (d.isPlayer && d.team === team) {
+                d.color = colors[0];
+                d.colors = colors;
+                d.colorAngle = angle;
+                d.avatarColor = textColor;
+            }
+        });
+        io.to(room.id).emit('gameState', room.game._getGameState());
+    }
+
+    io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
+    return res.json({ ok: true, teamColors: room.teamColors[team] });
+});
