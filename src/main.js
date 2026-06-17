@@ -283,14 +283,14 @@ class GokBallApp {
         // Game over
         this.network.on('gameOver', (data) => {
             const winTeamStr = data.winner === 'red' ? 'Kırmızı' : 'Mavi';
-            const color = data.winner === 'red' ? '#c70000' : '#00008c';
+                const color = data.winner === 'red' ? (getComputedStyle(document.documentElement).getPropertyValue('--red-team') || '#c70000') : (getComputedStyle(document.documentElement).getPropertyValue('--blue-team') || '#00008c');
 
             // Create nice on-screen overlay instead of alert
             const overlay = document.createElement('div');
             overlay.className = 'game-over-overlay';
             overlay.innerHTML = `
-                <h1 style="color: ${color}; text-shadow: 2px 2px 0 #000; font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
-                <p style="color: white; font-size: 24px; text-shadow: 1px 1px 0 #000; margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
+                <h1 style="color: ${color}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
+                <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
             `;
             document.body.appendChild(overlay);
 

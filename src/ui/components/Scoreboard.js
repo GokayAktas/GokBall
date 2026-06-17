@@ -21,7 +21,7 @@ export class Scoreboard {
                     <div class="score-display">
                         <div class="score-box red"></div>
                         <span class="score-text" id="hud-score-red">0</span>
-                        <span style="color: rgba(255,255,255,0.3)">-</span>
+                        <span style="color: var(--text-muted)">-</span>
                         <span class="score-text" id="hud-score-blue">0</span>
                         <div class="score-box blue"></div>
                     </div>
@@ -109,7 +109,7 @@ export class Scoreboard {
   }
 
   showGoal(team) {
-    const color = team === 'red' ? '#c70000' : '#00008c';
+    const color = team === 'red' ? getComputedStyle(document.documentElement).getPropertyValue('--red-team') || '#c70000' : getComputedStyle(document.documentElement).getPropertyValue('--blue-team') || '#00008c';
     const overlay = document.createElement('div');
     overlay.className = 'goal-overlay';
     overlay.innerHTML = `<div class="goal-text" style="color: ${color}">GOOOL!!!</div>`;

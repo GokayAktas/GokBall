@@ -27,7 +27,7 @@ export class RoomLobby {
             <div class="header-titles">
               <h2 id="roomTitle">${this._esc(data?.roomName || 'Oda')}</h2>
               <div class="header-sub">${this._esc(data?.stadium?.name || 'Klasik')} • <span id="playerCount">${data?.players?.length || 0}</span> Oyuncu</div>
-              ${data?.roomType === 'local' ? '<div id="localModeBanner" style="display:flex; align-items:center; gap:6px; margin-top:6px; padding:4px 10px; background:rgba(155,89,182,0.15); border:1px solid rgba(155,89,182,0.3); border-radius:8px; font-size:11px; color:#bb86fc;">🖥️ Yerel Sunucu — Kurucu çıkarsa oda kapanır</div>' : ''}
+              ${data?.roomType === 'local' ? '<div id="localModeBanner" style="display:flex; align-items:center; gap:6px; margin-top:6px; padding:4px 10px; background:rgba(123,97,255,0.12); border:1px solid rgba(123,97,255,0.25); border-radius:8px; font-size:11px; color:var(--accent-purple);">🖥️ Yerel Sunucu — Kurucu çıkarsa oda kapanır</div>' : ''}
             </div>
             <button class="btn btn-danger btn-sm" id="btnLeave" style="font-weight: 700; display:flex; gap:6px; align-items:center; border-radius: 20px; padding: 6px 16px;">
                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -49,7 +49,7 @@ export class RoomLobby {
                     <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed" style="padding: 2px 8px;">Katıl</button>
                  </div>
-                 <button class="btn btn-xs team-clear-btn" id="btnClearRed" style="display:none; background:rgba(0,0,0,0.3); color:white; border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Kırmızı Takımı Boşalt">
+                 <button class="btn btn-xs team-clear-btn" id="btnClearRed" style="display:none; background:var(--bg-glass); color:var(--text-primary); border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Kırmızı Takımı Boşalt">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                  </button>
               </div>
@@ -61,7 +61,7 @@ export class RoomLobby {
               <div class="team-header spectator">
                  <div class="team-title"><span class="team-icon">👁️</span> İzleyiciler</div>
                  <div style="display:flex; gap: 5px;">
-                   <button class="btn btn-xs" id="btnJoinAuto" style="display:none; background:linear-gradient(135deg, #FF9A9E, #FECFEF); color:#333; border:none; padding:4px 8px; border-radius:6px; font-size:16px; cursor:pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
+                   <button class="btn btn-xs" id="btnJoinAuto" style="display:none; background: linear-gradient(135deg, var(--accent-purple), var(--accent-royal)); color:var(--text-primary); border:none; padding:4px 8px; border-radius:6px; font-size:16px; cursor:pointer; box-shadow: var(--shadow-sm);" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinSpectator">İzle</button>
                  </div>
               </div>
@@ -75,7 +75,7 @@ export class RoomLobby {
                     <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue" style="padding: 2px 8px;">Katıl</button>
                  </div>
-                 <button class="btn btn-xs team-clear-btn" id="btnClearBlue" style="display:none; background:rgba(0,0,0,0.3); color:white; border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Mavi Takımı Boşalt">
+                 <button class="btn btn-xs team-clear-btn" id="btnClearBlue" style="display:none; background:var(--bg-glass); color:var(--text-primary); border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Mavi Takımı Boşalt">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                  </button>
               </div>
@@ -122,11 +122,11 @@ export class RoomLobby {
           </div>
         </div>
 
-        <div class="lobby-chat-sidebar" style="width: 350px; display: flex; flex-direction: column; background: #0B132B; border-radius: 16px; border: 1px solid rgba(255,255,255,0.03); box-shadow: 0 8px 32px rgba(0,0,0,0.4); padding: 20px;">
-          <h3 style="margin-top:0; margin-bottom:15px; font-size: 18px; color: white;">💬 Sohbet</h3>
+        <div class="lobby-chat-sidebar" style="width: 350px; display: flex; flex-direction: column; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-md); padding: 20px;">
+          <h3 style="margin-top:0; margin-bottom:15px; font-size: 18px; color: var(--text-primary);">💬 Sohbet</h3>
           <div id="lobbyChatMessages" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 5px; margin-bottom: 15px; font-size: 13px;"></div>
           <div style="display:flex; gap: 8px;">
-            <input type="text" id="lobbyChatInput" class="input" placeholder="Mesaj..." style="flex:1; padding: 10px; border-radius: 8px; font-size: 13px; background: rgba(0,0,0,0.2);" autocomplete="off" />
+            <input type="text" id="lobbyChatInput" class="input" placeholder="Mesaj..." style="flex:1; padding: 10px; border-radius: 8px; font-size: 13px; background: var(--bg-input);" autocomplete="off" />
             <button class="btn btn-primary" id="btnSendChat" style="padding: 0; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

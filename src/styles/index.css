@@ -74,6 +74,23 @@
   --transition-slow: 400ms ease;
 }
 
+:root[data-theme="champions"]{
+  --bg-primary: #081229;
+  --bg-secondary: #0d2540;
+  --bg-card: #0f2a44;
+  --bg-glass: rgba(255,255,255,0.04);
+  --text-primary: #E6EEF6;
+  --text-secondary: #C9D8EB;
+  --accent-royal: #1565C0;
+  --accent-purple: #7B61FF;
+  --accent-silver: #CFCFCF;
+  --shadow-glow: 0 6px 20px rgba(21,101,192,0.18);
+  --shadow-glow-active: 0 8px 30px rgba(123,97,255,0.28);
+  --border-active: 1px solid rgba(21,101,192,0.8);
+  --blue-team: #1565C0;
+  --red-team: #D32F2F;
+}
+
 /* ============================================
    Reset & Base
    ============================================ */

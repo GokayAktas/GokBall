@@ -33,9 +33,9 @@ export class InGameMenu {
         this.container.innerHTML = `
             <div class="room-mgmt-menu">
                 <div class="room-mgmt-header">
-                    <div style="display:flex; flex-direction:column;">
+                        <div style="display:flex; flex-direction:column;">
                         <span class="room-mgmt-title" style="margin:0;">${name}</span>
-                        <span style="font-size:12px; color:rgba(255,255,255,0.4); margin-top:2px;">${roomData.stadiumName || 'Klasik Saha'} • ${players.length} Oyuncu</span>
+                        <span style="font-size:12px; color:var(--text-muted); margin-top:2px;">${roomData.stadiumName || 'Klasik Saha'} • ${players.length} Oyuncu</span>
                     </div>
                     <div style="display:flex; gap:12px; align-items:center;">
                         ${isAdmin ? `
@@ -119,7 +119,7 @@ export class InGameMenu {
                 <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
                     <button class="btn btn-primary btn-block" id="btnResumeGame" style="font-weight:700; height: 45px; font-size: 16px;">OYUNA DÖN</button>
                     ${isAdmin ? `
-                        <button class="btn btn-danger btn-block" id="btnStopGame" style="font-weight:700; height: 40px; display:flex; gap:8px; justify-content:center; align-items:center; background: rgba(231, 76, 60, 0.15); border: 1px solid rgba(231, 76, 60, 0.3); color: #ff7675;">
+                        <button class="btn btn-danger btn-block" id="btnStopGame" style="font-weight:700; height: 40px; display:flex; gap:8px; justify-content:center; align-items:center;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
                             MAÇI DURDUR (LOBİYE DÖN)
                         </button>

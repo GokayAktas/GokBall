@@ -140,7 +140,10 @@ export class Chat {
         if (data.system) {
             div.textContent = data.message;
         } else {
-            const color = data.team === 'red' ? '#c70000' : data.team === 'blue' ? '#00008c' : '#A6C5D7';
+            const red = getComputedStyle(document.documentElement).getPropertyValue('--red-team') || '#c70000';
+            const blue = getComputedStyle(document.documentElement).getPropertyValue('--blue-team') || '#00008c';
+            const neutral = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#A6C5D7';
+            const color = data.team === 'red' ? red.trim() : data.team === 'blue' ? blue.trim() : neutral.trim();
             div.innerHTML = `<span class="chat-message-author" style="color:${color}">${this._esc(data.playerName)}</span>: ${this._esc(data.message)}`;
         }
 

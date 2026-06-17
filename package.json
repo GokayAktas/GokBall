@@ -10,7 +10,8 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "dev:lan": "concurrently \"npm run server\" \"vite --host\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tint-assets": "node scripts/tint-assets.js"
   },
   "dependencies": {
     "express": "^4.18.2",
