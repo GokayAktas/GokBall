@@ -771,7 +771,7 @@ export class Room {
                 
                 if (player.isAdmin) {
                     helpText += "\n👑 Admin Komutları:\n";
-                    helpText += "🎨 /color (takım) (açı)? (yazı rengi)? renk1[,renk2[,renk3]] - Takım renklerini değiştirir (Haxcolors uyumlu). Örnek: /color red 60 FFFFFF C70000,FF5555\n";
+                    helpText += "🎨 /colors (takım) (açı) (yazı rengi) (renk1) (renk2) (renk3) - Takım renklerini değiştirir\n";
                     helpText += "🔓 /clear_bans - Tüm yasaklamaları (banları) kaldırır\n";
                 }
 
