@@ -75,6 +75,41 @@ export class Settings {
                         <input type="range" class="slider" id="zoomSlider" min="5" max="30" value="15" />
                     </div>
                 </div>
+                <!-- Admin Team Colors -->
+                <div class="settings-section admin-only" id="settingsAdminColors" style="display:none;">
+                  <div class="settings-section-title">
+                    <span style="font-size:24px;">🎨</span> Takım Renkleri (Admin)
+                  </div>
+                  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <label>Red primary</label>
+                      <input type="color" id="settingsRedPrimary" value="#D32F2F" />
+                      <input type="text" id="settingsRedExtra" placeholder="Ek renkler, virgülle ayrılmış (FF6B6B,FFCDD2)" />
+                      <label>Açı</label>
+                      <input type="number" id="settingsRedAngle" value="0" />
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <label>Blue primary</label>
+                      <input type="color" id="settingsBluePrimary" value="#1565C0" />
+                      <input type="text" id="settingsBlueExtra" placeholder="Ek renkler, virgülle ayrılmış (4FA3FF,82B1FF)" />
+                      <label>Açı</label>
+                      <input type="number" id="settingsBlueAngle" value="0" />
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <label>Preview</label>
+                      <div style="display:flex; gap:8px;">
+                        <div id="previewRed" style="width:48px; height:48px; border-radius:50%; background:#D32F2F; box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
+                        <div id="previewBlue" style="width:48px; height:48px; border-radius:50%; background:#1565C0; box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
+                      </div>
+                      <div style="margin-top:8px; display:flex; gap:8px;">
+                        <button class="btn btn-primary" id="btnSettingsApplyColors">Uygula</button>
+                        <button class="btn btn-secondary" id="btnSettingsLoadColors">Sunucudan Yükle</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
             </div>
         `;
     return div;
@@ -136,5 +171,102 @@ export class Settings {
         window.addEventListener('keydown', handler, { once: true });
       });
     });
+    // After elements are mounted, wire admin color controls
+    // Small timeout to ensure DOM nodes exist in the page
+    setTimeout(() => this.onMountElements?.(), 20);
+  }
+
+  onMountElements() {
+    // Helper to apply local preview and optionally emit to server via NetworkManager
+    const applyPreview = (allColors, emitToServer = false) => {
+      try {
+        if (allColors.red && allColors.red.colors && allColors.red.colors[0]) {
+          document.documentElement.style.setProperty('--red-team', '#' + allColors.red.colors[0]);
+          const preview = document.getElementById('previewRed');
+          if (preview) preview.style.background = '#' + allColors.red.colors[0];
+        }
+        if (allColors.blue && allColors.blue.colors && allColors.blue.colors[0]) {
+          document.documentElement.style.setProperty('--blue-team', '#' + allColors.blue.colors[0]);
+          const preview = document.getElementById('previewBlue');
+          if (preview) preview.style.background = '#' + allColors.blue.colors[0];
+        }
+
+        // Apply to local physics discs immediately for quick preview
+        if (this.app.gameRunning && this.app.physics && this.app.physics.discs) {
+          for (const disc of this.app.physics.discs) {
+            if (!disc.isPlayer) continue;
+            const tc = allColors[disc.team];
+            if (tc && tc.colors && tc.colors.length > 0) {
+              disc.color = tc.colors[0];
+              disc.colors = tc.colors.slice();
+              disc.colorAngle = tc.angle || 0;
+              disc.avatarColor = tc.textColor || disc.avatarColor;
+            }
+          }
+        }
+
+        if (emitToServer) {
+          if (allColors.red) this.app.network.setTeamColors({ team: 'red', angle: allColors.red.angle || 0, textColor: allColors.red.textColor || 'FFFFFF', colors: allColors.red.colors });
+          if (allColors.blue) this.app.network.setTeamColors({ team: 'blue', angle: allColors.blue.angle || 0, textColor: allColors.blue.textColor || 'FFFFFF', colors: allColors.blue.colors });
+        }
+      } catch (e) {
+        console.error('applyPreview error', e);
+      }
+    };
+
+    // Wire admin controls
+    const isAdmin = this.app.network.socket?.id === this.app.currentRoomData?.adminId;
+    const adminSection = document.getElementById('settingsAdminColors');
+    if (adminSection) {
+      adminSection.style.display = isAdmin ? 'block' : 'none';
+
+      const redPicker = document.getElementById('settingsRedPrimary');
+      const bluePicker = document.getElementById('settingsBluePrimary');
+      const redExtras = document.getElementById('settingsRedExtra');
+      const blueExtras = document.getElementById('settingsBlueExtra');
+      const redAngle = document.getElementById('settingsRedAngle');
+      const blueAngle = document.getElementById('settingsBlueAngle');
+      const previewApply = document.getElementById('btnSettingsApplyColors');
+      const previewLoad = document.getElementById('btnSettingsLoadColors');
+
+      const collect = () => ({
+        red: {
+          colors: [redPicker.value.replace('#','')].concat((redExtras.value || '').split(',').map(s => s.replace('#','').trim()).filter(Boolean)),
+          angle: parseInt(redAngle.value || '0', 10) || 0,
+          textColor: 'FFFFFF'
+        },
+        blue: {
+          colors: [bluePicker.value.replace('#','')].concat((blueExtras.value || '').split(',').map(s => s.replace('#','').trim()).filter(Boolean)),
+          angle: parseInt(blueAngle.value || '0', 10) || 0,
+          textColor: 'FFFFFF'
+        }
+      });
+
+      // Live preview when picking color
+      redPicker?.addEventListener('input', () => {
+        const p = collect(); applyPreview({ red: p.red, blue: p.blue }, false);
+      });
+      bluePicker?.addEventListener('input', () => {
+        const p = collect(); applyPreview({ red: p.red, blue: p.blue }, false);
+      });
+
+      previewApply?.addEventListener('click', () => {
+        const p = collect(); applyPreview(p, true); // emit to server
+      });
+
+      previewLoad?.addEventListener('click', () => {
+        const rc = this.app.currentRoomData?.teamColors || null;
+        if (rc && rc.red) {
+          document.getElementById('settingsRedPrimary').value = '#' + (rc.red.colors?.[0] || 'D32F2F');
+          document.getElementById('settingsRedExtra').value = (rc.red.colors || []).slice(1).join(',');
+          document.getElementById('settingsRedAngle').value = rc.red.angle || 0;
+        }
+        if (rc && rc.blue) {
+          document.getElementById('settingsBluePrimary').value = '#' + (rc.blue.colors?.[0] || '1565C0');
+          document.getElementById('settingsBlueExtra').value = (rc.blue.colors || []).slice(1).join(',');
+          document.getElementById('settingsBlueAngle').value = rc.blue.angle || 0;
+        }
+      });
+    }
   }
 }
