@@ -509,8 +509,8 @@ export class RoomLobby {
           ${p.isAdmin ? '<span class="team-player-admin">👑</span>' : ''}
           ${isAdmin && !p.isAdmin ? `
             <div style="margin-left:auto; display:flex; gap:4px;">
-              <button class="btn-icon btn-ban" data-ban-id="${p.id}" title="Oyuncuyu banla" style="padding:2px 4px; font-size:10px;">✕</button>
               <button class="btn-icon btn-kick" data-kick-id="${p.id}" title="Oyuncuyu odadan at" style="padding:2px 4px; font-size:12px;">🦵</button>
+              <button class="btn-icon btn-ban" data-ban-id="${p.id}" title="Oyuncuyu banla" style="padding:2px 4px; font-size:10px;">✕</button>
             </div>
           ` : ''}
         </div>
@@ -583,23 +583,24 @@ export class RoomLobby {
   }
 
   _setupKickButtons() {
-    document.querySelectorAll('.btn-ban').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const playerId = btn.dataset.banId;
-        this.app.ui.showConfirm('Bu oyuncuyu banlamak istediğinize emin misiniz?', () => {
-          this.app.network.banPlayer(playerId, 'Banned by admin');
-        });
-      });
-    });
-
+    // Kick first, then ban. Use confirm-with-reason modal.
     document.querySelectorAll('.btn-kick').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const playerId = btn.dataset.kickId;
-        this.app.ui.showConfirm('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', () => {
-          this.app.network.kickPlayer(playerId, 'Kicked by admin');
-        });
+        this.app.ui.showConfirmWithReason('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', (reason) => {
+          this.app.network.kickPlayer(playerId, reason || 'Kicked by admin');
+        }, { placeholder: 'Sebep (opsiyonel)', confirmText: 'At', danger: true });
+      });
+    });
+
+    document.querySelectorAll('.btn-ban').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const playerId = btn.dataset.banId;
+        this.app.ui.showConfirmWithReason('Bu oyuncuyu banlamak istediğinize emin misiniz?', (reason) => {
+          this.app.network.banPlayer(playerId, reason || 'Banned by admin');
+        }, { placeholder: 'Ban sebebi (opsiyonel)', confirmText: 'Banla', danger: true });
       });
     });
   }

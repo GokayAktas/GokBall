@@ -362,6 +362,15 @@ body {
   border-color: var(--border-active);
 }
 
+/* Custom confirm modal styles (matches design system) */
+#customConfirmModal {
+  font-family: var(--font-family);
+}
+#customConfirmModal .input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+}
+
 /* ============================================
    Inputs
    ============================================ */

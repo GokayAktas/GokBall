@@ -95,4 +95,71 @@ export class UIManager {
         overlay.appendChild(box);
         document.body.appendChild(overlay);
     }
+
+    /**
+     * Show a confirmation dialog with an optional reason input field.
+     * onConfirm will be called with the reason string (may be empty).
+     */
+    showConfirmWithReason(message, onConfirm, options = {}) {
+        const { placeholder = 'Sebep (opsiyonel)', confirmText = 'Onayla', danger = true } = options;
+        const old = document.getElementById('customConfirmModal');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'customConfirmModal';
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.6); z-index: 10000;
+            display: flex; justify-content: center; align-items: center;
+        `;
+
+        const box = document.createElement('div');
+        box.style.cssText = `
+            background: var(--bg-card); padding: 20px 28px; border-radius: 12px;
+            box-shadow: var(--shadow-lg); border: 1px solid var(--border-color);
+            display: flex; flex-direction: column; align-items: stretch;
+            font-family: 'Inter', sans-serif; min-width: 380px; color: var(--text-primary);
+        `;
+
+        const title = document.createElement('div');
+        title.innerHTML = danger ? '⚠️ Onay Gerekiyor' : 'Bilgi';
+        title.style.cssText = `font-weight: 800; font-size: 18px; margin-bottom: 10px; color: var(--accent-purple);`;
+
+        const text = document.createElement('div');
+        text.innerHTML = message;
+        text.style.cssText = `font-size: 14px; margin-bottom: 12px; color: var(--text-primary); text-align: left; line-height: 1.4;`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = placeholder;
+        input.className = 'input';
+        input.style.cssText = `margin-bottom:14px; padding:10px; border-radius:8px; border:1px solid var(--border-color);`;
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = `display: flex; gap: 12px; justify-content: flex-end;`;
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.innerText = 'Vazgeç';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.onclick = () => overlay.remove();
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.innerText = confirmText;
+        confirmBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+        confirmBtn.onclick = () => {
+            const reason = (input.value || '').trim();
+            overlay.remove();
+            if (typeof onConfirm === 'function') onConfirm(reason);
+        };
+
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(confirmBtn);
+        box.appendChild(title);
+        box.appendChild(text);
+        box.appendChild(input);
+        box.appendChild(btnRow);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        input.focus();
+    }
 }

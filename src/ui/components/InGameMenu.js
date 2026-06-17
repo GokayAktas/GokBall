@@ -23,10 +23,11 @@ export class InGameMenu {
         const specs = players.filter(p => p.team === 'spectator');
 
         const isMatchRunning = roomData.game && (roomData.game.state === 'playing' || roomData.game.state === 'countdown' || roomData.game.state === 'goal');
+        // Swap ban/kick button order: Kick (remove) first, then Ban
         const adminActions = (p) => isAdmin && p.id !== this.app.network.playerId ? `
             <div style="display:flex; gap:4px;">
-                <button class="kick-btn ban-btn" data-ban-id="${p.id}" title="Oyuncuyu banla">✕</button>
                 <button class="kick-btn" data-id="${p.id}" title="Oyuncuyu odadan at">🦵</button>
+                <button class="kick-btn ban-btn" data-ban-id="${p.id}" title="Oyuncuyu banla">✕</button>
             </div>
         ` : '';
 
@@ -158,22 +159,23 @@ export class InGameMenu {
                 this.app.network.socket.emit('toggleTeamLock');
             });
 
-            this.container.querySelectorAll('.ban-btn').forEach(btn => {
-                btn.onclick = () => {
-                    const id = btn.dataset.banId;
-                    this.app.ui.showConfirm('Bu oyuncuyu banlamak istediğinize emin misiniz?', () => {
-                        this.app.network.banPlayer(id, 'Banned by admin');
-                    });
-                };
-            });
-
             this.container.querySelectorAll('.kick-btn').forEach(btn => {
+                // Kick buttons now come first (🦵)
                 if (btn.classList.contains('ban-btn')) return;
                 btn.onclick = () => {
                     const id = btn.dataset.id;
-                    this.app.ui.showConfirm('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', () => {
-                        this.app.network.kickPlayer(id, 'Kicked by admin');
-                    });
+                    this.app.ui.showConfirmWithReason('Bu oyuncuyu odadan atmak istediğinize emin misiniz?', (reason) => {
+                        this.app.network.kickPlayer(id, reason || 'Kicked by admin');
+                    }, { placeholder: 'Sebep (opsiyonel)', confirmText: 'At', danger: true });
+                };
+            });
+
+            this.container.querySelectorAll('.ban-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const id = btn.dataset.banId;
+                    this.app.ui.showConfirmWithReason('Bu oyuncuyu banlamak istediğinize emin misiniz?', (reason) => {
+                        this.app.network.banPlayer(id, reason || 'Banned by admin');
+                    }, { placeholder: 'Ban sebebi (opsiyonel)', confirmText: 'Banla', danger: true });
                 };
             });
             // Drag patterns
