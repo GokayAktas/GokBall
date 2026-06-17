@@ -347,8 +347,11 @@ export class Game {
         this.state = 'goal';
         this.physics.kickOffReset = true;
         // set cooldown until we allow next goal to be counted (score pause length in ticks)
-        const pauseTicks = 60; // 1 second at 60Hz to avoid double counting
-        this._goalCooldownUntil = this.timeElapsed + pauseTicks;
+        // Add a small safety margin to avoid re-processing due to rounding or
+        // tick-edge conditions.
+        const pauseTicks = 60; // 1 second at 60Hz
+        const safetyMargin = 2; // extra ticks
+        this._goalCooldownUntil = this.timeElapsed + pauseTicks + safetyMargin;
         // Broadcast goal
         this.room.broadcast('goalScored', { team: scoredOnTeam === 'red' ? 'blue' : 'red', scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
 
@@ -441,8 +444,8 @@ export class Game {
                     this.physics.setKickOffTeam(goalTeam === 'red' ? 'blue' : 'red');
                     this.physics.kickOffReset = true;
 
-                    // Set cooldown to avoid immediate re-processing
-                    this._goalCooldownUntil = this.timeElapsed + 60; // 1 second @60Hz
+                                // Set cooldown to avoid immediate re-processing
+                                this._goalCooldownUntil = this.timeElapsed + 60 + 2; // 1 second @60Hz + safety
 
                     // Broadcast goal event so non-admin clients see it
                     this.room.broadcast('goalScored', { team: goalTeam, scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
