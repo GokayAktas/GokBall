@@ -339,8 +339,10 @@ export class Game {
         // Prevent duplicate handling: ignore if we've recently handled a goal
         const nowTicks = this.timeElapsed;
         if (nowTicks <= this._goalCooldownUntil) return;
-
-        if (scoredOnTeam === 'red') this.scoreRed++;
+        // `scoredOnTeam` is the team whose goal line the ball crossed (i.e. the
+        // team that conceded). The scoring team is the opposite team.
+        const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';
+        if (scoringTeam === 'red') this.scoreRed++;
         else this.scoreBlue++;
         this.state = 'goal';
         this.physics.kickOffReset = true;
@@ -357,6 +359,21 @@ export class Game {
         this.physics.setKickOffTeam(scoredOnTeam);
         // Ensure kickoff reset so clock doesn't advance
         this.physics.kickOffReset = true;
+
+        // Immediately teleport the ball to center and zero its velocity so
+        // clients see the center reset right away instead of waiting for the
+        // pause to expire.
+        if (this.physics.ballDisc) {
+            this.physics.ballDisc.pos.x = 0;
+            this.physics.ballDisc.pos.y = 0;
+            this.physics.ballDisc.speed.x = 0;
+            this.physics.ballDisc.speed.y = 0;
+            // Restore default ball color
+            this.physics.ballDisc.color = 'FFB82E';
+        }
+
+        // Send immediate gameState so clients reflect the teleported ball
+        this.room.broadcast('gameState', this._getGameState());
     }
 
     _checkGameEnd() {
