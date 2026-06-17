@@ -9,13 +9,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// If running behind a reverse proxy (NGINX, Cloud Run, Heroku), enable trust proxy
+// so Express can correctly read client IPs and TLS state.
+app.set('trust proxy', process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1');
 const httpServer = createServer(app);
+// Configure allowed client origins. Use environment variable CLIENT_ORIGINS as comma-separated list
+const CLIENT_ORIGINS = process.env.CLIENT_ORIGINS
+    ? process.env.CLIENT_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
+const allowAllOrigins = process.env.ALLOW_ALL_ORIGINS === 'true' || process.env.NODE_ENV === 'development';
+
 const io = new SocketServer(httpServer, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
+        origin: allowAllOrigins ? true : CLIENT_ORIGINS,
+        methods: ['GET', 'POST'],
+        credentials: true
     },
-    transports: ['websocket']
+    // Allow polling fallback before upgrading to websocket — improves reliability behind proxies
+    transports: process.env.FORCE_WEBSOCKET === 'true' ? ['websocket'] : ['polling', 'websocket'],
+    // Keepalive tuning: allow slightly longer timeouts for slow mobile networks
+    pingInterval: Number(process.env.SOCKET_PING_INTERVAL) || 25000,
+    pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT) || 60000
 });
 
 // Serve static client files if built
@@ -40,6 +56,12 @@ const playerRooms = new Map(); // socketId -> roomId
 // ============================================
 io.on('connection', (socket) => {
     console.log(`[Server] Player connected: ${socket.id}`);
+
+    // Log remote address in a standardized way (works with trust proxy)
+    try {
+        const remote = socket.handshake.address || (socket.request && socket.request.connection && socket.request.connection.remoteAddress) || 'unknown';
+        console.log(`[Server] Connection from ${remote}`);
+    } catch (e) {}
 
     // --- Room Listing ---
     socket.on('listRooms', () => {
