@@ -35,7 +35,7 @@ export class SettingsModal {
                 { id: 'right', label: 'Sağ', icon: '➡️' },
                 { id: 'kick', label: 'Vuruş', icon: '🦵' }
             ].map(item => `
-                                <div class="control-item" style="padding: 6px 0;">
+                                <div class="control-item">
                                     <div class="control-label control-label-inline">${item.label}</div>
                                     <button class="control-key key-bind-btn" data-action="${item.id}">
                                         ${(bindings[item.id] || []).map(k => k.replace('Key', '').replace('Arrow', '')).join(' / ')}
@@ -51,7 +51,7 @@ export class SettingsModal {
                             <span>🔊</span> Ses
                         </div>
                         <div class="slider-group">
-                            <label style="display: flex; justify-content: space-between; font-size: 14px;">
+                            <label class="slider-label">
                                 <span>Ana Ses</span>
                                 <span><span id="modVolumeValue">100</span>%</span>
                             </label>
@@ -65,7 +65,7 @@ export class SettingsModal {
                             <span>🔍</span> Görüntü
                         </div>
                         <div class="slider-group">
-                            <label style="display: flex; justify-content: space-between; font-size: 14px;">
+                            <label class="slider-label">
                                 <span>Zoom</span>
                                 <span><span id="modZoomValue">1.5</span>x</span>
                             </label>

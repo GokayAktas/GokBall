@@ -1239,6 +1239,16 @@ select.input option {
   font-size: 12px;
   min-width: 70px;
 }
+/* control item spacing inside settings modal */
+.settings-modal .control-item {
+  padding: 6px 0;
+}
+/* label for sliders in settings modal */
+.settings-modal .slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
 
 .room-mgmt-grid {
   display: grid;
