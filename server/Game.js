@@ -319,6 +319,22 @@ export class Game {
             }
         }
 
+        // Notify clients to release held kick if server-side physics auto-triggered a kick
+        // Iterate discs and if disc._autoKickReleased is set, inform the owning player
+        try {
+            for (const disc of this.physics.discs) {
+                if (disc._autoKickReleased && disc.ownerId) {
+                    const player = this.room.players.get(disc.ownerId);
+                    if (player && player.socket) {
+                        player.socket.emit('kickReleased');
+                    }
+                    disc._autoKickReleased = false;
+                }
+            }
+        } catch (e) {
+            // swallow errors here to avoid crashing server loop
+        }
+
         // Check time limit
         if (this.timeLimit > 0 && this.timeElapsed / this.tickRate >= this.timeLimit) {
             if (this.scoreRed !== this.scoreBlue) {

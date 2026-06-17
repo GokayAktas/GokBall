@@ -240,6 +240,9 @@ export class GamePhysics {
             // Change ball color to White on kick
             if (this.ballDisc) this.ballDisc.color = 'FFFFFF';
 
+            // Mark player disc so server can notify client to release held kick
+            playerDisc._autoKickReleased = true;
+
             const nx = dx / dist;
             const ny = dy / dist;
             this.ballDisc.speed.x += nx * playerDisc.kickStrength;

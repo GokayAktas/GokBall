@@ -17,6 +17,7 @@ export class InputManager {
         this._onKeyUp = this._onKeyUp.bind(this);
 
         this.enabled = false;
+        this._suppressKick = false; // when true, ignore kick input until keyup
     }
 
     enable() {
@@ -47,6 +48,10 @@ export class InputManager {
 
     _onKeyUp(e) {
         this.keys[e.code] = false;
+        // If the user released a kick key, clear suppression so they can press again
+        if (this._suppressKick && (this.bindings.kick || []).includes(e.code)) {
+            this._suppressKick = false;
+        }
     }
 
     /**
@@ -58,8 +63,16 @@ export class InputManager {
             down: this._isAction('down'),
             left: this._isAction('left'),
             right: this._isAction('right'),
-            kick: this._isAction('kick')
+            kick: this._isAction('kick') && !this._suppressKick
         };
+    }
+
+    /**
+     * Suppress kick input until the player releases the kick key.
+     * Used when server auto-fires a held kick so client must re-press to kick again.
+     */
+    suppressKickUntilKeyUp() {
+        this._suppressKick = true;
     }
 
     _isAction(action) {

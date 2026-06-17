@@ -349,6 +349,13 @@ class GokBallApp {
 
                 // If server sent allTeamColors, prefer that
                 const all = data.allTeamColors || (data.team ? { [data.team]: data.teamColors } : null);
+
+        // Server instructs client to release a held kick (after auto-trigger)
+        this.network.on('kickReleased', () => {
+            try {
+                this.input.suppressKickUntilKeyUp();
+            } catch (e) {}
+        });
                 if (!all) return;
 
                 // Apply CSS variables for red and blue if present
