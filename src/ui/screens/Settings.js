@@ -81,6 +81,14 @@ export class Settings {
                     <span style="font-size:24px;">🎨</span> Takım Renkleri (Admin)
                   </div>
                   <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                      <label>Önayarlar</label>
+                      <div style="display:flex; gap:8px;">
+                        <button class="btn" id="presetChampions">Champions</button>
+                        <button class="btn" id="presetClassic">Classic</button>
+                        <button class="btn" id="presetNeon">Neon</button>
+                      </div>
+                    </div>
                     <div style="display:flex; flex-direction:column; gap:6px;">
                       <label>Red primary</label>
                       <input type="color" id="settingsRedPrimary" value="#D32F2F" />
@@ -248,6 +256,33 @@ export class Settings {
       });
       bluePicker?.addEventListener('input', () => {
         const p = collect(); applyPreview({ red: p.red, blue: p.blue }, false);
+      });
+
+      // Preset buttons
+      document.getElementById('presetChampions')?.addEventListener('click', () => {
+        document.getElementById('settingsRedPrimary').value = '#D32F2F';
+        document.getElementById('settingsRedExtra').value = 'FF6B6B,FFCDD2';
+        document.getElementById('settingsRedAngle').value = '0';
+        document.getElementById('settingsBluePrimary').value = '#1565C0';
+        document.getElementById('settingsBlueExtra').value = '4FA3FF,82B1FF';
+        document.getElementById('settingsBlueAngle').value = '0';
+        applyPreview(collect(), false);
+      });
+
+      document.getElementById('presetClassic')?.addEventListener('click', () => {
+        document.getElementById('settingsRedPrimary').value = '#c70000';
+        document.getElementById('settingsRedExtra').value = 'FF9999';
+        document.getElementById('settingsBluePrimary').value = '#00008c';
+        document.getElementById('settingsBlueExtra').value = '6666FF';
+        applyPreview(collect(), false);
+      });
+
+      document.getElementById('presetNeon')?.addEventListener('click', () => {
+        document.getElementById('settingsRedPrimary').value = '#FF007F';
+        document.getElementById('settingsRedExtra').value = 'FF66A3,FFCCE6';
+        document.getElementById('settingsBluePrimary').value = '#00E5FF';
+        document.getElementById('settingsBlueExtra').value = '66FBFF,CCFBFF';
+        applyPreview(collect(), false);
       });
 
       previewApply?.addEventListener('click', () => {

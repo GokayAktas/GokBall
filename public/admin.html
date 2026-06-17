@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GokBall Admin - Team Colors</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; background:#0b1220; color:#eef6ff; padding:24px }
+    .card{background:#0f2338;padding:16px;border-radius:8px;max-width:800px}
+    label{display:block;margin-top:8px;font-size:12px;color:#cfe6ff}
+    input[type=text], input[type=number] { padding:8px;width:100%;border-radius:6px;border:1px solid #213b53;background:#071727;color:#fff }
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    button{padding:8px 12px;border-radius:6px;border:none;background:#1572c0;color:#fff;cursor:pointer}
+    .presets button{background:#7b61ff}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>GokBall Admin - Team Colors</h2>
+    <p>Sunucuya bağlanmak için <strong>X-Admin-Secret</strong> başlığını kullanın.</p>
+
+    <label>Room ID</label>
+    <input type="text" id="roomId" placeholder="room_1" />
+
+    <label>Admin Secret</label>
+    <input type="text" id="adminSecret" placeholder="secret" />
+
+    <div class="row">
+      <div class="col">
+        <label>Team</label>
+        <select id="teamSelect"><option value="red">Red</option><option value="blue">Blue</option></select>
+
+        <label>Primary Color</label>
+        <input type="color" id="primaryColor" value="#D32F2F" />
+
+        <label>Extras (comma)</label>
+        <input type="text" id="extras" placeholder="FF6B6B,FFCDD2" />
+
+        <label>Angle</label>
+        <input type="number" id="angle" value="0" />
+
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button id="btnApply">Apply (HTTP)</button>
+          <button id="btnSocket">Apply (Socket)</button>
+        </div>
+      </div>
+      <div class="col">
+        <label>Preview</label>
+        <div id="preview" style="display:flex;gap:8px;align-items:center">
+          <div id="pv1" style="width:48px;height:48px;border-radius:50%;background:#D32F2F"></div>
+          <div id="pv2" style="width:48px;height:48px;border-radius:50%;background:#1565C0"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Presets</label>
+          <div class="presets" style="display:flex;gap:8px;margin-top:6px">
+            <button id="pChamp">Champions</button>
+            <button id="pClassic">Classic</button>
+            <button id="pNeon">Neon</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="result" style="margin-top:12px;color:#a6d8ff"></div>
+  </div>
+
+  <script>
+    const roomIdEl = document.getElementById('roomId');
+    const adminSecretEl = document.getElementById('adminSecret');
+    const teamSel = document.getElementById('teamSelect');
+    const primary = document.getElementById('primaryColor');
+    const extras = document.getElementById('extras');
+    const angle = document.getElementById('angle');
+    const pv1 = document.getElementById('pv1');
+    const pv2 = document.getElementById('pv2');
+    const resultEl = document.getElementById('result');
+
+    function setPreview() {
+      pv1.style.background = primary.value;
+      pv2.style.background = (teamSel.value === 'red') ? '#1565C0' : primary.value;
+    }
+    primary.addEventListener('input', setPreview);
+    teamSel.addEventListener('change', setPreview);
+
+    document.getElementById('pChamp').addEventListener('click', () => {
+      primary.value = '#D32F2F'; extras.value = 'FF6B6B,FFCDD2'; angle.value = 0; setPreview();
+    });
+    document.getElementById('pClassic').addEventListener('click', () => {
+      primary.value = '#c70000'; extras.value = 'FF9999'; angle.value = 0; setPreview();
+    });
+    document.getElementById('pNeon').addEventListener('click', () => {
+      primary.value = '#FF007F'; extras.value = 'FF66A3,FFCCE6'; angle.value = 0; setPreview();
+    });
+
+    document.getElementById('btnApply').addEventListener('click', async () => {
+      const rid = roomIdEl.value.trim();
+      if (!rid) return alert('Room ID girin');
+      const secret = adminSecretEl.value.trim();
+      if (!secret) return alert('Admin secret girin');
+      const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), textColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
+      try {
+        const res = await fetch('/admin/rooms/' + encodeURIComponent(rid) + '/teamColors', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret }, body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        resultEl.textContent = JSON.stringify(data);
+      } catch (e) { resultEl.textContent = 'Error: ' + e.message }
+    });
+
+    // Socket apply (uses socket.io client connect to same origin)
+    document.getElementById('btnSocket').addEventListener('click', async () => {
+      const rid = roomIdEl.value.trim(); if (!rid) return alert('Room ID girin');
+      // This will only emit to the server if you are actually connected as that socket (admin client) — useful for testing from admin client page if socket is authenticated
+      try {
+        const s = io(); // requires socket.io-client served to page; if not available, fallback to HTTP
+        const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), textColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
+        s.emit('setTeamColors', payload);
+        resultEl.textContent = 'Emitted via socket (check server logs)';
+      } catch (e) {
+        resultEl.textContent = 'Socket emit failed: ' + e.message;
+      }
+    });
+  </script>
+
+  <script src="/socket.io/socket.io.js"></script>
+</body>
+</html>
