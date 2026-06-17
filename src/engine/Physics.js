@@ -753,10 +753,10 @@ export class Physics {
                     disc.speed.y = sd.sy;
                 }
             } else {
-                // For others, we snap. To make it smoother, we could interpolate, 
-                // but snapping is standard for low-latency feel in Haxball logic.
-                disc.pos.x = sd.x;
-                disc.pos.y = sd.y;
+                // For other players, apply a small smoothing step to reduce jitter
+                // while still following server authority closely.
+                disc.pos.x = disc.pos.x * 0.8 + sd.x * 0.2;
+                disc.pos.y = disc.pos.y * 0.8 + sd.y * 0.2;
                 disc.speed.x = sd.sx;
                 disc.speed.y = sd.sy;
             }

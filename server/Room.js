@@ -186,6 +186,11 @@ export class Room {
             blue: { angle: 0, textColor: 'FFFFFF', colors: ['1565C0'] }
         };
 
+        // Local-mode authority broadcast control: throttle admin state broadcasts
+        // to avoid flooding the room when Admin is sending high-frequency updates.
+        this._lastAuthorityBroadcast = 0;
+        this._minAuthorityBroadcastMs = 50; // ~20Hz
+
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);

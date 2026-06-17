@@ -459,7 +459,20 @@ export class Game {
         }
 
         // Broadcast to others immediately
-        this.room.broadcast('gameState', this._getGameState());
+        // Throttle authority-driven broadcasts in local rooms to a reasonable rate
+        // to avoid saturating clients when admin sends high-frequency physics updates.
+        try {
+            const now = Date.now();
+            const minMs = (this.room._minAuthorityBroadcastMs !== undefined) ? this.room._minAuthorityBroadcastMs : 50;
+            const last = this.room._lastAuthorityBroadcast || 0;
+            if (now - last >= minMs) {
+                this.room._lastAuthorityBroadcast = now;
+                this.room.broadcast('gameState', this._getGameState());
+            }
+        } catch (e) {
+            // Fallback to unconditional broadcast on error
+            this.room.broadcast('gameState', this._getGameState());
+        }
     }
 
     _getGameState() {
