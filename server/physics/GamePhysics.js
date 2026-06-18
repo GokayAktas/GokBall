@@ -102,7 +102,6 @@ export class GamePhysics {
 
         this.ballDisc = this.discs.length > 0 ? this.discs[0] : null;
 
-        // Kickoff state
         this.kickOffTeam = null;
         this.kickOffReset = false;
     }
@@ -256,7 +255,6 @@ export class GamePhysics {
         }
 
         this.ballDisc.color = 'FFFFFF';
-
         playerDisc._autoKickReleased = true;
 
         const nx = dx / dist;
@@ -274,44 +272,14 @@ export class GamePhysics {
         for (const disc of this.discs) {
             if (disc.isPlayer && disc.team) {
                 const isRed = disc.team === 'red';
-                const isDefending = disc.team !== this.kickOffTeam;
+                const isDefending = disc.team === this.kickOffTeam;
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    const absY = Math.abs(dy);
-                    if (absY < kickOffRadius) {
-                        if (dist < defendMinDist && dist > 0) {
-                            const nx = dx / dist;
-                            const ny = dy / dist;
-                            disc.pos.x = nx * defendMinDist;
-                            disc.pos.y = ny * defendMinDist;
-                            const dot = disc.speed.x * nx + disc.speed.y * ny;
-                            if (dot < 0) {
-                                disc.speed.x -= dot * nx;
-                                disc.speed.y -= dot * ny;
-                            }
-                            if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
-                                disc.speed.x = 0;
-                                disc.speed.y = 0;
-                            }
-                        }
-                    } else {
-                        if (isRed) {
-                            if (disc.pos.x > 0) {
-                                disc.pos.x = 0;
-                                if (disc.speed.x > 0) disc.speed.x = 0;
-                            }
-                        } else {
-                            if (disc.pos.x < 0) {
-                                disc.pos.x = 0;
-                                if (disc.speed.x < 0) disc.speed.x = 0;
-                            }
-                        }
-                    }
-                } else {
+                    // Kickoff team (conceded): stay within their OWN half
                     if (isRed) {
                         if (disc.pos.x > 0) {
                             disc.pos.x = 0;
@@ -323,6 +291,8 @@ export class GamePhysics {
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
+                } else {
+                    // Scoring team: FREE to move anywhere in their own half (no constraints)
                 }
             }
         }

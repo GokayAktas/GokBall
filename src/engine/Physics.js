@@ -359,9 +359,20 @@ export class Physics {
                         if (dist < a.radius + b.radius) {
                             this.kickOffReset = false;
                         }
+                } else {
+                    // Kickoff team: stay within their OWN half (can't cross center line)
+                    if (isRed) {
+                        if (disc.pos.x > 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
+                        }
                     } else {
-                        return; // Non-kickoff team ignores collision completely (ghost ball)
+                        if (disc.pos.x < 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
+                        }
                     }
+                }
                 }
             }
         }
@@ -582,70 +593,14 @@ export class Physics {
         for (const disc of this.discs) {
             if (disc.isPlayer && disc.team) {
                 const isRed = disc.team === 'red';
-                const isDefending = disc.team !== this.kickOffTeam;
+                const isDefending = disc.team === this.kickOffTeam;
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // Defending team: half-court shaped boundary (not straight line)
-                    // At center circle level (y within ±kickOffRadius): keep outside the circle
-                    // Above/below circle level: keep in own half
-                    const absY = Math.abs(dy);
-                    if (absY < kickOffRadius) {
-                        // Inside the center circle vertical range: keep outside the center circle
-                        if (dist < defendMinDist && dist > 0) {
-                            const nx = dx / dist;
-                            const ny = dy / dist;
-                            disc.pos.x = nx * defendMinDist;
-                            disc.pos.y = ny * defendMinDist;
-
-                            const dot = disc.speed.x * nx + disc.speed.y * ny;
-                            if (dot < 0) {
-                                disc.speed.x -= dot * nx;
-                                disc.speed.y -= dot * ny;
-                            }
-                            if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
-                                disc.speed.x = 0;
-                                disc.speed.y = 0;
-                            }
-                        }
-                    } else {
-                        // Above/below the center circle: restrict to own half
-                        const defendMaxX = isRed ? -(disc.radius) : disc.radius;
-                        if (isRed) {
-                            if (disc.pos.x > defendMaxX) {
-                                disc.pos.x = defendMaxX;
-                                if (disc.speed.x > 0) disc.speed.x = 0;
-                            }
-                        } else {
-                            if (disc.pos.x < defendMaxX) {
-                                disc.pos.x = defendMaxX;
-                                if (disc.speed.x < 0) disc.speed.x = 0;
-                            }
-                        }
-                    }
-
-                    // Also keep outside the kickoff circle if near center
-                    if (dist < defendMinDist && dist > 0) {
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        disc.pos.x = nx * defendMinDist;
-                        disc.pos.y = ny * defendMinDist;
-
-                        const dot = disc.speed.x * nx + disc.speed.y * ny;
-                        if (dot < 0) {
-                            disc.speed.x -= dot * nx;
-                            disc.speed.y -= dot * ny;
-                        }
-                        if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
-                            disc.speed.x = 0;
-                            disc.speed.y = 0;
-                        }
-                    }
-                } else {
-                    // Kickoff team (=scored on): stay within their OWN half
+                    // Kickoff team (conceded): stay within their OWN half
                     if (isRed) {
                         if (disc.pos.x > 0) {
                             disc.pos.x = 0;
@@ -657,6 +612,8 @@ export class Physics {
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
+                } else {
+                    // Scoring team: FREE to move anywhere in their own half (no constraints)
                 }
             }
         }
