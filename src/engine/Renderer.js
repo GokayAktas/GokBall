@@ -305,19 +305,6 @@ export class Renderer {
             ctx.lineWidth = lw;
             ctx.stroke();
 
-            // Kick charge outline (visible to all players)
-            if (disc.isPlayer && disc.kicking) {
-                const ballRadius = physics.ballDisc?.radius || 10;
-                const kickRange = disc.radius + ballRadius + 6;
-                ctx.beginPath();
-                ctx.arc(disc.pos.x, disc.pos.y, kickRange, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([5, 4]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-
             // Avatar (Centered bold text)
             if (disc.avatar || disc.isPlayer) {
                 ctx.fillStyle = disc.avatarColor ? '#' + disc.avatarColor : '#FFFFFF';

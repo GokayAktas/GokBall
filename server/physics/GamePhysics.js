@@ -280,57 +280,81 @@ export class GamePhysics {
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // 1. Defending team strictly kept behind a half-plane boundary
-                    // positioned just outside the center circle to avoid clipping
-                    // through the kickoff barrier. We use kickOffRadius + disc.radius
-                    // as conservative boundary.
-                    const defendMaxX = isRed ? -defendMinDist : defendMinDist;
-                    if (isRed) {
-                        if (disc.pos.x > defendMaxX) {
-                            disc.pos.x = defendMaxX;
-                            if (disc.speed.x > 0) disc.speed.x = 0;
+                    // Defending team: half-court shaped boundary (not straight line)
+                    // At center circle level (y within ±kickOffRadius): keep outside the circle
+                    // Above/below circle level: keep in own half
+                    const absY = Math.abs(dy);
+                    if (absY < kickOffRadius) {
+                        // Inside the center circle vertical range: keep outside the center circle
+                        if (dist < defendMinDist && dist > 0) {
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+                            disc.pos.x = nx * defendMinDist;
+                            disc.pos.y = ny * defendMinDist;
+
+                            const dot = disc.speed.x * nx + disc.speed.y * ny;
+                            if (dot < 0) {
+                                disc.speed.x -= dot * nx;
+                                disc.speed.y -= dot * ny;
+                            }
+                            if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
+                                disc.speed.x = 0;
+                                disc.speed.y = 0;
+                            }
                         }
                     } else {
-                        if (disc.pos.x < defendMaxX) {
-                            disc.pos.x = defendMaxX;
-                            if (disc.speed.x < 0) disc.speed.x = 0;
+                        // Above/below the center circle: restrict to own half
+                        const defendMaxX = isRed ? -(disc.radius) : disc.radius;
+                        if (isRed) {
+                            if (disc.pos.x > defendMaxX) {
+                                disc.pos.x = defendMaxX;
+                                if (disc.speed.x > 0) disc.speed.x = 0;
+                            }
+                        } else {
+                            if (disc.pos.x < defendMaxX) {
+                                disc.pos.x = defendMaxX;
+                                if (disc.speed.x < 0) disc.speed.x = 0;
+                            }
                         }
                     }
 
-                    // 2. Defending team blocked FROM center circle (radial wall)
+                    // Also keep outside the kickoff circle if near center
                     if (dist < defendMinDist && dist > 0) {
                         const nx = dx / dist;
                         const ny = dy / dist;
                         disc.pos.x = nx * defendMinDist;
                         disc.pos.y = ny * defendMinDist;
 
-                        // Remove any inward velocity component so they can't re-enter
-                        // the circle on the next integration step.
                         const dot = disc.speed.x * nx + disc.speed.y * ny;
                         if (dot < 0) {
                             disc.speed.x -= dot * nx;
                             disc.speed.y -= dot * ny;
                         }
-                        // Also clamp small residual speeds to avoid tunneling
                         if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
                             disc.speed.x = 0;
                             disc.speed.y = 0;
                         }
                     }
                 } else {
-                    // 3. Kicking team: Allow them to occupy the kickoff circle area
-                    // and a small buffer up to `kickOffRadius` into center, but
-                    // prevent them from crossing far into opponent half.
-                    const allowMaxX = isRed ? kickOffRadius : -kickOffRadius;
-                    if (isRed) {
-                        if (disc.pos.x > allowMaxX) {
-                            disc.pos.x = allowMaxX;
-                            if (disc.speed.x > 0) disc.speed.x = 0;
-                        }
-                    } else {
-                        if (disc.pos.x < allowMaxX) {
-                            disc.pos.x = allowMaxX;
-                            if (disc.speed.x < 0) disc.speed.x = 0;
+                    // Kickoff team: must stay within the center circle area
+                    // At center circle level: stay inside the circle
+                    // Above/below circle: stay within own half
+                    const absY = Math.abs(dy);
+                    if (absY < kickOffRadius) {
+                        // Inside the center circle vertical range: stay inside the circle
+                        if (dist > kickOffRadius - disc.radius && dist > 0) {
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+                            const targetDist = kickOffRadius - disc.radius;
+                            if (targetDist > 0) {
+                                disc.pos.x = nx * targetDist;
+                                disc.pos.y = ny * targetDist;
+                            }
+                            const dot = disc.speed.x * nx + disc.speed.y * ny;
+                            if (dot > 0) {
+                                disc.speed.x -= dot * nx;
+                                disc.speed.y -= dot * ny;
+                            }
                         }
                     }
                 }

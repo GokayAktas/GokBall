@@ -97,19 +97,8 @@ export class CreateRoom {
           </div>
         </div>
 
-        <div class="input-group">
-          <label for="roomType">Sunucu Modu (Bağlantı Türü)</label>
-          <select id="roomType" class="input">
-            <option value="cloud" selected>☁️ Bulut Sunucu (Standart Çevrimiçi)</option>
-            <option value="local">🖥️ Yerel Sunucu (Host = Odayı Kuran Oyuncu)</option>
-          </select>
-          <span id="roomTypeDesc" style="color: var(--text-muted); font-size: var(--font-xs); margin-top: var(--space-xs); display: block; line-height: 1.4;">
-            Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.
-          </span>
-          <span id="roomTypeWarning" class="hidden" style="color: var(--warning); font-size: var(--font-xs); margin-top: var(--space-xs); display: block; line-height: 1.4;">
-            ⚠️ DİKKAT: Yerel sunucu modunda odayı kuran kişi odadan çıkarsa oda otomatik olarak kapanır!
-          </span>
-        </div>
+        <!-- Room type always cloud now -->
+        <input type="hidden" id="roomType" value="cloud" />
  
         <button class="btn btn-primary btn-lg btn-block" id="btnCreate">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -125,20 +114,6 @@ export class CreateRoom {
 
     document.getElementById('btnBack')?.addEventListener('click', () => {
       this.app.ui.showScreen('mainMenu');
-    });
-
-    // Room Type selection dynamic description
-    const roomTypeSelect = document.getElementById('roomType');
-    const roomTypeDesc = document.getElementById('roomTypeDesc');
-    const roomTypeWarning = document.getElementById('roomTypeWarning');
-    roomTypeSelect?.addEventListener('change', () => {
-      if (roomTypeSelect.value === 'local') {
-        roomTypeDesc.textContent = 'Yerel Sunucu: Odanın sunucusu, odayı kuran oyuncunun bilgisayarıdır. Aynı ağdaki oyuncular için sıfıra yakın gecikme sağlar. Kurucu odadan çıkarsa oda kapanır.';
-        roomTypeWarning?.classList.remove('hidden');
-      } else {
-        roomTypeDesc.textContent = 'Bulut Sunucu: Oyun internet sunucularında barındırılır. Dünyanın her yerinden oyuncuların katılmasına olanak tanır.';
-        roomTypeWarning?.classList.add('hidden');
-      }
     });
 
     // Slider value display
@@ -228,7 +203,7 @@ export class CreateRoom {
     const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
 
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
-    const roomType = document.getElementById('roomType')?.value || 'cloud';
+    const roomType = 'cloud'; // Only cloud mode
 
     const options = {
       name,

@@ -124,27 +124,7 @@ class GokBallApp {
         this.network.on('pingUpdate', (data) => {
             const pingEl = document.getElementById('pingValue');
             if (!pingEl) return;
-
-            // If we're in a local room and I'm the creator/admin, broadcast my ping as hostPing
-            if (this.currentRoomData?.roomType === 'local' && this.network.socket?.id === this.currentRoomData?.creatorId) {
-                pingEl.textContent = data.ping;
-                this.network.socket?.emit('hostPing', { ping: data.ping });
-                return;
-            }
-
-            // If we're in local room but not the host, wait for hostPing from server
-            if (this.currentRoomData?.roomType === 'local') return;
-
-            // Default behavior: show own measured ping
             pingEl.textContent = data.ping;
-        });
-
-        // Host ping listener: server will broadcast host's ping for local rooms
-        this.network.on('hostPing', (data) => {
-            if (this.currentRoomData?.roomType === 'local') {
-                const pingEl = document.getElementById('pingValue');
-                if (pingEl) pingEl.textContent = data.ping;
-            }
         });
 
         // Room Update -> Update InGameMenu if visible
@@ -168,22 +148,20 @@ class GokBallApp {
         // Room created -> go to lobby
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
-            this.currentRoomData.roomType = data.roomType || 'cloud';
-            this.currentRoomData.creatorId = data.creatorId;
+            this.currentRoomData.roomType = 'cloud';
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
-            this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
+            this.physics.isLocalAuthorityMode = false;
             this.ui.showScreen('roomLobby', data);
         });
 
         // Room joined -> go to lobby
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
-            this.currentRoomData.roomType = data.roomType || 'cloud';
-            this.currentRoomData.creatorId = data.creatorId;
+            this.currentRoomData.roomType = 'cloud';
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
-            this.physics.isLocalAuthorityMode = (data.roomType === 'local' && this.network.socket?.id === data.adminId);
+            this.physics.isLocalAuthorityMode = false;
 
             // If game is active, jump in as spectator/player
             if (data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal')) {
@@ -238,7 +216,7 @@ class GokBallApp {
             if (this.currentRoomData && data.players) {
                 this.currentRoomData.players = data.players;
                 this.currentRoomData.adminId = data.playerId;
-                this.physics.isLocalAuthorityMode = (this.currentRoomData.roomType === 'local' && this.network.socket?.id === data.playerId);
+                this.physics.isLocalAuthorityMode = false;
                 
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             }
@@ -323,7 +301,7 @@ class GokBallApp {
             this.ui.showScreen('mainMenu');
         });
 
-        // Chat messages during game
+        // Chat messages (in-game and lobby)
         this.network.on('chatMessage', (data) => {
             if (this.gameRunning) {
                 this.chat.addMessage(data);
@@ -471,9 +449,6 @@ class GokBallApp {
     _gameLoop() {
         if (!this.gameRunning) return;
 
-        const isLocalMode = this.currentRoomData?.roomType === 'local';
-        const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
-
         // Get input
         const inputState = this.input.getInput();
         if (this.network.socket?.id) {
@@ -493,41 +468,20 @@ class GokBallApp {
 
         const stepSize = 1000 / 60; // Standard 60Hz physics
         while (this.accumulator >= stepSize) {
-            const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-            if (myDisc) myDisc.input = inputState; // CRUCIAL: Must update local input BEFORE prediction!
-
-            if (isLocalMode && isAdmin) {
-                if (this._serverGameState === 'playing') {
-                    this.physics.step();
-                }
-            } else {
-                // RUN FULL PREDICTION AT FIXED 60HZ
-                if (this._serverGameState === 'playing') {
-                    // Prevent remote players from endlessly moving locally based on last key press
-                    for (const disc of this.physics.discs) {
-                        if (disc.isPlayer && disc !== myDisc) {
-                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
-                        }
+            // RUN FULL PREDICTION AT FIXED 60HZ
+            if (this._serverGameState === 'playing') {
+                // Prevent remote players from endlessly moving locally based on last key press
+                for (const disc of this.physics.discs) {
+                    if (disc.isPlayer) {
+                        disc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
-                    this.physics.step();
                 }
-            }
-
-            if (myDisc?._autoKickReleased) {
-                this.input.suppressKickUntilKeyUp();
-                myDisc._autoKickReleased = false;
+                const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                if (myDisc) myDisc.input = inputState; // CRUCIAL: Must update local input BEFORE prediction!
+                this.physics.step();
             }
 
             this.accumulator -= stepSize;
-        }
-
-        if (isLocalMode && isAdmin && this._serverGameState === 'playing') {
-            this._authoritySendCounter = (this._authoritySendCounter || 0) + 1;
-            if (this._authoritySendCounter % 2 === 0) {
-                this.network.socket?.emit('authorityState', {
-                    physics: this.physics.getState()
-                });
-            }
         }
 
         // Update camera
@@ -555,24 +509,6 @@ class GokBallApp {
 
     _handleGameState(state) {
         this._serverGameState = state.state; // Track game state locally
-
-        const isLocalMode = this.currentRoomData?.roomType === 'local';
-        const isAdmin = this.network.socket?.id === this.currentRoomData?.adminId;
-
-        // If I am Admin in Local mode, I am the physics source of truth.
-        if (isLocalMode && isAdmin) {
-            if (state.scoreRed !== undefined) {
-                this.scoreboard.update(state.scoreRed, state.scoreBlue, state.time);
-            }
-            if (state.state !== 'playing') {
-                // If game is paused (goal/countdown), hard sync to server positions (respawns, kickoffs)
-                this.physics.applyState(state.physics);
-            } else {
-                // If playing, only sync metadata (spawns, typing, other players' inputs) so I don't jitter my own physics
-                this.physics.applyMetadata(state.physics);
-            }
-            return;
-        }
 
         // Detect kicks for sound effects
         if (state.physics && state.physics.discs) {

@@ -21,7 +21,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
         bg: {
             type: "grass", width: fieldW, height: fieldH,
             kickOffRadius: 75, cornerRadius: 0,
-            color: "718C5A", stripeColor: "6B8954", bgColor: "59854C",
+            color: "59854C", stripeColor: "6B8954", bgColor: "718C5A",
             lineColor: "C7E6BD", showCenterLine: true, showKickOffCircle: true
         },
         vertexes: [
@@ -233,6 +233,14 @@ export class Room {
             players: this.getPlayerList()
         }, player.id);
 
+        // Broadcast join message to chat for in-game display
+        this.broadcast('chatMessage', {
+            playerName: '🏟 SİSTEM',
+            message: `✅ ${name} odaya katıldı!`,
+            team: 'spectator',
+            system: true
+        });
+
         // Send a private command hint only to the joining player.
         // NOTE: Return a private join hint so the client UI can display it
         // at the right moment (after lobby UI has initialized).
@@ -304,6 +312,14 @@ export class Room {
                 players: this.getPlayerList()
             });
         }
+
+        // Broadcast leave message to chat for in-game display
+        this.broadcast('chatMessage', {
+            playerName: '🏟 SİSTEM',
+            message: `❌ ${player.name} odadan ayrıldı!`,
+            team: 'spectator',
+            system: true
+        });
 
         this.broadcast('playerLeft', {
             playerId: socketId,

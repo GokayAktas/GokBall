@@ -202,15 +202,6 @@ export class Game {
     _startLoop() {
         this._stopLoop();
 
-        // In `local` roomType, the Admin/client is authoritative and will
-        // send `authorityState` packets. In that mode we avoid running the
-        // server-side physics tick to prevent conflicting updates.
-        if (this.room && this.room.roomType === 'local') {
-            // Still ensure kickoff team default is red for the initial state
-            this.physics.setKickOffTeam('red'); // Red gets the first kickoff
-            return;
-        }
-
         this.physics.setKickOffTeam('red'); // Red gets the first kickoff
         const interval = 1000 / this.tickRate;
         this.tickInterval = setInterval(() => this._tick(), interval);
@@ -282,16 +273,11 @@ export class Game {
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
         const stepSize = 1000 / this.tickRate; // Exact 60Hz step
 
-        const isLocalMode = this.room.roomType === 'local';
         let goalTeam = null;
 
         while (this.accumulator >= stepSize) {
-            if (!isLocalMode) {
-                const result = this.physics.step();
-                if (result.goalTeam) goalTeam = result.goalTeam;
-            } else {
-                // Local mode handles physics via auth packets
-            }
+            const result = this.physics.step();
+            if (result.goalTeam) goalTeam = result.goalTeam;
 
             // Increment time logic safely within loop
             // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
@@ -350,12 +336,10 @@ export class Game {
             // Overtime - continue until a goal
         }
 
-        // Broadcast state (only in cloud mode — local mode is handled by applyAuthorityState)
-        if (!isLocalMode) {
-            this._broadcastCounter = (this._broadcastCounter || 0) + 1;
-            if (this._broadcastCounter % 2 === 0) {
-                this.room.broadcast('gameState', this._getGameState());
-            }
+        // Broadcast state
+        this._broadcastCounter = (this._broadcastCounter || 0) + 1;
+        if (this._broadcastCounter % 2 === 0) {
+            this.room.broadcast('gameState', this._getGameState());
         }
     }
 
@@ -418,95 +402,7 @@ export class Game {
      * Apply state from an authoritative client (Admin in Local mode)
      */
     applyAuthorityState(state) {
-        if (!state) return;
-
-        // Sync physics discs
-        if (state.physics) {
-            this.physics.applyState(state.physics);
-        }
-
-        // Sync score and time
-        if (state.scoreRed !== undefined) this.scoreRed = state.scoreRed;
-        if (state.scoreBlue !== undefined) this.scoreBlue = state.scoreBlue;
-        // Only accept remote time updates when kickoff has already happened.
-        // In local (authority) mode the admin may be running a countdown or kickoff reset;
-        // prevent the match clock from advancing before the kickoff touch.
-        if (state.time !== undefined) {
-            const kickReset = state.physics ? !!state.physics.kickOffReset : false;
-            if (!kickReset) {
-                this.timeElapsed = state.time * (this.tickRate || 60);
-            }
-        }
-
-        // Sync kickoff flags from authoritative client, but avoid accepting kickoff-team changes
-        // immediately after a local restart (to prevent flip-flopping ownership)
-        if (state.physics) {
-            if (state.physics.kickOffTeam !== undefined) {
-                if (Date.now() > this._forceKickOffIgnoreUntil) {
-                    this.physics.kickOffTeam = state.physics.kickOffTeam;
-                }
-            }
-            if (state.physics.kickOffReset !== undefined) this.physics.kickOffReset = !!state.physics.kickOffReset;
-        }
-
-        // In local mode, detect goals from the authoritative physics snapshot
-        if (this.room.roomType === 'local') {
-            const g = this.physics._checkGoals && this.physics._checkGoals();
-            const goalTeam = g && g.goalTeam ? g.goalTeam : null;
-            // Only handle a goal when it transitions from no-goal to a specific goalTeam
-            if (goalTeam && this._lastGoalTeam !== goalTeam) {
-                this._lastGoalTeam = goalTeam;
-
-                // If the authoritative state already contains updated scores, accept them
-                // and avoid incrementing again on the server to prevent double-counting.
-                if (state.scoreRed !== undefined && state.scoreBlue !== undefined) {
-                    // Apply authoritative scores
-                    this.scoreRed = state.scoreRed;
-                    this.scoreBlue = state.scoreBlue;
-
-                    // Enter goal state on server (pause and kickoff reset) but DO NOT increment
-                    this.state = 'goal';
-                    this.goalPauseTicks = 2 * this.tickRate;
-                    this.physics.setKickOffTeam(goalTeam === 'red' ? 'blue' : 'red');
-                    this.physics.kickOffReset = true;
-
-                    if (this.physics.ballDisc) {
-                        this.physics.ballDisc.pos.x = 0;
-                        this.physics.ballDisc.pos.y = 0;
-                        this.physics.ballDisc.speed.x = 0;
-                        this.physics.ballDisc.speed.y = 0;
-                        this.physics.ballDisc.color = 'FFB82E';
-                    }
-
-                    // Set cooldown to avoid immediate re-processing
-                    this._goalCooldownUntil = this.timeElapsed + 60 + 2; // 1 second @60Hz + safety
-
-                    // Broadcast goal event so non-admin clients see it
-                    this.room.broadcast('goalScored', { team: goalTeam, scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
-                } else {
-                    // No authoritative score provided — perform local increment
-                    this._handleGoal(goalTeam);
-                }
-            } else if (!goalTeam) {
-                this._lastGoalTeam = null;
-            }
-        }
-
-        // Broadcast to others immediately
-        // Throttle authority-driven broadcasts in local rooms to a reasonable rate
-        // to avoid saturating clients when admin sends high-frequency physics updates.
-        try {
-            const now = Date.now();
-            const minMs = (this.room._minAuthorityBroadcastMs !== undefined) ? this.room._minAuthorityBroadcastMs : 50;
-            const last = this.room._lastAuthorityBroadcast || 0;
-            if (now - last >= minMs) {
-                this.room._lastAuthorityBroadcast = now;
-                this.room.broadcast('gameState', this._getGameState());
-            }
-        } catch (e) {
-            // Fallback to unconditional broadcast on error
-            this.room.broadcast('gameState', this._getGameState());
-        }
+        // No-op: local mode removed
     }
 
     _getGameState() {
