@@ -643,8 +643,18 @@ export class Physics {
                         }
                     }
                 } else {
-                    // Kickoff team: free to move anywhere in their own half
-                    // No restriction - they can be in the center circle or anywhere in their half
+                    // Kickoff team (=scored on): stay within their OWN half
+                    if (isRed) {
+                        if (disc.pos.x > 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
+                        }
+                    } else {
+                        if (disc.pos.x < 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
+                        }
+                    }
                 }
             }
         }

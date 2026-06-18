@@ -139,7 +139,22 @@ export class GamePhysics {
         }
     }
 
+    /**
+     * Full physics step: movement, collisions, kickoff constraints
+     */
     step() {
+        return this._stepInternal(true);
+    }
+
+    /**
+     * Physics step WITHOUT kickoff constraints (used during goal pause)
+     * Players and ball can move freely, no goal checking
+     */
+    stepFree() {
+        return this._stepInternal(false);
+    }
+
+    _stepInternal(applyConstraints) {
         for (const disc of this.discs) {
             if (!disc.isPlayer) continue;
 
@@ -181,9 +196,9 @@ export class GamePhysics {
             disc.pos.y += disc.speed.y;
         }
 
-        // Enforce kickoff constraints before collision resolution so initial
-        // movement can't immediately violate kickoff rules.
-        this._applyKickOffConstraints();
+        if (applyConstraints) {
+            this._applyKickOffConstraints();
+        }
 
         for (let i = 0; i < this.discs.length; i++) {
             for (let j = i + 1; j < this.discs.length; j++) {
@@ -215,10 +230,9 @@ export class GamePhysics {
             }
         }
 
-        // Re-apply kickoff constraints after all collision resolution to
-        // guarantee no player ends up inside restricted areas due to collision
-        // responses or numerical drift.
-        this._applyKickOffConstraints();
+        if (applyConstraints) {
+            this._applyKickOffConstraints();
+        }
 
         return this._checkGoals();
     }
@@ -272,15 +286,15 @@ export class GamePhysics {
             if (disc.isPlayer && disc.team) {
                 const isRed = disc.team === 'red';
                 const isDefending = disc.team !== this.kickOffTeam;
+                // isDefending = team that SCORED (not kickoff team)
+                // Must stay in their OWN half (left for red, right for blue)
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                // Defending team is pushed OUT of the circle (radius + disc radius)
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // Defending team: half-court shaped boundary (not straight line)
+                    // Defending (=scoring) team: half-court shaped boundary
                     // At center circle level (y within ±kickOffRadius): keep outside the circle
                     // Above/below circle level: keep in own half
                     const absY = Math.abs(dy);
@@ -304,40 +318,34 @@ export class GamePhysics {
                         }
                     } else {
                         // Above/below the center circle: restrict to own half
-                        const defendMaxX = isRed ? -(disc.radius) : disc.radius;
+                        // Own half = left of centerline for red, right of centerline for blue
+                        const centerLine = isRed ? 0 : 0;
                         if (isRed) {
-                            if (disc.pos.x > defendMaxX) {
-                                disc.pos.x = defendMaxX;
+                            if (disc.pos.x > 0) {
+                                disc.pos.x = 0;
                                 if (disc.speed.x > 0) disc.speed.x = 0;
                             }
                         } else {
-                            if (disc.pos.x < defendMaxX) {
-                                disc.pos.x = defendMaxX;
+                            if (disc.pos.x < 0) {
+                                disc.pos.x = 0;
                                 if (disc.speed.x < 0) disc.speed.x = 0;
                             }
                         }
                     }
-
-                    // Also keep outside the kickoff circle if near center
-                    if (dist < defendMinDist && dist > 0) {
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        disc.pos.x = nx * defendMinDist;
-                        disc.pos.y = ny * defendMinDist;
-
-                        const dot = disc.speed.x * nx + disc.speed.y * ny;
-                        if (dot < 0) {
-                            disc.speed.x -= dot * nx;
-                            disc.speed.y -= dot * ny;
+                } else {
+                    // Kickoff team (=scored on): free to move anywhere in their OWN half
+                    // They should also be kept within their half (left for red, right for blue)
+                    if (isRed) {
+                        if (disc.pos.x > 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x > 0) disc.speed.x = 0;
                         }
-                        if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
-                            disc.speed.x = 0;
-                            disc.speed.y = 0;
+                    } else {
+                        if (disc.pos.x < 0) {
+                            disc.pos.x = 0;
+                            if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
-                } else {
-                    // Kickoff team: free to move anywhere in their own half
-                    // No restriction - they can be in the center circle or anywhere in their half
                 }
             }
         }
@@ -353,10 +361,6 @@ export class GamePhysics {
                 const playerDisc = a === this.ballDisc ? b : a;
                 if (playerDisc.isPlayer) {
                     if (playerDisc.team === this.kickOffTeam) {
-                        // Allow collision, will reset kickoff state in _performKick or here if it's a touch
-                        // Actually, Haxball reset only happens on 'touch' or 'kick'
-                        // If it's a touch (not kick), we reset here:
-                        // Since _collideDiscs handles physical response, we check if they are close enough
                         const dx = b.pos.x - a.pos.x;
                         const dy = b.pos.y - a.pos.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -556,10 +560,10 @@ export class GamePhysics {
                     typing: d.typing, 
                     id: d.ownerId || d.id,
                     input: d.input,
-                    color: d.color,  // MUST sync color for custom team colors!
-                    colors: d.colors, // For multiple colors (Haxcolors)
-                    colorAngle: d.colorAngle, // For multiple colors angle
-                    avatarColor: d.avatarColor, // MUST sync for custom text colors!
+                    color: d.color,
+                    colors: d.colors,
+                    colorAngle: d.colorAngle,
+                    avatarColor: d.avatarColor,
                     cMask: d.cMask,
                     cGroup: d.cGroup,
                     bCoef: d.bCoef,
@@ -574,26 +578,20 @@ export class GamePhysics {
         };
     }
 
-    // Server's applyState only accepts positional and physics updates from Admin.
-    // Server remains the strict authority on array size (who is playing) and metadata (teams, names).
     applyState(state) {
         if (!state.discs) return;
 
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
-            // If admin has extra or fewer discs during a race condition, just update what matches.
             if (!disc) continue;
 
-            // Apply position and speed directly
             disc.pos.x = sd.x;
             disc.pos.y = sd.y;
             disc.speed.x = sd.sx;
             disc.speed.y = sd.sy;
             
-            // Admin also controls kicking state since Admin simulates collision
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
-            // Sync visual metadata that clients need (colors, team, owner)
             if (sd.color !== undefined) disc.color = sd.color;
             if (sd.colors !== undefined) disc.colors = sd.colors;
             if (sd.colorAngle !== undefined) disc.colorAngle = sd.colorAngle;
@@ -601,11 +599,9 @@ export class GamePhysics {
             if (sd.team !== undefined) disc.team = sd.team;
             if (sd.id !== undefined) disc.ownerId = sd.id;
         }
-        // Sync kickoff flags if provided by admin
         if (state.kickOffReset !== undefined) this.kickOffReset = !!state.kickOffReset;
         if (state.kickOffTeam !== undefined) this.kickOffTeam = state.kickOffTeam;
 
-        // Ensure ballDisc reference is up-to-date (usually disc 0)
         this.ballDisc = this.discs.length > 0 ? this.discs[0] : null;
     }
 

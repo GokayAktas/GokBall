@@ -236,6 +236,7 @@ export class Game {
 
         if (this.state === 'goal') {
             // Keep running physics during goal pause so ball continues moving
+            // Use stepFree() so players are NOT teleported by kickoff constraints
             const now = performance.now();
             const dt = now - (this.lastPhysTime || now);
             this.lastPhysTime = now;
@@ -244,7 +245,7 @@ export class Game {
             const stepSize = 1000 / this.tickRate;
 
             while (this.accumulator >= stepSize) {
-                this.physics.step();
+                this.physics.stepFree(); // No kickoff constraints, no goal checking
                 this.accumulator -= stepSize;
             }
 
