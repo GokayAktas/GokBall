@@ -80,7 +80,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
         ],
         playerPhysics: {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.08, kickingAcceleration: 0.05, kickingDamping: 0.96, kickStrength: 5
+            acceleration: 0.12, kickingAcceleration: 0.08, kickingDamping: 0.96, kickStrength: 5
         },
         ballPhysics: "disc0"
     };
@@ -153,7 +153,7 @@ const STADIUMS = {
         ],
         playerPhysics: {
             radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.1, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 5.0
+            acceleration: 0.14, kickingAcceleration: 0.09, kickingDamping: 0.96, kickStrength: 5.0
         },
         ballPhysics: "disc0"
     },

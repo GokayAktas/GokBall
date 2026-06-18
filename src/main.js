@@ -510,6 +510,9 @@ class GokBallApp {
     _handleGameState(state) {
         this._serverGameState = state.state; // Track game state locally
 
+        // Set goal pause flag to prevent teleportation during goal celebration
+        this.physics.inGoalPause = (state.state === 'goal');
+
         // Detect kicks for sound effects
         if (state.physics && state.physics.discs) {
             const ball = state.physics.discs[0];

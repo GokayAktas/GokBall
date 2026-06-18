@@ -118,7 +118,8 @@ export class Physics {
         // Kickoff state (mirrors server for prediction)
         this.stadium = null;
         this.kickOffReset = false;
-        this.kickOffTeam = null; 
+        this.kickOffTeam = null;
+        this.inGoalPause = false; // Skip constraints during goal pause
     }
 
     /**
@@ -574,6 +575,7 @@ export class Physics {
 
     _applyKickOffConstraints() {
         if (!this.kickOffReset || !this.kickOffTeam) return;
+        if (this.inGoalPause) return; // Don't constrain during goal pause
 
         const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
 
