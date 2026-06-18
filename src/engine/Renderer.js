@@ -259,9 +259,10 @@ export class Renderer {
                 border = disc.kicking ? (this._theme.textPrimary || '#FFFFFF') : '#000000';
                 lw = 2.5;
             } else {
-                colors = [disc.color || 'FFB82E']; // Default to target yellow
+                // Ball: Always white with black outline
+                colors = ['FFFFFF']; // Always white
                 border = '#000000';
-                lw = 3; // Thicker outline for ball per request
+                lw = 3;
             }
 
             // Draw player color stripes (horizontal stripes rotated by colorAngle)

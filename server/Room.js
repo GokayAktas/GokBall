@@ -21,7 +21,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
         bg: {
             type: "grass", width: fieldW, height: fieldH,
             kickOffRadius: 75, cornerRadius: 0,
-            color: "59854C", stripeColor: "6B8954", bgColor: "718C5A",
+            color: "699057", stripeColor: "7B9F6C", bgColor: "718D5A",
             lineColor: "C7E6BD", showCenterLine: true, showKickOffCircle: true
         },
         vertexes: [

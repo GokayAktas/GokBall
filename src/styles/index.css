@@ -139,6 +139,7 @@ body {
   height: 100%;
   z-index: 1;
   display: none;
+  image-rendering: auto;
 }
 
 #gameUI {
@@ -773,22 +774,24 @@ select.input option {
 .chat-resizer {
   position: absolute;
   top: 0;
+  left: 0;
   right: 0;
-  width: 40px;
-  height: 20px;
+  height: 14px;
   cursor: ns-resize;
   z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
 }
 
 .chat-resizer::after {
   content: '';
-  width: 20px;
+  width: 40px;
   height: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
 }
 
 .chat-toggle-btn-small {

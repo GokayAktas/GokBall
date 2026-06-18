@@ -235,8 +235,30 @@ export class Game {
         }
 
         if (this.state === 'goal') {
+            // Keep running physics during goal pause so ball continues moving
+            const now = performance.now();
+            const dt = now - (this.lastPhysTime || now);
+            this.lastPhysTime = now;
+
+            this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
+            const stepSize = 1000 / this.tickRate;
+
+            while (this.accumulator >= stepSize) {
+                this.physics.step();
+                this.accumulator -= stepSize;
+            }
+
             this.goalPauseTicks--;
             if (this.goalPauseTicks <= 0) {
+                // Teleport ball to center after pause
+                if (this.physics.ballDisc) {
+                    this.physics.ballDisc.pos.x = 0;
+                    this.physics.ballDisc.pos.y = 0;
+                    this.physics.ballDisc.speed.x = 0;
+                    this.physics.ballDisc.speed.y = 0;
+                    this.physics.ballDisc.color = 'FFB82E';
+                }
+
                 // Check if game should end
                 if (this._checkGameEnd()) {
                     this.state = 'ended';
@@ -366,26 +388,14 @@ export class Game {
         this.room.broadcast('goalScored', { team: scoredOnTeam === 'red' ? 'blue' : 'red', scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
 
         this.state = 'goal';
-        this.goalPauseTicks = 2 * this.tickRate; // 2 second pause
+        this.goalPauseTicks = 3 * this.tickRate; // 3 second pause - ball keeps moving freely during this time
 
         // The team conceded the goal gets the next kick-off
         this.physics.setKickOffTeam(scoredOnTeam);
         // Ensure kickoff reset so clock doesn't advance
         this.physics.kickOffReset = true;
 
-        // Immediately teleport the ball to center and zero its velocity so
-        // clients see the center reset right away instead of waiting for the
-        // pause to expire.
-        if (this.physics.ballDisc) {
-            this.physics.ballDisc.pos.x = 0;
-            this.physics.ballDisc.pos.y = 0;
-            this.physics.ballDisc.speed.x = 0;
-            this.physics.ballDisc.speed.y = 0;
-            // Restore default ball color
-            this.physics.ballDisc.color = 'FFB82E';
-        }
-
-        // Send immediate gameState so clients reflect the teleported ball
+        // Send gameState immediately so clients see the goal
         this.room.broadcast('gameState', this._getGameState());
     }
 

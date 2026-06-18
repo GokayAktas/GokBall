@@ -336,27 +336,8 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // Kickoff team: must stay within the center circle area
-                    // At center circle level: stay inside the circle
-                    // Above/below circle: stay within own half
-                    const absY = Math.abs(dy);
-                    if (absY < kickOffRadius) {
-                        // Inside the center circle vertical range: stay inside the circle
-                        if (dist > kickOffRadius - disc.radius && dist > 0) {
-                            const nx = dx / dist;
-                            const ny = dy / dist;
-                            const targetDist = kickOffRadius - disc.radius;
-                            if (targetDist > 0) {
-                                disc.pos.x = nx * targetDist;
-                                disc.pos.y = ny * targetDist;
-                            }
-                            const dot = disc.speed.x * nx + disc.speed.y * ny;
-                            if (dot > 0) {
-                                disc.speed.x -= dot * nx;
-                                disc.speed.y -= dot * ny;
-                            }
-                        }
-                    }
+                    // Kickoff team: free to move anywhere in their own half
+                    // No restriction - they can be in the center circle or anywhere in their half
                 }
             }
         }
