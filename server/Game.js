@@ -323,7 +323,7 @@ export class Game {
 
         // Check goal (guard against rapid re-triggering)
         if (goalTeam) {
-            if (this.timeElapsed > this._goalCooldownUntil) {
+            if (this.timeElapsed >= this._goalCooldownUntil) {
                 this._handleGoal(goalTeam);
             }
         }
@@ -371,7 +371,7 @@ export class Game {
         // Basic scoring handler
         // Prevent duplicate handling: ignore if we've recently handled a goal
         const nowTicks = this.timeElapsed;
-        if (nowTicks <= this._goalCooldownUntil) return;
+        if (nowTicks < this._goalCooldownUntil) return;
         // `scoredOnTeam` is the team whose goal line the ball crossed (i.e. the
         // team that conceded). The scoring team is the opposite team.
         const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';

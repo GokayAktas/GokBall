@@ -130,7 +130,7 @@ export class GamePhysics {
             cGroup: CollisionFlags[team] || CollisionFlags.all
         });
         this.discs.push(disc);
-        return this.discs.length - 1; // return index
+        return this.discs.length - 1;
     }
 
     removeDisc(index) {
@@ -139,22 +139,15 @@ export class GamePhysics {
         }
     }
 
-    /**
-     * Full physics step: movement, collisions, kickoff constraints
-     */
     step() {
-        return this._stepInternal(true);
+        return this._stepInternal(true, true);
     }
 
-    /**
-     * Physics step WITHOUT kickoff constraints (used during goal pause)
-     * Players and ball can move freely, no goal checking
-     */
     stepFree() {
-        return this._stepInternal(false);
+        return this._stepInternal(false, false);
     }
 
-    _stepInternal(applyConstraints) {
+    _stepInternal(applyConstraints, checkGoals) {
         for (const disc of this.discs) {
             if (!disc.isPlayer) continue;
 
@@ -196,9 +189,7 @@ export class GamePhysics {
             disc.pos.y += disc.speed.y;
         }
 
-        if (applyConstraints) {
-            this._applyKickOffConstraints();
-        }
+        if (applyConstraints) this._applyKickOffConstraints();
 
         for (let i = 0; i < this.discs.length; i++) {
             for (let j = i + 1; j < this.discs.length; j++) {
@@ -230,11 +221,13 @@ export class GamePhysics {
             }
         }
 
-        if (applyConstraints) {
-            this._applyKickOffConstraints();
-        }
+        if (applyConstraints) this._applyKickOffConstraints();
 
-        return this._checkGoals();
+        let goalTeam = null;
+        if (checkGoals) {
+            goalTeam = this._checkGoals();
+        }
+        return { goalTeam };
     }
 
     _ballInKickRange(playerDisc) {
@@ -249,7 +242,6 @@ export class GamePhysics {
     _performKick(playerDisc) {
         if (!this.ballDisc) return false;
 
-        // Kickoff rule: ONLY the kickoff team can kick the ball during reset
         if (this.kickOffReset && playerDisc.team !== this.kickOffTeam) {
             return false;
         }
@@ -259,15 +251,12 @@ export class GamePhysics {
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Kickoff team touched via kick
         if (this.kickOffReset && playerDisc.team === this.kickOffTeam) {
             this.kickOffReset = false;
         }
 
-        // Change ball color to White on kick
         this.ballDisc.color = 'FFFFFF';
 
-        // Mark player disc so server can notify client to release held kick
         playerDisc._autoKickReleased = true;
 
         const nx = dx / dist;
@@ -286,26 +275,19 @@ export class GamePhysics {
             if (disc.isPlayer && disc.team) {
                 const isRed = disc.team === 'red';
                 const isDefending = disc.team !== this.kickOffTeam;
-                // isDefending = team that SCORED (not kickoff team)
-                // Must stay in their OWN half (left for red, right for blue)
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // Defending (=scoring) team: half-court shaped boundary
-                    // At center circle level (y within ±kickOffRadius): keep outside the circle
-                    // Above/below circle level: keep in own half
                     const absY = Math.abs(dy);
                     if (absY < kickOffRadius) {
-                        // Inside the center circle vertical range: keep outside the center circle
                         if (dist < defendMinDist && dist > 0) {
                             const nx = dx / dist;
                             const ny = dy / dist;
                             disc.pos.x = nx * defendMinDist;
                             disc.pos.y = ny * defendMinDist;
-
                             const dot = disc.speed.x * nx + disc.speed.y * ny;
                             if (dot < 0) {
                                 disc.speed.x -= dot * nx;
@@ -317,9 +299,6 @@ export class GamePhysics {
                             }
                         }
                     } else {
-                        // Above/below the center circle: restrict to own half
-                        // Own half = left of centerline for red, right of centerline for blue
-                        const centerLine = isRed ? 0 : 0;
                         if (isRed) {
                             if (disc.pos.x > 0) {
                                 disc.pos.x = 0;
@@ -333,8 +312,6 @@ export class GamePhysics {
                         }
                     }
                 } else {
-                    // Kickoff team (=scored on): free to move anywhere in their OWN half
-                    // They should also be kept within their half (left for red, right for blue)
                     if (isRed) {
                         if (disc.pos.x > 0) {
                             disc.pos.x = 0;
@@ -354,7 +331,6 @@ export class GamePhysics {
     _collideDiscs(a, b) {
         if (a.invMass === 0 && b.invMass === 0) return;
 
-        // Kickoff rule handling: NO collision with ball for defending team
         if (this.kickOffReset) {
             const isBall = (a === this.ballDisc || b === this.ballDisc);
             if (isBall) {
@@ -368,7 +344,7 @@ export class GamePhysics {
                             this.kickOffReset = false;
                         }
                     } else {
-                        return; // Non-kickoff team ignores collision completely (ghost ball)
+                        return;
                     }
                 }
             }
@@ -390,7 +366,6 @@ export class GamePhysics {
         b.pos.x += nx * overlap * (b.invMass / totalInvMass);
         b.pos.y += ny * overlap * (b.invMass / totalInvMass);
 
-        // Change ball color to White on touch
         if (a === this.ballDisc || b === this.ballDisc) {
             this.ballDisc.color = 'FFFFFF';
         }
@@ -522,23 +497,21 @@ export class GamePhysics {
     }
 
     _checkGoals() {
-        if (!this.ballDisc) return { goalTeam: null };
+        if (!this.ballDisc) return null;
         for (const goal of this.goals) {
             const gx = (goal.p0.x + goal.p1.x) / 2;
             const gy0 = Math.min(goal.p0.y, goal.p1.y);
             const gy1 = Math.max(goal.p0.y, goal.p1.y);
 
-            // Ball y must be within goal width
             if (this.ballDisc.pos.y < gy0 || this.ballDisc.pos.y > gy1) continue;
 
-            // Full ball entry check: entire ball must cross the goal line (gx)
-            if (gx < 0) { // Left Goal (Red defending, Blue scoring)
-                if (this.ballDisc.pos.x < gx - this.ballDisc.radius) return { goalTeam: goal.team };
-            } else { // Right Goal (Blue defending, Red scoring)
-                if (this.ballDisc.pos.x > gx + this.ballDisc.radius) return { goalTeam: goal.team };
+            if (gx < 0) {
+                if (this.ballDisc.pos.x < gx - this.ballDisc.radius) return goal.team;
+            } else {
+                if (this.ballDisc.pos.x > gx + this.ballDisc.radius) return goal.team;
             }
         }
-        return { goalTeam: null };
+        return null;
     }
 
     getState() {
@@ -580,17 +553,14 @@ export class GamePhysics {
 
     applyState(state) {
         if (!state.discs) return;
-
         for (let i = 0; i < state.discs.length; i++) {
             const sd = state.discs[i];
             const disc = this.discs[i];
             if (!disc) continue;
-
             disc.pos.x = sd.x;
             disc.pos.y = sd.y;
             disc.speed.x = sd.sx;
             disc.speed.y = sd.sy;
-            
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.color !== undefined) disc.color = sd.color;
             if (sd.colors !== undefined) disc.colors = sd.colors;
@@ -601,7 +571,6 @@ export class GamePhysics {
         }
         if (state.kickOffReset !== undefined) this.kickOffReset = !!state.kickOffReset;
         if (state.kickOffTeam !== undefined) this.kickOffTeam = state.kickOffTeam;
-
         this.ballDisc = this.discs.length > 0 ? this.discs[0] : null;
     }
 
