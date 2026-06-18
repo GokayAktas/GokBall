@@ -65,7 +65,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
             { p0: [fieldW, goalWidth], p1: [fieldW, -goalWidth], team: "blue" }
         ],
         discs: [
-            { pos: [0, 0], radius: 10, invMass: 1, bCoef: 0.7, damping: 0.995, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
+            { pos: [0, 0], radius: 10, invMass: 1, bCoef: 0.5, damping: 0.99, color: "FFFFFF", cMask: ["all"], cGroup: ["ball"] },
             // Posts
             { pos: [-fieldW, goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] },
             { pos: [-fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: "CCCCFF", cMask: ["all"] },
@@ -80,7 +80,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
         ],
         playerPhysics: {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 8
+            acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
         },
         ballPhysics: "disc0"
     };
@@ -153,7 +153,7 @@ const STADIUMS = {
         ],
         playerPhysics: {
             radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 8.0
+            acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 5.0
         },
         ballPhysics: "disc0"
     },

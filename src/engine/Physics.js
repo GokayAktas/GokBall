@@ -593,27 +593,23 @@ export class Physics {
         for (const disc of this.discs) {
             if (disc.isPlayer && disc.team) {
                 const isRed = disc.team === 'red';
-                const isDefending = disc.team === this.kickOffTeam;
+                const isKickoffTeam = disc.team === this.kickOffTeam;
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const defendMinDist = kickOffRadius + disc.radius;
 
-                if (isDefending) {
-                    // Kickoff team (conceded): stay within their OWN half
-                    if (isRed) {
-                        if (disc.pos.x > 0) {
-                            disc.pos.x = 0;
-                            if (disc.speed.x > 0) disc.speed.x = 0;
-                        }
-                    } else {
-                        if (disc.pos.x < 0) {
-                            disc.pos.x = 0;
-                            if (disc.speed.x < 0) disc.speed.x = 0;
-                        }
+                // Both teams stay in their own half during kickoff
+                if (isRed) {
+                    if (disc.pos.x > 0) {
+                        disc.pos.x = 0;
+                        if (disc.speed.x > 0) disc.speed.x = 0;
                     }
                 } else {
-                    // Scoring team: FREE to move anywhere in their own half (no constraints)
+                    if (disc.pos.x < 0) {
+                        disc.pos.x = 0;
+                        if (disc.speed.x < 0) disc.speed.x = 0;
+                    }
                 }
             }
         }
