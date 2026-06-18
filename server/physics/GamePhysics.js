@@ -159,11 +159,16 @@ export class GamePhysics {
             disc.speed.x += ax * accel;
             disc.speed.y += ay * accel;
 
-            if (disc.input.kick && !disc.kicking) {
-                disc.kicking = true;
-                this._performKick(disc);
-            } else if (!disc.input.kick) {
+            if (disc.input.kick) {
+                if (!disc.kicking) disc.kicking = true;
+                if (!disc._kickHoldConsumed && this._ballInKickRange(disc)) {
+                    if (this._performKick(disc)) {
+                        disc._kickHoldConsumed = true;
+                    }
+                }
+            } else {
                 disc.kicking = false;
+                disc._kickHoldConsumed = false;
             }
         }
 
@@ -218,6 +223,15 @@ export class GamePhysics {
         return this._checkGoals();
     }
 
+    _ballInKickRange(playerDisc) {
+        if (!this.ballDisc) return false;
+        const dx = this.ballDisc.pos.x - playerDisc.pos.x;
+        const dy = this.ballDisc.pos.y - playerDisc.pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
+        return dist < minDist && dist > 0;
+    }
+
     _performKick(playerDisc) {
         if (!this.ballDisc) return false;
 
@@ -225,31 +239,28 @@ export class GamePhysics {
         if (this.kickOffReset && playerDisc.team !== this.kickOffTeam) {
             return false;
         }
+        if (!this._ballInKickRange(playerDisc)) return false;
 
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
-        if (dist < minDist && dist > 0) {
-            // Kickoff team touched via kick
-            if (this.kickOffReset && playerDisc.team === this.kickOffTeam) {
-                this.kickOffReset = false;
-            }
-
-            // Change ball color to White on kick
-            if (this.ballDisc) this.ballDisc.color = 'FFFFFF';
-
-            // Mark player disc so server can notify client to release held kick
-            playerDisc._autoKickReleased = true;
-
-            const nx = dx / dist;
-            const ny = dy / dist;
-            this.ballDisc.speed.x += nx * playerDisc.kickStrength;
-            this.ballDisc.speed.y += ny * playerDisc.kickStrength;
-            return true;
+        // Kickoff team touched via kick
+        if (this.kickOffReset && playerDisc.team === this.kickOffTeam) {
+            this.kickOffReset = false;
         }
-        return false;
+
+        // Change ball color to White on kick
+        this.ballDisc.color = 'FFFFFF';
+
+        // Mark player disc so server can notify client to release held kick
+        playerDisc._autoKickReleased = true;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        this.ballDisc.speed.x += nx * playerDisc.kickStrength;
+        this.ballDisc.speed.y += ny * playerDisc.kickStrength;
+        return true;
     }
 
     _applyKickOffConstraints() {

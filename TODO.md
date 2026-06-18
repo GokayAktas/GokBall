@@ -1,6 +1,24 @@
 # Plan: Yerel Sunucu ve Genel İyileştirmeler
 
-TL;DR: Yerel sunucu modundaki oyun mantığı hatalarını (santra, sınırlar, gol sonrası top reset), performans/authoritative model iyileştirmesini (Haxball benzeri yaklaşım) ve istenen UI/UX değişikliklerini (kick/ban swap, sohbet geçmişi, /color komutunun geliştirilmesi, top rengi seçimi, MS/FPS UI, otomatik şut, ayarlar renk kısmının kaldırılması, şut dış çizgisinin paylaşılımı) önceliklendirilmiş adımlarla uygulayacağım.
+TL;DR: Yerel sunucu modundaki oyun mantığı hatalarını (santra, sınırlar, gol sonrası top reset), performans/authoritative model iyileştirmesini (Haxball benzeri yaklaşım) ve istenen UI/UX değişikliklerini önceliklendirilmiş adımlarla uygulayacağım.
+
+## Durum (18 Haz 2026)
+
+### Tamamlanan
+- [x] **2A** Yeni maçta ilk santra kırmızı (`Game.start()` → `setKickOffTeam('red')`, `_forceKickOffIgnoreUntil`)
+- [x] **2B** Santra öncesi sınırlar — server `GamePhysics._applyKickOffConstraints` + client `Physics.js` senkronize (çift uygulama)
+- [x] **2C** Gol sonrası top merkeze ışınlanma — cloud + local authority yolu
+- [x] **3** Auto-kick (şut tuşu basılı + top menzilde) — client + server physics
+- [x] **3** Şut dış çizgisi diğer oyunculara görünür (`kicking` sync + Renderer dash circle)
+- [x] **4** Lobby sohbet geçmişi (`Room.chatHistory` → `roomJoined` / `gameStarted`)
+- [x] **5** Ban/Kick buton swap (önceden yapılmış)
+- [x] **5** MS/FPS HUD görsel iyileştirme
+- [x] **5** Ayarlar renk kısmı kaldırıldı (Settings + SettingsModal)
+
+### Bekleyen
+- [ ] **2D** Local mode performans refactor (Haxball authority modeli, delta mesajlar, tick-rate tuning)
+- [ ] **3** Top rengi seçim hakkı (CreateRoom / RoomLobby UI)
+- [ ] **4** `/color` komutu geliştirmesi (şu an `/colors` var; angle + 3 renk desteği kısmen mevcut)
 
 ## Steps
 1. Keşif (Discovery) — 1 iş günü (kısa)

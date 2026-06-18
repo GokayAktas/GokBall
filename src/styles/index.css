@@ -1756,28 +1756,46 @@ select.input option {
   bottom: 20px;
   left: 20px;
   display: flex;
-  gap: 15px;
+  gap: 10px;
   z-index: 1000;
   pointer-events: none;
 }
 
 .stat-item {
-  background: rgba(0, 9, 38, 0.6);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(166, 197, 215, 0.15);
-  border-radius: 8px;
-  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(0, 9, 38, 0.85), rgba(0, 20, 60, 0.75));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(166, 197, 215, 0.2);
+  border-radius: 10px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
   font-weight: 700;
   color: var(--ice-blue);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  min-width: 80px;
+}
+
+.stat-ping .stat-icon { color: var(--success, #4caf50); }
+.stat-fps .stat-icon { color: var(--warning, #ffc107); }
+
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.stat-unit {
+  font-size: 11px;
+  opacity: 0.65;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .stat-icon {
-  opacity: 0.7;
+  opacity: 0.9;
+  font-size: 14px;
 }
 
 .team-clear-btn {

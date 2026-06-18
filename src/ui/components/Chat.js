@@ -156,6 +156,16 @@ export class Chat {
         }
     }
 
+    loadHistory(messages) {
+        if (!messages || !messages.length) return;
+        const msgs = document.getElementById('gameChatMessages');
+        if (!msgs) return;
+        msgs.innerHTML = '';
+        for (const msg of messages) {
+            this.addMessage(msg);
+        }
+    }
+
     _send() {
         const input = document.getElementById('gameChatInput');
         if (!input) return;

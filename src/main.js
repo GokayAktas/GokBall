@@ -115,8 +115,8 @@ class GokBallApp {
         statsHUD.id = 'statsHUD';
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
-            <div class="stat-item"><span class="stat-icon" style="color:var(--success)">📶</span> <span id="pingValue">--</span> ms</div>
-            <div class="stat-item"><span class="stat-icon" style="color:var(--warning)">⚡</span> <span id="fpsValue">0</span> fps</div>
+            <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
+            <div class="stat-item stat-fps"><span class="stat-icon">⚡</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
 
@@ -437,6 +437,9 @@ class GokBallApp {
         // Show in-game components
         this.scoreboard.show();
         this.chat.show();
+        if (roomData?.chatHistory?.length) {
+            this.chat.loadHistory(roomData.chatHistory);
+        }
         document.getElementById('statsHUD')?.classList.remove('hidden');
 
         // Enable input
@@ -509,6 +512,12 @@ class GokBallApp {
                     this.physics.step();
                 }
             }
+
+            if (myDisc?._autoKickReleased) {
+                this.input.suppressKickUntilKeyUp();
+                myDisc._autoKickReleased = false;
+            }
+
             this.accumulator -= stepSize;
         }
 

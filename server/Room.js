@@ -196,6 +196,9 @@ export class Room {
         this._lastAuthorityBroadcast = 0;
         this._minAuthorityBroadcastMs = 50; // ~20Hz
 
+        // Persist lobby chat for in-game display
+        this.chatHistory = [];
+
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);
@@ -245,8 +248,9 @@ export class Room {
             stadium: this.stadium,
             teamColors: this.teamColors,
             game: this.game.getInfo(),
-            teamsLocked: this.teamsLocked
-            , joinHint
+            teamsLocked: this.teamsLocked,
+            chatHistory: this.chatHistory.slice(),
+            joinHint
         };
     }
 
@@ -589,6 +593,19 @@ export class Room {
         }
     }
 
+    _recordChatMessage(data) {
+        this.chatHistory.push({
+            playerId: data.playerId || null,
+            playerName: data.playerName || 'System',
+            message: data.message,
+            team: data.team || null,
+            system: !!data.system
+        });
+        if (this.chatHistory.length > 100) {
+            this.chatHistory.shift();
+        }
+    }
+
     /**
      * Send chat message (broadcasts to ALL players including sender)
      */
@@ -602,13 +619,14 @@ export class Room {
             return;
         }
 
-        // Broadcast to ALL including sender (no excludeId)
-        this.broadcast('chatMessage', {
+        const payload = {
             playerId: senderId,
             playerName: sender.name,
             message: message.substring(0, 200),
             team: sender.team
-        });
+        };
+        this._recordChatMessage(payload);
+        this.broadcast('chatMessage', payload);
     }
 
     setTyping(senderId, state) {
@@ -772,7 +790,8 @@ export class Room {
             stadium: this.stadium,
             teamColors: this.teamColors,
             roomType: this.roomType,
-            game: this.game.getInfo()
+            game: this.game.getInfo(),
+            chatHistory: this.chatHistory.slice()
         };
     }
 

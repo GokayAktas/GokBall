@@ -234,12 +234,18 @@ export class Physics {
                 disc.speed.y += (ay / accelMag) * currentAccel;
             }
 
-            // 3. Kick (Standard Haxball logic - no movement slowdown)
-            if (disc.input.kick && !disc.kicking) {
-                disc.kicking = true;
-                if (this._performKick(disc)) kickHappened = true;
-            } else if (!disc.input.kick) {
+            // 3. Kick — auto-fire once per hold when ball enters range
+            if (disc.input.kick) {
+                if (!disc.kicking) disc.kicking = true;
+                if (!disc._kickHoldConsumed && this._ballInKickRange(disc)) {
+                    if (this._performKick(disc)) {
+                        disc._kickHoldConsumed = true;
+                        kickHappened = true;
+                    }
+                }
+            } else {
                 disc.kicking = false;
+                disc._kickHoldConsumed = false;
             }
         }
 
@@ -290,12 +296,24 @@ export class Physics {
             }
         }
 
+        // Re-apply kickoff constraints after collision resolution
+        this._applyKickOffConstraints();
+
         // Check goals
         const goalTeam = this._checkGoals();
         return { goalTeam, kickHappened };
     }
 
     // Removed stepLocalOnly as we will now use full prediction via step()
+
+    _ballInKickRange(playerDisc) {
+        if (!this.ballDisc) return false;
+        const dx = this.ballDisc.pos.x - playerDisc.pos.x;
+        const dy = this.ballDisc.pos.y - playerDisc.pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
+        return dist < minDist && dist > 0;
+    }
 
     _performKick(playerDisc) {
         if (!this.ballDisc) return false;
@@ -304,27 +322,26 @@ export class Physics {
         if (this.kickOffReset && playerDisc.team !== this.kickOffTeam) {
             return false;
         }
+        if (!this._ballInKickRange(playerDisc)) return false;
+
         const dx = this.ballDisc.pos.x - playerDisc.pos.x;
         const dy = this.ballDisc.pos.y - playerDisc.pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const minDist = playerDisc.radius + this.ballDisc.radius + 6;
 
-        if (dist < minDist && dist > 0) {
-            // Kickoff team touched via kick
-            if (this.kickOffReset && playerDisc.team === this.kickOffTeam) {
-                this.kickOffReset = false;
-            }
-
-            // Change ball color to White on kick
-            if (this.ballDisc) this.ballDisc.color = 'FFFFFF';
-
-            const nx = dx / dist;
-            const ny = dy / dist;
-            this.ballDisc.speed.x += nx * playerDisc.kickStrength;
-            this.ballDisc.speed.y += ny * playerDisc.kickStrength;
-            return true;
+        // Kickoff team touched via kick
+        if (this.kickOffReset && playerDisc.team === this.kickOffTeam) {
+            this.kickOffReset = false;
         }
-        return false;
+
+        // Change ball color to White on kick
+        this.ballDisc.color = 'FFFFFF';
+        playerDisc._autoKickReleased = true;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        this.ballDisc.speed.x += nx * playerDisc.kickStrength;
+        this.ballDisc.speed.y += ny * playerDisc.kickStrength;
+        return true;
     }
 
     _collideDiscs(a, b) {
@@ -567,24 +584,22 @@ export class Physics {
                 const dx = disc.pos.x;
                 const dy = disc.pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                
                 const defendMinDist = kickOffRadius + disc.radius;
 
                 if (isDefending) {
-                    // 1. Defending team wall at mid-line
+                    const defendMaxX = isRed ? -defendMinDist : defendMinDist;
                     if (isRed) {
-                        if (disc.pos.x > -disc.radius) {
-                            disc.pos.x = -disc.radius;
+                        if (disc.pos.x > defendMaxX) {
+                            disc.pos.x = defendMaxX;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
                     } else {
-                        if (disc.pos.x < disc.radius) {
-                            disc.pos.x = disc.radius;
+                        if (disc.pos.x < defendMaxX) {
+                            disc.pos.x = defendMaxX;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
 
-                    // 2. Defending team blocked from circle
                     if (dist < defendMinDist && dist > 0) {
                         const nx = dx / dist;
                         const ny = dy / dist;
@@ -596,17 +611,21 @@ export class Physics {
                             disc.speed.x -= dot * nx;
                             disc.speed.y -= dot * ny;
                         }
+                        if (Math.hypot(disc.speed.x, disc.speed.y) < 0.01) {
+                            disc.speed.x = 0;
+                            disc.speed.y = 0;
+                        }
                     }
                 } else {
-                    // 3. Kicking team: Restricted to their half (x=0 boundary to reach ball)
+                    const allowMaxX = isRed ? kickOffRadius : -kickOffRadius;
                     if (isRed) {
-                        if (disc.pos.x > 0) {
-                            disc.pos.x = 0;
+                        if (disc.pos.x > allowMaxX) {
+                            disc.pos.x = allowMaxX;
                             if (disc.speed.x > 0) disc.speed.x = 0;
                         }
                     } else {
-                        if (disc.pos.x < 0) {
-                            disc.pos.x = 0;
+                        if (disc.pos.x < allowMaxX) {
+                            disc.pos.x = allowMaxX;
                             if (disc.speed.x < 0) disc.speed.x = 0;
                         }
                     }
@@ -645,6 +664,8 @@ export class Physics {
      */
     getState() {
         return {
+            kickOffReset: this.kickOffReset,
+            kickOffTeam: this.kickOffTeam,
             discs: this.discs.map(d => ({
                 x: Math.round(d.pos.x * 100) / 100,
                 y: Math.round(d.pos.y * 100) / 100,

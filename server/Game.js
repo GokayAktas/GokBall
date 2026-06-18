@@ -163,7 +163,7 @@ export class Game {
                 }
             }
         }
-        
+
         // Ensure ball color starts as FFB82E
         if (this.physics.ballDisc) {
             this.physics.ballDisc.color = 'FFB82E';
@@ -278,7 +278,7 @@ export class Game {
         const now = performance.now();
         const dt = now - (this.lastPhysTime || now);
         this.lastPhysTime = now;
-        
+
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
         const stepSize = 1000 / this.tickRate; // Exact 60Hz step
 
@@ -419,7 +419,7 @@ export class Game {
      */
     applyAuthorityState(state) {
         if (!state) return;
-        
+
         // Sync physics discs
         if (state.physics) {
             this.physics.applyState(state.physics);
@@ -470,8 +470,16 @@ export class Game {
                     this.physics.setKickOffTeam(goalTeam === 'red' ? 'blue' : 'red');
                     this.physics.kickOffReset = true;
 
-                                // Set cooldown to avoid immediate re-processing
-                                this._goalCooldownUntil = this.timeElapsed + 60 + 2; // 1 second @60Hz + safety
+                    if (this.physics.ballDisc) {
+                        this.physics.ballDisc.pos.x = 0;
+                        this.physics.ballDisc.pos.y = 0;
+                        this.physics.ballDisc.speed.x = 0;
+                        this.physics.ballDisc.speed.y = 0;
+                        this.physics.ballDisc.color = 'FFB82E';
+                    }
+
+                    // Set cooldown to avoid immediate re-processing
+                    this._goalCooldownUntil = this.timeElapsed + 60 + 2; // 1 second @60Hz + safety
 
                     // Broadcast goal event so non-admin clients see it
                     this.room.broadcast('goalScored', { team: goalTeam, scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
