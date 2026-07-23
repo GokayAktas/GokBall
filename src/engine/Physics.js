@@ -582,25 +582,39 @@ export class Physics {
         const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
 
         for (const disc of this.discs) {
-            if (disc.isPlayer && disc.team) {
-                const isRed = disc.team === 'red';
-                const isKickoffTeam = disc.team === this.kickOffTeam;
-                const dx = disc.pos.x;
-                const dy = disc.pos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const defendMinDist = kickOffRadius + disc.radius;
-
-                // Both teams stay in their own half during kickoff
-                if (isRed) {
-                    if (disc.pos.x > 0) {
-                        disc.pos.x = 0;
-                        if (disc.speed.x > 0) disc.speed.x = 0;
-                    }
-                } else {
-                    if (disc.pos.x < 0) {
-                        disc.pos.x = 0;
-                        if (disc.speed.x < 0) disc.speed.x = 0;
-                    }
+            if (!disc.isPlayer || !disc.team) continue;
+            
+            const absY = Math.abs(disc.pos.y);
+            
+            // Calculate max allowed x based on center circle curve
+            let maxX;
+            if (absY < kickOffRadius) {
+                // Inside center circle area: boundary follows circle's edge
+                // Circle: x² + y² = R² → x = sqrt(R² - y²)
+                const circleEdgeX = Math.sqrt(kickOffRadius * kickOffRadius - absY * absY);
+                // Player's right edge (pos.x + radius) can't exceed circle's right edge
+                // So: pos.x + radius <= circleEdgeX → pos.x <= circleEdgeX - radius
+                maxX = circleEdgeX - disc.radius;
+            } else {
+                // Above/below center circle: boundary is center line
+                // Player's right edge can't exceed center line
+                // So: pos.x + radius <= 0 → pos.x <= -radius
+                maxX = -disc.radius;
+            }
+            
+            // Apply constraint based on team
+            if (disc.team === 'red') {
+                // Red team: can't go past maxX to the right
+                if (disc.pos.x > maxX) {
+                    disc.pos.x = maxX;
+                    if (disc.speed.x > 0) disc.speed.x *= -0.5;
+                }
+            } else if (disc.team === 'blue') {
+                // Blue team: can't go past -maxX to the left (mirror of red)
+                const minX = -maxX;
+                if (disc.pos.x < minX) {
+                    disc.pos.x = minX;
+                    if (disc.speed.x < 0) disc.speed.x *= -0.5;
                 }
             }
         }
@@ -608,9 +622,8 @@ export class Physics {
 
     /**
      * Enforce player movement boundaries:
-     * - Red team stays in left half (right edge can't cross center)
-     * - Blue team stays in right half (left edge can't cross center)
-     * - Vertical boundaries: player can go outside field but opposite edge touches boundary
+     * - Only vertical boundaries: player can go outside field but opposite edge touches boundary
+     * - No horizontal half-field constraints outside of kickoff (handled by _applyKickOffConstraints)
      */
     _enforcePlayerBounds() {
         if (!this.stadium) return;
@@ -622,23 +635,6 @@ export class Physics {
         
         for (const disc of this.discs) {
             if (!disc.isPlayer) continue;
-            
-            // Horizontal (half-field) constraints - always active
-            if (disc.team === 'red') {
-                // Red team: right edge (pos.x + radius) can't cross center line (0)
-                const rightEdge = disc.pos.x + disc.radius;
-                if (rightEdge > 0) {
-                    disc.pos.x = -disc.radius;
-                    if (disc.speed.x > 0) disc.speed.x *= -0.5;
-                }
-            } else if (disc.team === 'blue') {
-                // Blue team: left edge (pos.x - radius) can't cross center line (0)
-                const leftEdge = disc.pos.x - disc.radius;
-                if (leftEdge < 0) {
-                    disc.pos.x = disc.radius;
-                    if (disc.speed.x < 0) disc.speed.x *= -0.5;
-                }
-            }
             
             // Vertical (top/bottom field line) constraints
             // Top: player's bottom edge can go up to the top line

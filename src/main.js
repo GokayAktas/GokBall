@@ -4,7 +4,7 @@
  * All game logic runs on the server (host's machine), clients do prediction
  */
 import { NetworkManager } from './network/NetworkManager.js';
-import { Physics } from './engine/Physics.js';
+import { Physics, CollisionFlags } from './engine/Physics.js';
 import { Renderer } from './engine/Renderer.js';
 import { Camera } from './engine/Camera.js';
 import { InputManager } from './engine/InputManager.js';
@@ -615,6 +615,52 @@ class GokBallApp {
         }, 3200);
     }
 
+    /** Update a player's disc when team changes mid-game (host only) */
+    _hostUpdatePlayerDisc(playerId, players) {
+        if (!players) return;
+        const playerData = players.find(p => p.id === playerId);
+        if (!playerData) return;
+        
+        // Find existing disc
+        const existingDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
+        
+        if (playerData.team === 'spectator') {
+            // Remove player disc
+            if (existingDisc) {
+                this.physics.removePlayerDisc(existingDisc);
+            }
+        } else {
+            // Update or create player disc for new team
+            if (existingDisc) {
+                // Update existing disc's team and color
+                existingDisc.team = playerData.team;
+                existingDisc.color = playerData.team === 'red' ? 'c70000' : '00008c';
+                existingDisc.colors = [existingDisc.color];
+                existingDisc._playerName = playerData.name;
+                existingDisc._avatar = playerData.avatar || '1';
+                
+                // Update collision group for new team
+                existingDisc.cGroup = CollisionFlags[playerData.team] || CollisionFlags.all;
+            } else {
+                // Create new disc for player
+                const pp = this._currentStadium?.playerPhysics || {
+                    radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+                    acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+                };
+                const spawnDist = this._currentStadium?.spawnDistance || 170;
+                const dir = playerData.team === 'red' ? -1 : 1;
+                const disc = this.physics.addPlayerDisc(pp, playerData.team, dir * spawnDist, 0);
+                disc.id = playerId;
+                disc.ownerId = playerId;
+                disc._playerName = playerData.name;
+                disc._avatar = playerData.avatar || '1';
+                disc.color = playerData.team === 'red' ? 'c70000' : '00008c';
+                disc.colors = [disc.color];
+                disc.avatarColor = 'FFFFFF';
+            }
+        }
+    }
+
     /** Send authoritative state to server (relayed to other players) */
     _sendAuthorityState() {
         this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
@@ -677,6 +723,10 @@ class GokBallApp {
             if (this.currentRoomData && data.players) {
                 this.currentRoomData.players = data.players;
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+            // HOST MODE: Update player disc when team changes mid-game
+            if (this._isHost() && this._isHostAuthority && this.gameRunning && data.playerId) {
+                this._hostUpdatePlayerDisc(data.playerId, data.players || this.currentRoomData?.players);
             }
         });
 
