@@ -223,3 +223,4 @@ export class NetworkManager {
         this._cleanupConnection();
         this.connected = false;
     }
+}
