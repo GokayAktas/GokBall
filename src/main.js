@@ -829,6 +829,130 @@ class GokBallApp {
         this._animFrame = requestAnimationFrame(() => this._gameLoop());
     }
 
+    /** Setup callback handlers for network events */
+    _setupNetworkCallbacks() {
+        this.network.on('roomCreated', (data) => {
+            this.currentRoomData = data;
+            if (this.currentRoomData) {
+                this.currentRoomData.roomType = data.roomType || 'cloud';
+                this.currentRoomData.creatorId = data.creatorId;
+            }
+            this.stadiumData = data.stadium;
+            this.physics.myPlayerId = this.network.socket?.id;
+            this.physics.isLocalAuthorityMode = data.roomType === 'local' && this.network.socket?.id === data.adminId;
+            this.ui.showScreen('roomLobby', data);
+        });
+
+        this.network.on('roomJoined', (data) => {
+            this.currentRoomData = data;
+            if (this.currentRoomData) {
+                this.currentRoomData.roomType = data.roomType || 'cloud';
+                this.currentRoomData.creatorId = data.creatorId;
+            }
+            this.stadiumData = data.stadium;
+            this.physics.myPlayerId = this.network.socket?.id;
+            this.physics.isLocalAuthorityMode = data.roomType === 'local' && this.network.socket?.id === data.adminId;
+            if (data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal')) {
+                this.startGame(data);
+            } else {
+                this.ui.showScreen('roomLobby', data);
+            }
+        });
+
+        this.network.on('roomError', (data) => {
+            alert(data.error || 'Bir hata olu\u015ftu');
+        });
+
+        this.network.on('playerJoined', (data) => {
+            if (this.currentRoomData && data.players) {
+                this.currentRoomData.players = data.players;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        this.network.on('playerLeft', (data) => {
+            if (this.currentRoomData && data.players) {
+                this.currentRoomData.players = data.players;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        this.network.on('teamChanged', (data) => {
+            if (this.currentRoomData && data.players) {
+                this.currentRoomData.players = data.players;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        this.network.on('adminUpdate', (data) => {
+            if (this.currentRoomData) {
+                if (data.players) this.currentRoomData.players = data.players;
+                this.currentRoomData.adminId = data.playerId;
+                this.physics.isLocalAuthorityMode = this.currentRoomData.roomType === 'local' && this.network.socket?.id === data.playerId;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        this.network.on('gameStarted', (data) => {
+            if (data?.roomData) {
+                this.currentRoomData = data.roomData;
+                this.stadiumData = data.roomData.stadium || this.stadiumData;
+            }
+            this.startGame(this.currentRoomData);
+            if (data?.state) this._handleGameState(data.state);
+        });
+
+        this.network.on('gameState', (state) => {
+            if (this.gameRunning) this._handleGameState(state);
+        });
+
+        this.network.on('goalScored', (data) => {
+            if (this.scoreboard) {
+                this.scoreboard.update(data.scoreRed, data.scoreBlue, 0);
+                this.scoreboard.showGoal(data.team);
+            }
+            this.audio.playGoal();
+            this.chat.addMessage({
+                message: `\u26bd GOL! ${data.team === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi'} tak\u0131m skoru: ${data.scoreRed} - ${data.scoreBlue}`,
+                system: true
+            });
+        });
+
+        this.network.on('gameOver', (data) => {
+            const winnerStr = data.winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
+            const winnerColor = data.winner === 'red' ? '#c70000' : '#00008c';
+            const overlay = document.createElement('div');
+            overlay.className = 'game-over-overlay';
+            overlay.innerHTML = `
+                <h1 style="color: ${winnerColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winnerStr} TAKIM KAZANDI!</h1>
+                <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
+            `;
+            document.body.appendChild(overlay);
+            setTimeout(() => {
+                if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                this.stopGame();
+            }, 3000);
+        });
+
+        // Sync room data updates
+        this.network.on('teamLockChanged', (data) => {
+            if (this.currentRoomData) {
+                this.currentRoomData.teamsLocked = data.locked;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        this.network.on('roomUpdate', (data) => {
+            if (this.currentRoomData) {
+                if (data.scoreLimit !== undefined) this.currentRoomData.game.scoreLimit = data.scoreLimit;
+                if (data.timeLimit !== undefined) this.currentRoomData.game.timeLimit = data.timeLimit;
+                if (data.teamsLocked !== undefined) this.currentRoomData.teamsLocked = data.teamsLocked;
+                if (data.players) this.currentRoomData.players = data.players;
+                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+    }
+
     _handleGameState(state) {
         this._serverGameState = state.state; // Track game state locally
 
