@@ -359,20 +359,9 @@ export class Physics {
                         if (dist < a.radius + b.radius) {
                             this.kickOffReset = false;
                         }
-                } else {
-                    // Kickoff team: stay within their OWN half (can't cross center line)
-                    if (isRed) {
-                        if (disc.pos.x > 0) {
-                            disc.pos.x = 0;
-                            if (disc.speed.x > 0) disc.speed.x = 0;
-                        }
                     } else {
-                        if (disc.pos.x < 0) {
-                            disc.pos.x = 0;
-                            if (disc.speed.x < 0) disc.speed.x = 0;
-                        }
+                        return;
                     }
-                }
                 }
             }
         }
