@@ -231,4 +231,4 @@ export class NetworkManager {
         this.connected = false;
         this.isLocal = false;
     }
-
+}
