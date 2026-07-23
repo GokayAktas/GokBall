@@ -44,6 +44,23 @@ class GokBallApp {
         // Server game state tracking
         this._serverGameState = 'stopped';
 
+        // Host-authority mode (room creator runs physics)
+        this._isHostAuthority = false;
+        this._remoteInputs = new Map(); // playerId -> input
+        this._hostScoreRed = 0;
+        this._hostScoreBlue = 0;
+        this._hostTimeElapsed = 0;
+        this._hostGoalPauseTicks = 0;
+        this._hostGameState = 'stopped';
+        this._hostScoreLimit = 3;
+        this._hostTimeLimit = 180;
+        this._hostKickOffTeam = 'red';
+        this._hostAuthoritySendCounter = 0;
+        this._hostLastGoalTeam = null; // Track last scored team for authority state
+
+        // Pause state
+        this._isPaused = false;
+
         // Load saved zoom
         const savedZoom = localStorage.getItem('gokball_zoom');
         if (savedZoom) this.camera.setZoom(parseFloat(savedZoom));
@@ -59,6 +76,16 @@ class GokBallApp {
                     e.preventDefault();
                     if (this.chat.collapsed) this.chat._toggleCollapse();
                     chatInput.focus();
+                }
+            }
+        });
+
+        // P key for pause (host only)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'p' || e.key === 'P') {
+                if (this.gameRunning && this._isHost() && this._isHostAuthority) {
+                    e.preventDefault();
+                    this._togglePause();
                 }
             }
         });
@@ -84,9 +111,10 @@ class GokBallApp {
             console.log('[GokBall] Connected to server:', this.network.playerId);
         } catch (err) {
             console.error('[GokBall] Connection failed:', err?.message || err);
-            alert('Sunucuya bağlanılamadı! Lütfen sunucunun çalıştığından emin olun.\n\n' +
-                  'Host: node server/index.js\n' +
-                  'Ardından sayfayı yenileyin.');
+            alert('Sunucuya bağlanılamadı!\n\n' +
+                  '1. Render sunucunuzun çalıştığından emin olun\n' +
+                  '2. VITE_SERVER_URL ayarını kontrol edin\n' +
+                  '3. Sayfayı yenileyin');
             return;
         }
 
@@ -212,6 +240,8 @@ class GokBallApp {
 
     stopGame() {
         this.gameRunning = false;
+        this._isPaused = false;
+        this._removePauseOverlay();
         this.input.disable();
         this.renderer.hide();
         this.chat.hide();
@@ -220,6 +250,7 @@ class GokBallApp {
         this.settingsModal.hide();
         document.getElementById('gameUI')?.classList.add('hidden');
         document.getElementById('statsHUD')?.classList.add('hidden');
+        document.getElementById('gameCanvas')?.classList.remove('paused');
         this.ui.showApp();
 
         if (this._animFrame) {
@@ -232,7 +263,7 @@ class GokBallApp {
     _gameLoop() {
         if (!this.gameRunning) return;
 
-        // Get input
+        // Get local input
         const inputState = this.input.getInput();
         if (this.network.socket?.id) {
             this.physics.myPlayerId = this.network.socket.id;
@@ -241,24 +272,124 @@ class GokBallApp {
         // Send input to server
         this.network.sendInput(inputState);
 
-        // Fixed Timestep Physics (60Hz) - Client-side prediction
+        // Fixed Timestep Physics (60Hz)
         const now = performance.now();
         const dt = now - (this.lastPhysTime || now);
         this.lastPhysTime = now;
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
 
         const stepSize = 1000 / 60;
-        while (this.accumulator >= stepSize) {
-            if (this._serverGameState === 'playing') {
-                // Client-side prediction
-                for (const disc of this.physics.discs) {
-                    if (disc.isPlayer) {
+        while (this.accumulator >= stepSize) {                // --- HOST MODE: Full authority game loop ---
+            if (this._isHost() && this._isHostAuthority) {
+
+                // Skip physics when paused
+                if (this._isPaused) {
+                    // Still send occasional authority state so non-host clients sync
+                    this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
+                    if (this._hostAuthoritySendCounter % 30 === 0) {
+                        this._sendAuthorityState();
+                    }
+                    this.accumulator -= stepSize;
+                    continue;
+                }
+
+                if (this._hostGameState === 'playing') {
+                    // Apply inputs to ALL player discs
+                    for (const disc of this.physics.discs) {
+                        if (!disc.isPlayer) continue;
                         disc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
+
+                    // Local player input
+                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    if (myDisc) myDisc.input = inputState;
+
+                    // Remote player inputs
+                    for (const [playerId, remoteInput] of this._remoteInputs) {
+                        const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
+                        if (remoteDisc) {
+                            remoteDisc.input = remoteInput;
+                        }
+                    }
+
+                    // Step physics
+                    const result = this.physics.step();
+
+                    // Check for goals
+                    if (result.goalTeam && this._hostGameState === 'playing') {
+                        this._hostHandleGoal(result.goalTeam);
+                    }
+
+                    // Advance time
+                    if (!this.physics.kickOffReset) {
+                        this._hostTimeElapsed++;
+                    }
+
+                    // Check time limit
+                    if (this._hostTimeLimit > 0 && this._hostTimeElapsed / 60 >= this._hostTimeLimit) {
+                        if (this._hostScoreRed !== this._hostScoreBlue) {
+                            this._hostGameOver();
+                        }
+                    }
+
+                    // Update scoreboard
+                    this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+
+                    // Send authority state to server (relayed to other players)
+                    this._sendAuthorityState();
                 }
-                const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                if (myDisc) myDisc.input = inputState;
-                this.physics.step();
+
+                else if (this._hostGameState === 'goal') {
+                    // Goal pause: physics still runs
+                    this.physics.step();
+                    this._hostGoalPauseTicks--;
+
+                    // Send authority state during goal pause so non-host clients see the ball
+                    this._sendAuthorityState();
+
+                    if (this._hostGoalPauseTicks <= 0) {
+                        // Reset ball to center
+                        if (this.physics.ballDisc) {
+                            this.physics.ballDisc.pos.x = 0;
+                            this.physics.ballDisc.pos.y = 0;
+                            this.physics.ballDisc.speed.x = 0;
+                            this.physics.ballDisc.speed.y = 0;
+                            this.physics.ballDisc.color = 'FFB82E';
+                        }
+
+                        // Check score limit
+                        if (this._hostScoreLimit > 0 &&
+                            (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
+                            this._hostGameOver();
+                            this.accumulator -= stepSize;
+                            continue;
+                        }
+
+                        // Reset for next kickoff (use resetPositions to keep disc IDs intact)
+                        this.physics.kickOffReset = true;
+                        this.physics.kickOffTeam = this._hostKickOffTeam;
+                        this.physics.inGoalPause = false;
+                        this.physics.resetPositions();
+                        this._hostGameState = 'playing';
+                        this._serverGameState = 'playing';
+                        
+                        // Send authority state immediately so non-host clients see the reset
+                        this._sendAuthorityState();
+                    }
+                }
+
+            } else {
+                // --- CLIENT MODE: Normal prediction ---
+                if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer) {
+                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
+                        }
+                    }
+                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    if (myDisc) myDisc.input = inputState;
+                    this.physics.step();
+                }
             }
 
             this.accumulator -= stepSize;
@@ -285,6 +416,221 @@ class GokBallApp {
         }
 
         this._animFrame = requestAnimationFrame(() => this._gameLoop());
+    }
+
+    /** Check if this client is the room creator/host */
+    _isHost() {
+        return this.currentRoomData?.creatorId === this.network.socket?.id;
+    }
+
+    /** Initialize host-authority game mode (state only, spawning happens after startGame) */
+    _initHostGame() {
+        this._hostScoreRed = 0;
+        this._hostScoreBlue = 0;
+        this._hostTimeElapsed = 0;
+        this._hostGoalPauseTicks = 0;
+        this._hostGameState = 'playing';
+        this._hostKickOffTeam = 'red';
+        this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
+        this._hostTimeLimit = this.currentRoomData?.game?.timeLimit || 180;
+        this._remoteInputs.clear();
+        console.log('[GokBall] Host game state initialized');
+    }
+
+    /** Spawn discs for ALL players in host mode */
+    _hostSpawnAllPlayers() {
+        // Remove existing player discs
+        const toRemove = [];
+        for (let i = 0; i < this.physics.discs.length; i++) {
+            if (this.physics.discs[i].isPlayer) toRemove.push(i);
+        }
+        for (const idx of toRemove.sort((a, b) => b - a)) {
+            this.physics.discs.splice(idx, 1);
+        }
+
+        const pp = this._currentStadium?.playerPhysics || {
+            radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+            acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+        };
+        const spawnDist = this._currentStadium?.spawnDistance || 170;
+
+        const players = this.currentRoomData?.players || [];
+        // Separate by team
+        const redPlayers = players.filter(p => p.team === 'red');
+        const bluePlayers = players.filter(p => p.team === 'blue');
+
+        const spacing = 40;
+        const spawnTeam = (teamPlayers, team, dir) => {
+            for (let i = 0; i < teamPlayers.length; i++) {
+                const p = teamPlayers[i];
+                const y = (i - (teamPlayers.length - 1) / 2) * spacing;
+                const disc = this.physics.addPlayerDisc(pp, team, dir * spawnDist, y);
+                disc.id = p.id;
+                disc.ownerId = p.id;
+                disc._playerName = p.name;
+                disc._avatar = p.avatar || '1';
+                disc.color = team === 'red' ? 'c70000' : '00008c';
+                disc.colors = [disc.color];
+                disc.avatarColor = 'FFFFFF';
+            }
+        };
+
+        spawnTeam(redPlayers, 'red', -1);
+        spawnTeam(bluePlayers, 'blue', 1);
+    }
+
+    /** Handle goal in host mode */
+    _hostHandleGoal(scoredOnTeam) {
+        const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';
+
+        if (scoringTeam === 'red') this._hostScoreRed++;
+        else this._hostScoreBlue++;
+
+        this._hostGameState = 'goal';
+        this._hostGoalPauseTicks = 3 * 60; // 3 seconds at 60Hz
+        this._hostKickOffTeam = scoredOnTeam; // conceded team gets kickoff
+
+        this.physics.kickOffReset = true;
+        this.physics.kickOffTeam = scoredOnTeam;
+        this.physics.inGoalPause = true;
+
+        // Update scoreboard locally
+        this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+        this.scoreboard.showGoal(scoringTeam);
+        this.audio.playGoal();
+
+        this.chat.addMessage({
+            message: `\u26bd GOL! ${scoringTeam === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi'} tak\u0131m skoru: ${this._hostScoreRed} - ${this._hostScoreBlue}`,
+            system: true
+        });
+
+        // Send goalScored event to server for relay to other players
+        this.network.socket?.emit('hostGoalEvent', {
+            team: scoringTeam,
+            scoreRed: this._hostScoreRed,
+            scoreBlue: this._hostScoreBlue
+        });
+    }
+
+    /** Handle game over in host mode */
+    _hostGameOver() {
+        const winner = this._hostScoreRed > this._hostScoreBlue ? 'red' : 'blue';
+        this._hostGameState = 'ended';
+
+        const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
+        const winColor = winner === 'red' ? '#c70000' : '#00008c';
+
+        // Send game over to server for relay to other players
+        this.network.socket?.emit('hostGameOverEvent', {
+            winner: winner,
+            scoreRed: this._hostScoreRed,
+            scoreBlue: this._hostScoreBlue
+        });
+
+        const overlay = document.createElement('div');
+        overlay.className = 'game-over-overlay';
+        overlay.innerHTML = `
+            <h1 style="color: ${winColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
+            <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${this._hostScoreRed} - ${this._hostScoreBlue}</p>
+        `;
+        document.body.appendChild(overlay);
+
+        setTimeout(() => {
+            if (document.body.contains(overlay)) document.body.removeChild(overlay);
+            this.stopGame();
+        }, 3000);
+    }
+
+    /** Toggle pause state (host only) */
+    _togglePause() {
+        if (!this._isHost() || !this._isHostAuthority) return;
+        if (this._hostGameState !== 'playing' && !this._isPaused) return;
+        
+        this._isPaused = !this._isPaused;
+        
+        if (this._isPaused) {
+            this._showPauseOverlay();
+            // Notify non-host players via server
+            this.network.socket?.emit('pauseGame', { paused: true });
+        } else {
+            this._resumeGame();
+        }
+        
+        // Update InGameMenu if visible
+        if (this.inGameMenu.isVisible) {
+            this.inGameMenu.render(this.currentRoomData);
+        }
+    }
+
+    _showPauseOverlay() {
+        document.getElementById('gameCanvas')?.classList.add('paused');
+        
+        // Remove existing overlay
+        this._removePauseOverlay();
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'pauseOverlay';
+        overlay.className = 'pause-overlay';
+        overlay.innerHTML = `
+            <div class="pause-text-container">
+                <span class="pause-title">OYUN</span>
+                <span class="pause-subtitle">DURDURULDU</span>
+            </div>
+            <div class="pause-hint">Devam etmek için P tuşuna basın</div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    _removePauseOverlay() {
+        const existing = document.getElementById('pauseOverlay');
+        if (existing) existing.remove();
+        document.getElementById('gameCanvas')?.classList.remove('paused');
+    }
+
+    _resumeGame() {
+        this._isPaused = false;
+        this._removePauseOverlay();
+        
+        // Notify non-host players via server
+        this.network.socket?.emit('pauseGame', { paused: false });
+        
+        // Send authority state immediately
+        this._sendAuthorityState();
+        
+        // Play resume animation
+        this._playResumeAnimation();
+    }
+
+    _playResumeAnimation() {
+        // Create the white rectangle animation
+        const anim = document.createElement('div');
+        anim.id = 'resumeAnimation';
+        anim.className = 'resume-animation';
+        document.body.appendChild(anim);
+        
+        // Remove after animation completes
+        setTimeout(() => {
+            const el = document.getElementById('resumeAnimation');
+            if (el) el.remove();
+        }, 3200);
+    }
+
+    /** Send authoritative state to server (relayed to other players) */
+    _sendAuthorityState() {
+        this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
+        // Send at ~30fps (every other frame at 60fps)
+        if (this._hostAuthoritySendCounter % 2 !== 0) return;
+
+        this.network.socket?.emit('authorityState', {
+            state: this._hostGameState,
+            physics: this.physics.getState(),
+            scoreRed: this._hostScoreRed,
+            scoreBlue: this._hostScoreBlue,
+            time: Math.floor(this._hostTimeElapsed / 60),
+            scoreLimit: this._hostScoreLimit,
+            timeLimit: this._hostTimeLimit,
+            kickOffTeam: this._hostKickOffTeam
+        });
     }
 
     /** Setup callback handlers for network events */
@@ -347,12 +693,42 @@ class GokBallApp {
                 this.currentRoomData = data.roomData;
                 this.stadiumData = data.roomData.stadium || this.stadiumData;
             }
-            this._serverGameState = 'playing'; // Start predicting immediately
-            this.startGame(this.currentRoomData);
+
+            // Check if this is host-authority mode
+            if (data?.isHostAuthority) {
+                this._isHostAuthority = true;
+                if (this._isHost()) {
+                    console.log('[GokBall] HOST: I am the game host, running physics locally');
+                    this._initHostGame();
+                }
+            }
+
+            this._serverGameState = 'playing';
+            this.startGame(this.currentRoomData); // Loads stadium
+
+            // IMPORTANT: Spawn player discs AFTER startGame loaded the stadium
+            // Otherwise startGame's loadStadium clears all discs
+            if (this._isHost() && this._isHostAuthority) {
+                this._hostSpawnAllPlayers();
+                this.physics.kickOffReset = true;
+                this.physics.kickOffTeam = 'red';
+                this.physics.inGoalPause = false;
+                console.log('[GokBall] Host players spawned:', this.currentRoomData?.players?.length);
+            }
+
             if (data?.state) this._handleGameState(data.state);
         });
 
+        // Remote inputs from other players (relayed by server)
+        this.network.on('remoteInput', (data) => {
+            if (this._isHost() && this._isHostAuthority && data?.playerId && data?.input) {
+                this._remoteInputs.set(data.playerId, data.input);
+            }
+        });
+
         this.network.on('gameState', (state) => {
+            // Host ignores server gameState in host-authority mode (host IS the authority)
+            if (this._isHost() && this._isHostAuthority) return;
             if (this.gameRunning) this._handleGameState(state);
         });
 
@@ -382,6 +758,65 @@ class GokBallApp {
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
                 this.stopGame();
             }, 3000);
+        });
+
+        // Chat messages (in-game)
+        this.network.on('chatMessage', (data) => {
+            if (this.gameRunning) {
+                this.chat.addMessage(data);
+            }
+        });
+        
+        // Game stopped (admin clicked stop)
+        this.network.on('gameStopped', (data) => {
+            if (this.gameRunning) {
+                this.stopGame();
+                if (this.currentRoomData) {
+                    this.ui.showScreen('roomLobby', this.currentRoomData);
+                } else {
+                    this.ui.showScreen('roomList');
+                }
+            }
+        });
+        
+        // Player kicked / disconnected
+        this.network.on('playerKicked', (data) => {
+            const reason = data.reason || 'Ba\u011flant\u0131 koptu';
+            this.stopGame();
+            // Show connection lost dialog
+            const overlay = document.createElement('div');
+            overlay.id = 'connectionLostOverlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
+            overlay.innerHTML = `
+                <div style="background:var(--bg-card);padding:40px;border-radius:16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5);border:1px solid var(--border-color);min-width:320px;">
+                    <div style="font-size:48px;margin-bottom:16px;">\u26A0\uFE0F</div>
+                    <h2 style="color:var(--text-primary);margin:0 0 8px;font-size:22px;">Ba\u011flant\u0131 Koptu</h2>
+                    <p style="color:var(--text-secondary);margin:0 0 24px;font-size:14px;">${reason}</p>
+                    <button id="btnConnOk" class="btn btn-primary" style="padding:10px 40px;font-size:16px;font-weight:700;border-radius:8px;">Tamam</button>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById('btnConnOk')?.addEventListener('click', () => {
+                overlay.remove();
+                this.currentRoomData = null;
+                this.ui.showScreen('roomList');
+            });
+        });
+
+        // Pause state for non-host players
+        this.network.on('gamePaused', (data) => {
+            if (this._isHost()) return; // Host handles pause locally
+            if (data.paused) {
+                this._isPaused = true;
+                this._showPauseOverlay();
+            } else {
+                this._isPaused = false;
+                this._removePauseOverlay();
+                this._playResumeAnimation();
+            }
+            if (this.inGameMenu.isVisible) {
+                this.inGameMenu.render(this.currentRoomData);
+            }
         });
 
         this.network.on('teamLockChanged', (data) => {

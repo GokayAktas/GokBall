@@ -120,10 +120,16 @@ export class InGameMenu {
                 <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
                     <button class="btn btn-primary btn-block" id="btnResumeGame" style="font-weight:700; height: 45px; font-size: 16px;">OYUNA DÖN</button>
                     ${isAdmin ? `
-                        <button class="btn btn-danger btn-block" id="btnStopGame" style="font-weight:700; height: 40px; display:flex; gap:8px; justify-content:center; align-items:center;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
-                            MAÇI DURDUR (LOBİYE DÖN)
-                        </button>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn btn-secondary btn-block" id="btnPauseGame" style="font-weight:700; height: 40px; display:flex; gap:8px; justify-content:center; align-items:center; background:rgba(128,128,128,0.4); border:1px solid rgba(255,255,255,0.15); flex:1;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                ${this.app._isPaused ? 'DEVAM ET' : 'MAÇI DURAKLAT'}
+                            </button>
+                            <button class="btn btn-danger btn-block" id="btnStopGame" style="font-weight:700; height: 40px; display:flex; gap:8px; justify-content:center; align-items:center; flex:1;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                                MAÇI SONLANDIR
+                            </button>
+                        </div>
                     ` : ''}
                 </div>
             </div>
@@ -147,8 +153,9 @@ export class InGameMenu {
 
         if (isAdmin) {
             this.container.querySelector('#btnStopGame')?.addEventListener('click', () => this.app.network.stopGame());
-            // Note: pauseGame might need implementation on server if not present
-            this.container.querySelector('#btnPauseGame')?.addEventListener('click', () => this.app.network.socket.emit('pauseGame'));
+            this.container.querySelector('#btnPauseGame')?.addEventListener('click', () => {
+                this.app._togglePause();
+            });
 
             this.container.querySelector('#btnToggleLock')?.addEventListener('click', () => {
                 const nextLocked = !this.app.currentRoomData?.teamsLocked;

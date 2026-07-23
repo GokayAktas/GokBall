@@ -238,9 +238,62 @@ io.on('connection', (socket) => {
     // --- Game Input ---
     socket.on('input', (input) => {
         const room = getPlayerRoom(socket.id);
-        if (room && room.game.state === 'playing') {
-            room.game.setPlayerInput(socket.id, input);
+        if (!room || room.game.state !== 'playing') return;
+
+        // HOST-AUTHORITY MODE: Relay non-host inputs to the host
+        if (room.hostId && socket.id !== room.hostId) {
+            const hostSocket = io.sockets.sockets.get(room.hostId);
+            if (hostSocket) {
+                hostSocket.emit('remoteInput', { playerId: socket.id, input });
+            }
+            return;
         }
+
+        // Normal mode: apply to server physics
+        room.game.setPlayerInput(socket.id, input);
+    });
+
+    // --- Authority State (from Host in host-authority mode) ---
+    // Host runs physics and sends authoritative state; server relays to other players
+    socket.on('authorityState', (state) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        // Only accept from the host
+        if (socket.id !== room.hostId) return;
+        // Broadcast to everyone EXCEPT the host
+        socket.to(room.id).emit('gameState', state);
+    });
+
+    // --- Host Pause Event (relay to non-host players) ---
+    socket.on('pauseGame', (data) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        if (socket.id !== room.hostId) return;
+        socket.to(room.id).emit('gamePaused', { paused: data.paused });
+    });
+
+    // --- Host Goal Event (relay to non-host players) ---
+    socket.on('hostGoalEvent', (data) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        if (socket.id !== room.hostId) return;
+        socket.to(room.id).emit('goalScored', { 
+            team: data.team, 
+            scoreRed: data.scoreRed, 
+            scoreBlue: data.scoreBlue 
+        });
+    });
+
+    // --- Host Game Over Event (relay to non-host players) ---
+    socket.on('hostGameOverEvent', (data) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        if (socket.id !== room.hostId) return;
+        socket.to(room.id).emit('gameOver', {
+            winner: data.winner,
+            scoreRed: data.scoreRed,
+            scoreBlue: data.scoreBlue
+        });
     });
 
     // --- Start/Stop Game ---
@@ -259,7 +312,22 @@ io.on('connection', (socket) => {
         }
 
         try {
-            room.game.start();
+            // In host-authority mode, server doesn't run physics loop.
+            // Just broadcast gameStarted, host handles physics.
+            room.game.state = 'playing';
+            room.game.scoreRed = 0;
+            room.game.scoreBlue = 0;
+            room.game.timeElapsed = 0;
+            
+            // Broadcast start to everyone
+            io.to(room.id).emit('gameStarted', {
+                scoreRed: 0,
+                scoreBlue: 0,
+                roomData: room.getRoomData(),
+                isHostAuthority: true
+            });
+            
+            console.log(`[Server] Game started (host-authority) in room ${room.id}`);
         } catch (err) {
             console.error('[Server] Error starting game:', err);
             socket.emit('roomError', { error: 'Oyun başlatılırken bir hata oluştu.' });
@@ -273,8 +341,13 @@ io.on('connection', (socket) => {
         const player = room.players.get(socket.id);
         if (!player || !player.isAdmin) return;
 
-        room.game.stop();
-        room.broadcast('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
+        if (room.hostId && socket.id === room.hostId) {
+            // Host-authority: tell host to stop game via relay
+            io.to(room.id).emit('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
+        } else {
+            room.game.stop();
+            room.broadcast('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
+        }
     });
 
     // --- Chat ---
@@ -386,6 +459,29 @@ function leaveCurrentRoom(socket) {
 
     const room = rooms.get(roomId);
     if (room) {
+        // HOST MODE: If host (creator) leaves, kick all other players
+        if (socket.id === room.creatorId) {
+            // Kick all other players
+            for (const [pid, p] of room.players) {
+                if (pid !== socket.id) {
+                    p.socket.emit('playerKicked', {
+                        reason: 'Oda kurucusu ayr\u0131ld\u0131',
+                        hostLeft: true
+                    });
+                    p.socket.disconnect();
+                }
+            }
+            // Stop game and remove room
+            room.game.stop();
+            rooms.delete(roomId);
+            // Only clear players from this specific room
+            for (const pid of room.players.keys()) {
+                playerRooms.delete(pid);
+            }
+            console.log(`[Server] Host left, room closed: ${roomId}`);
+            return;
+        }
+
         const remaining = room.removePlayer(socket.id);
         socket.leave(roomId);
 

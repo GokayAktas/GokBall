@@ -1819,3 +1819,100 @@ select.input option {
   transform: scale(1.1) rotate(10deg);
   filter: brightness(1.2);
 }
+
+/* ============================================
+   Pause Overlay
+   ============================================ */
+.pause-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: pauseFadeIn 0.3s ease;
+}
+
+@keyframes pauseFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.pause-text-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.8), 0 0 40px rgba(0,0,0,0.5);
+}
+
+.pause-title {
+  font-size: 64px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+}
+
+.pause-subtitle {
+  font-size: 36px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.8);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+}
+
+.pause-hint {
+  margin-top: 30px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  font-weight: 500;
+  letter-spacing: 1px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Grayscale filter for paused canvas */
+#gameCanvas.paused {
+  filter: grayscale(100%) brightness(0.6) contrast(1.1);
+  transition: filter 0.5s ease;
+}
+
+#gameCanvas:not(.paused) {
+  filter: grayscale(0%) brightness(1) contrast(1);
+  transition: filter 0.3s ease;
+}
+
+/* ============================================
+   Resume Animation (White Rectangle Shrink)
+   ============================================ */
+.resume-animation {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 300px;
+  height: 80px;
+  transform: translate(-50%, -50%);
+  background: white;
+  z-index: 2500;
+  pointer-events: none;
+  animation: resumeShrink 3s linear forwards;
+}
+
+@keyframes resumeShrink {
+  0%   { width: 300px; height: 80px; opacity: 1; }
+  100% { width: 0px;    height: 80px; opacity: 0; }
+}

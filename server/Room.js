@@ -169,7 +169,7 @@ export class Room {
         this.name = options.name || 'GokBall Room';
         this.password = options.password || '';
         this.maxPlayers = Math.min(options.maxPlayers || 12, 24);
-        this.roomType = 'host';
+        this.roomType = 'cloud';
         this.players = new Map(); // socketId -> Player
         this.bannedIPs = new Set();
         this.hostId = null;

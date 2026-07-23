@@ -306,13 +306,14 @@ export class Renderer {
             ctx.lineWidth = lw;
             ctx.stroke();
 
-            // Avatar (Centered bold text)
-            if (disc.avatar || disc.isPlayer) {
+            // Avatar (Centered bold text) - check both avatar and _avatar properties
+            const avatarChar = disc.avatar || disc._avatar || (disc.isPlayer ? '?' : '');
+            if (avatarChar) {
                 ctx.fillStyle = disc.avatarColor ? '#' + disc.avatarColor : '#FFFFFF';
                 ctx.font = `900 ${disc.radius * 1.1}px Inter, "Segoe UI", Tahoma, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(disc.avatar || "", disc.pos.x, disc.pos.y + (disc.radius * 0.05));
+                ctx.fillText(avatarChar, disc.pos.x, disc.pos.y + (disc.radius * 0.05));
             }
 
             // Name label BELOW other players (NOT self)

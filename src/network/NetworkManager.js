@@ -104,6 +104,8 @@ export class NetworkManager {
             this.socket.on('playerTyping', (data) => this._trigger('playerTyping', data));
             this.socket.on('teamColorsUpdated', (data) => this._trigger('teamColorsUpdated', data));
             this.socket.on('kickReleased', (data) => this._trigger('kickReleased', data));
+            this.socket.on('remoteInput', (data) => this._trigger('remoteInput', data));
+            this.socket.on('gamePaused', (data) => this._trigger('gamePaused', data));
         });
     }
 
