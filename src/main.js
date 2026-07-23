@@ -40,6 +40,18 @@ class GokBallApp {
         this.gameRunning = false;
         this.stadiumData = null;
 
+        // Local game state (for offline/local mode)
+        this._localGameState = 'stopped'; // 'stopped' | 'playing' | 'goal' | 'ended'
+        this._localTimeElapsed = 0;       // in ticks (60Hz)
+        this._localScoreRed = 0;
+        this._localScoreBlue = 0;
+        this._localGoalPauseTicks = 0;    // countdown during goal celebration
+        this._localGoalCooldownTicks = 0; // prevent duplicate goals
+        this._localScoreLimit = 3;
+        this._localTimeLimit = 180;       // seconds
+        this._localKickOffTeam = 'red';
+        this._localKickOffReset = false;
+
         // Load saved zoom
         const savedZoom = localStorage.getItem('gokball_zoom');
         if (savedZoom) this.camera.setZoom(parseFloat(savedZoom));
@@ -73,13 +85,25 @@ class GokBallApp {
         this.ui.registerScreen('roomLobby', new RoomLobby(this));
         this.ui.registerScreen('settings', new Settings(this));
 
-        // Connect to server
+        // Connect to server (or fallback to local/offline mode)
         try {
             await this.network.connect();
             this.physics.myPlayerId = this.network.playerId;
             console.log('[GokBall] Connected to server');
         } catch (err) {
-            console.error('[GokBall] Failed to connect:', err);
+            console.warn('[GokBall] Server unavailable, switching to local/offline mode:', err.message);
+            try {
+                await this.network.connectLocal();
+                this.physics.myPlayerId = this.network.playerId;
+                console.log('[GokBall] Local mode active');
+            } catch (localErr) {
+                console.error('[GokBall] Local connection also failed:', localErr);
+            }
+        }
+
+        // Local mode initialization
+        if (this.network.isLocal) {
+            this._initLocalMode();
         }
 
         // Setup network callbacks
@@ -88,7 +112,6 @@ class GokBallApp {
         // Esc Menu Keyboard shortcut & Settings button binding
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.gameRunning) {
-                // If modal settings is open, close it first
                 if (this.settingsModal.isVisible) {
                     this.settingsModal.hide();
                     return;
@@ -97,7 +120,6 @@ class GokBallApp {
             }
         });
 
-        // Listen for HUD events
         window.addEventListener('toggleInGameMenu', () => {
             if (this.gameRunning) this.inGameMenu.toggle();
         });
@@ -144,227 +166,447 @@ class GokBallApp {
         this.ui.showScreen('mainMenu');
     }
 
-    _setupNetworkCallbacks() {
-        // Room created -> go to lobby
-        this.network.on('roomCreated', (data) => {
-            this.currentRoomData = data;
-            this.currentRoomData.roomType = 'cloud';
-            this.stadiumData = data.stadium;
-            this.physics.myPlayerId = this.network.socket?.id;
-            this.physics.isLocalAuthorityMode = false;
-            this.ui.showScreen('roomLobby', data);
-        });
+    /** Initialize local mode event overrides */
+    _initLocalMode() {
+        console.log('[GokBall] Local mode initialized');
 
-        // Room joined -> go to lobby
-        this.network.on('roomJoined', (data) => {
-            this.currentRoomData = data;
-            this.currentRoomData.roomType = 'cloud';
-            this.stadiumData = data.stadium;
-            this.physics.myPlayerId = this.network.socket?.id;
-            this.physics.isLocalAuthorityMode = false;
-
-            // If game is active, jump in as spectator/player
-            if (data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal')) {
-                this.startGame(data);
-            } else {
-                this.ui.showScreen('roomLobby', data);
-            }
-        });
-
-        this.network.on('roomUpdate', (data) => {
-            if (this.currentRoomData) {
-                if (data.scoreLimit !== undefined) this.currentRoomData.game.scoreLimit = data.scoreLimit;
-                if (data.timeLimit !== undefined) this.currentRoomData.game.timeLimit = data.timeLimit;
-                if (data.teamsLocked !== undefined) this.currentRoomData.teamsLocked = data.teamsLocked;
-                if (data.players) this.currentRoomData.players = data.players;
-
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
-            }
-        });
-
-        this.network.on('teamLockChanged', (data) => {
-            if (this.currentRoomData) {
-                this.currentRoomData.teamsLocked = data.locked;
-                if (this.inGameMenu.isVisible) {
-                    this.inGameMenu.render(this.currentRoomData);
+        // Override network changeTeam to work locally
+        this.network.changeTeam = (team) => {
+            if (!['red', 'blue', 'spectator'].includes(team)) return;
+            if (this.currentRoomData?.players) {
+                const myPlayer = this.currentRoomData.players.find(p => p.id === this.network.playerId);
+                if (myPlayer) {
+                    myPlayer.team = team;
+                    this._triggerLocalEvent('teamChanged', {
+                        playerId: this.network.playerId,
+                        team,
+                        players: this.currentRoomData.players
+                    });
+                    this._triggerLocalEvent('roomUpdate', {
+                        players: this.currentRoomData.players
+                    });
                 }
             }
-        });
+        };
 
-        this.network.on('playerJoined', (data) => {
-            if (this.currentRoomData && data.players) {
-                this.currentRoomData.players = data.players;
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+        // Override startGame
+        this.network.startGame = () => {
+            this._localStartGame();
+        };
+
+        // Override stopGame
+        this.network.stopGame = () => {
+            this._localStopGame();
+        };
+
+        // Override changeStadium (handles both string keys and HBS objects)
+        this.network.changeStadium = (stadiumData) => {
+            if (this._localGameState === 'playing' || this._localGameState === 'goal') return;
+            
+            let finalStadium = stadiumData;
+            
+            // String stadium name -> try to load a pre-generated one via the server's _loadLocalStadium
+            if (typeof stadiumData === 'string') {
+                this._loadLocalStadium(stadiumData);
+                return;
             }
-        });
-
-        this.network.on('playerLeft', (data) => {
-            if (this.currentRoomData && data.players) {
-                this.currentRoomData.players = data.players;
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            
+            if (typeof finalStadium === 'object') {
+                this.stadiumData = finalStadium;
+                this._currentStadium = finalStadium;
+                if (this.currentRoomData) this.currentRoomData.stadium = finalStadium;
+                this._triggerLocalEvent('stadiumChanged', { stadium: finalStadium });
+                this._triggerLocalEvent('chatMessage', {
+                    playerName: '🏟 SİSTEM', message: `Saha değiştirildi: ${finalStadium?.name || 'Custom'}`,
+                    team: 'spectator', system: true
+                });
             }
-        });
+        };
 
-        this.network.on('teamChanged', (data) => {
-            if (this.currentRoomData && data.players) {
-                this.currentRoomData.players = data.players;
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
-            }
-        });
-
-        this.network.on('adminUpdate', (data) => {
-            if (this.currentRoomData && data.players) {
-                this.currentRoomData.players = data.players;
-                this.currentRoomData.adminId = data.playerId;
-                this.physics.isLocalAuthorityMode = false;
-                
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
-            }
-        });
-
-        // Room error
-        this.network.on('roomError', (data) => {
-            alert(data.error || 'Bir hata oluştu');
-        });
-
-        // Game started -> enter game
-        this.network.on('gameStarted', (data) => {
-            if (data?.roomData) {
-                this.currentRoomData = data.roomData;
-                this.stadiumData = data.roomData.stadium || this.stadiumData;
-            }
-            this.startGame(this.currentRoomData);
-            if (data?.state) {
-                this._handleGameState(data.state);
-            }
-        });
-
-        // Game state update (during game)
-        this.network.on('gameState', (state) => {
-            if (!this.gameRunning) return;
-            this._handleGameState(state);
-        });
-
-        // Goal scored
-        this.network.on('goalScored', (data) => {
-            if (this.scoreboard) {
-                this.scoreboard.update(data.scoreRed, data.scoreBlue, 0);
-                this.scoreboard.showGoal(data.team);
-                this.audio.playGoal();
-            }
-            this.chat.addMessage({
-                message: `⚽ GOL! ${data.team === 'red' ? 'Kırmızı' : 'Mavi'} takım skoru: ${data.scoreRed} - ${data.scoreBlue}`,
-                system: true
-            });
-        });
-
-        // Game over
-        this.network.on('gameOver', (data) => {
-            const winTeamStr = data.winner === 'red' ? 'Kırmızı' : 'Mavi';
-                const color = data.winner === 'red' ? (getComputedStyle(document.documentElement).getPropertyValue('--red-team') || '#c70000') : (getComputedStyle(document.documentElement).getPropertyValue('--blue-team') || '#00008c');
-
-            // Create nice on-screen overlay instead of alert
-            const overlay = document.createElement('div');
-            overlay.className = 'game-over-overlay';
-            overlay.innerHTML = `
-                <h1 style="color: ${color}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
-                <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
-            `;
-            document.body.appendChild(overlay);
-
-            // Wait 3 seconds, then return to lobby
-            setTimeout(() => {
-                if (document.body.contains(overlay)) {
-                    document.body.removeChild(overlay);
-                }
-                this.stopGame();
-                if (data.roomData) this.currentRoomData = data.roomData;
-                this.ui.showScreen('roomLobby', this.currentRoomData);
-            }, 3000);
-        });
-
-        // Game stopped
-        this.network.on('gameStopped', (data) => {
-            this.stopGame();
-            if (data.roomData) this.currentRoomData = data.roomData;
-            this.ui.showScreen('roomLobby', this.currentRoomData);
-        });
-
-        // Player kicked
-        this.network.on('playerKicked', (data) => {
-            this.stopGame();
-            if (data.hostLeft) {
-                alert('Oda kurucusu ayrıldığı için oda kapatıldı.');
-            } else {
-                alert(data.reason || 'Odadan atıldınız');
-            }
-            this.ui.showScreen('mainMenu');
-        });
-
-        // Chat messages (in-game and lobby)
-        this.network.on('chatMessage', (data) => {
-            if (this.gameRunning) {
-                this.chat.addMessage(data);
-            }
-        });
-
-        // Disconnect
-        this.network.on('disconnect', () => {
-            this.stopGame();
-            this.ui.showApp();
-            this.ui.showScreen('mainMenu');
-        });
-
-        // Stadium changed
-        this.network.on('stadiumChanged', (data) => {
-            this.stadiumData = data.stadium;
-        });
-
-        // Team colors updated by admin -> update CSS vars and local disc colors
-        this.network.on('teamColorsUpdated', (data) => {
-            try {
-                if (!data) return;
-
-                // If server sent allTeamColors, prefer that
-                const all = data.allTeamColors || (data.team ? { [data.team]: data.teamColors } : null);
-
-        // Server instructs client to release a held kick (after auto-trigger)
-        this.network.on('kickReleased', () => {
-            try {
-                this.input.suppressKickUntilKeyUp();
-            } catch (e) {}
-        });
-                if (!all) return;
-
-                // Apply CSS variables for red and blue if present
-                if (all.red && all.red.colors && all.red.colors[0]) {
-                    document.documentElement.style.setProperty('--red-team', '#' + all.red.colors[0]);
-                }
-                if (all.blue && all.blue.colors && all.blue.colors[0]) {
-                    document.documentElement.style.setProperty('--blue-team', '#' + all.blue.colors[0]);
-                }
-
-                // Apply to local physics discs immediately for instant visual feedback
-                if (this.gameRunning && this.physics && this.physics.discs) {
-                    for (const disc of this.physics.discs) {
-                        if (!disc.isPlayer) continue;
-                        const tc = all[disc.team];
-                        if (tc && tc.colors && tc.colors.length > 0) {
-                            disc.color = tc.colors[0];
-                            disc.colors = tc.colors.slice();
-                            disc.colorAngle = tc.angle || 0;
-                            disc.avatarColor = tc.textColor || disc.avatarColor;
+        // Handle socket.emit calls from RoomLobby and other components
+        if (this.network.socket) {
+            const origEmit = this.network.socket.emit.bind(this.network.socket);
+            this.network.socket.emit = (event, data) => {
+                switch (event) {
+                    case 'toggleTeamLock':
+                        if (this.currentRoomData) {
+                            const locked = !this.currentRoomData.teamsLocked;
+                            this.currentRoomData.teamsLocked = locked;
+                            this._triggerLocalEvent('teamLockChanged', { locked });
+                            this._triggerLocalEvent('chatMessage', {
+                                playerName: '🏟 SİSTEM',
+                                message: locked ? '🔒 Takımlar kilitlendi' : '🔓 Takım kilidi açıldı',
+                                system: true, team: 'spectator'
+                            });
                         }
-                    }
-                }
+                        break;
 
-                // Let UI components re-render if needed (scoreboard/inGameMenu use CSS vars)
-                if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
-                if (this.scoreboard) this.scoreboard.render && this.scoreboard.render();
-            } catch (e) {
-                console.error('Error applying teamColorsUpdated', e);
+                    case 'setScoreLimit':
+                        if (this.currentRoomData?.game) {
+                            const limit = data === '0' ? 0 : (parseInt(data) || 3);
+                            this.currentRoomData.game.scoreLimit = limit;
+                            this._localScoreLimit = limit;
+                            this._triggerLocalEvent('roomUpdate', { scoreLimit: limit });
+                        }
+                        break;
+
+                    case 'setTimeLimit':
+                        if (this.currentRoomData?.game) {
+                            const limit = data === '0' ? 0 : (parseInt(data) || 180);
+                            this.currentRoomData.game.timeLimit = limit;
+                            this._localTimeLimit = limit;
+                            this._triggerLocalEvent('roomUpdate', { timeLimit: limit });
+                        }
+                        break;
+
+                    case 'setOvertime':
+                        if (this.currentRoomData?.game) {
+                            this.currentRoomData.game.overtimeEnabled = !!data;
+                            this._triggerLocalEvent('roomUpdate', { overtimeEnabled: !!data });
+                        }
+                        break;
+
+                    case 'randomizeTeams':
+                        // Single player - just a fun notification
+                        this._triggerLocalEvent('chatMessage', {
+                            playerName: '[SİSTEM]',
+                            message: '🎲 Tek oyuncu modunda takımlar karıştırılamaz!',
+                            team: 'spectator', system: true
+                        });
+                        break;
+
+                    case 'clearTeam':
+                        // Move admin to spectator
+                        if (this.currentRoomData?.players) {
+                            const myP = this.currentRoomData.players.find(p => p.id === this.network.playerId);
+                            if (myP && myP.team === data) {
+                                myP.team = 'spectator';
+                                this._triggerLocalEvent('teamChanged', {
+                                    playerId: this.network.playerId,
+                                    team: 'spectator',
+                                    players: this.currentRoomData.players
+                                });
+                            }
+                        }
+                        break;
+
+                    default:
+                        console.log('[Network][Local] emit:', event, data);
+                }
+            };
+        }
+    }
+
+    /** Generate small stadium */
+    _generateSmallStadium() { return this._generateClassicStadium(); } // Simplified — reuse classic
+
+    _loadLocalStadium(stadiumKey) {
+        // All stadiums use the same classic structure (simplified for local mode)
+        const stadium = this._generateClassicStadium();
+        
+        const names = {
+            small: 'Küçük', classic: 'Klasik', futsal: 'Futsal 3v3',
+            big: 'Büyük', huge: 'Devasa'
+        };
+        stadium.name = names[stadiumKey] || 'Klasik';
+
+        this.stadiumData = stadium;
+        this._currentStadium = stadium;
+        if (this.currentRoomData) this.currentRoomData.stadium = stadium;
+        this._triggerLocalEvent('stadiumChanged', { stadium });
+        this._triggerLocalEvent('chatMessage', {
+            playerName: '🏟 SİSTEM', message: `Saha değiştirildi: ${stadium.name}`,
+            team: 'spectator', system: true
+        });
+    }
+
+    /** Trigger a local event (simulates server event) */
+    _triggerLocalEvent(event, data) {
+        // Use setTimeout to simulate async server response
+        setTimeout(() => {
+            this.network._trigger(event, data);
+        }, 0);
+    }
+
+    // ============================================
+    // Local Room Creation
+    // ============================================
+
+    /** Generate a full classic stadium with physics data */
+    _generateClassicStadium() {
+        const fieldW = 370, fieldH = 170, spawnDist = 170;
+        const goalDepth = 40, goalWidth = 64, goalBackWidth = 44;
+        return {
+            name: 'Klasik', width: fieldW + goalDepth + 10, height: fieldH + 30, spawnDistance: spawnDist,
+            bg: { type: 'grass', width: fieldW, height: fieldH, kickOffRadius: 75, cornerRadius: 0,
+                color: '699057', stripeColor: '7B9F6C', bgColor: '718D5A', lineColor: 'C7E6BD',
+                showCenterLine: true, showKickOffCircle: true },
+            vertexes: [
+                { x: -fieldW, y: fieldH, bCoef: 0.1, cMask: ['ball'] },
+                { x: -fieldW, y: goalWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: -fieldW, y: -goalWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: -fieldW, y: -fieldH, bCoef: 0.1, cMask: ['ball'] },
+                { x: fieldW, y: fieldH, bCoef: 0.1, cMask: ['ball'] },
+                { x: fieldW, y: goalWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: fieldW, y: -goalWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: fieldW, y: -fieldH, bCoef: 0.1, cMask: ['ball'] },
+                { x: 0, y: fieldH, bCoef: 0.1, cMask: [], cGroup: [] },
+                { x: 0, y: -fieldH, bCoef: 0.1, cMask: [], cGroup: [] },
+                { x: -(fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: -(fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: (fieldW + goalDepth), y: goalBackWidth, bCoef: 0.1, cMask: ['ball'] },
+                { x: (fieldW + goalDepth), y: -goalBackWidth, bCoef: 0.1, cMask: ['ball'] }
+            ],
+            segments: [
+                { v0: 0, v1: 8, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 8, v1: 4, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 3, v1: 9, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 9, v1: 7, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 0, v1: 1, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 2, v1: 3, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 4, v1: 5, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 6, v1: 7, curve: 0, vis: true, color: 'C7E6BD', bCoef: 1, cMask: ['ball'] },
+                { v0: 1, v1: 10, curve: 90, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] },
+                { v0: 10, v1: 11, curve: 0, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] },
+                { v0: 11, v1: 2, curve: 90, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] },
+                { v0: 5, v1: 12, curve: -90, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] },
+                { v0: 12, v1: 13, curve: 0, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] },
+                { v0: 13, v1: 6, curve: -90, vis: true, color: '000000', bCoef: 0.1, cMask: ['ball'] }
+            ],
+            goals: [
+                { p0: [-fieldW, goalWidth], p1: [-fieldW, -goalWidth], team: 'red' },
+                { p0: [fieldW, goalWidth], p1: [fieldW, -goalWidth], team: 'blue' }
+            ],
+            discs: [
+                { pos: [0, 0], radius: 10, invMass: 1, bCoef: 0.5, damping: 0.99, color: 'FFFFFF', cMask: ['all'], cGroup: ['ball'] },
+                { pos: [-fieldW, goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: 'CCCCFF', cMask: ['all'] },
+                { pos: [-fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: 'CCCCFF', cMask: ['all'] },
+                { pos: [fieldW, goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: 'CCCCFF', cMask: ['all'] },
+                { pos: [fieldW, -goalWidth], radius: 8, invMass: 0, bCoef: 0.5, color: 'CCCCFF', cMask: ['all'] }
+            ],
+            planes: [
+                { normal: [0, 1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ['all'] },
+                { normal: [0, -1], dist: -(fieldH + 30), bCoef: 0.1, cMask: ['all'] },
+                { normal: [1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ['all'] },
+                { normal: [-1, 0], dist: -(fieldW + goalDepth + 10), bCoef: 0.1, cMask: ['all'] }
+            ],
+            playerPhysics: {
+                radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+                acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+            },
+            ballPhysics: 'disc0'
+        };
+    }
+
+    _createLocalRoom(options) {
+        const localId = this.network.playerId;
+        const roomId = 'local_room_' + Date.now();
+
+        // Current player data
+        const playerData = {
+            id: localId,
+            name: this.playerName || 'Player',
+            team: 'spectator',
+            isAdmin: true,
+            avatar: Math.floor(Math.random() * 99 + 1).toString()
+        };
+
+        // Generate full stadium data with physics
+        let stadium = null;
+        if (options.stadium && typeof options.stadium === 'object') {
+            stadium = options.stadium;
+        } else {
+            stadium = this._generateClassicStadium();
+        }
+
+        // Room data (mimics server roomCreated response)
+        const roomData = {
+            roomId: roomId,
+            roomName: options.name || 'Yerel Oda',
+            roomType: 'local',
+            creatorId: localId,
+            adminId: localId,
+            player: playerData,
+            players: [playerData],
+            stadium: stadium,
+            teamsLocked: false,
+            teamColors: {
+                red: { angle: 0, textColor: 'FFFFFF', colors: ['D32F2F'] },
+                blue: { angle: 0, textColor: 'FFFFFF', colors: ['1565C0'] }
+            },
+            game: {
+                state: 'stopped',
+                scoreRed: 0,
+                scoreBlue: 0,
+                time: 0,
+                scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
+                timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180
+            },
+            chatHistory: []
+        };
+
+        this.stadiumData = stadium;
+
+        // Trigger local roomCreated event
+        this._triggerLocalEvent('roomCreated', roomData);
+    }
+
+    // ============================================
+    // Local Game Management
+    // ============================================
+
+    _localStartGame() {
+        if (this._localGameState === 'playing') return;
+
+        this._localGameState = 'playing';
+        this._localTimeElapsed = 0;
+        this._localScoreRed = 0;
+        this._localScoreBlue = 0;
+        this._localGoalCooldownTicks = 0;
+        this._localKickOffReset = true;
+        this._localKickOffTeam = 'red';
+        this._serverGameState = 'playing';
+
+        // Start game first (loads stadium, clears UI, starts game loop)
+        this.startGame(this.currentRoomData);
+
+        // Spawn player discs AFTER stadium is loaded (fixes disc clearing bug)
+        this._localSpawnPlayers();
+
+        // Set kickoff state for physics
+        this.physics.kickOffReset = true;
+        this.physics.kickOffTeam = 'red';
+
+        // Broadcast start locally
+        this._triggerLocalEvent('gameStarted', {
+            scoreRed: 0,
+            scoreBlue: 0,
+            roomData: this.currentRoomData,
+            state: {
+                state: 'playing',
+                physics: this.physics.getState(),
+                scoreRed: 0,
+                scoreBlue: 0,
+                time: 0
             }
         });
+
+        // Chat message
+        this._triggerLocalEvent('chatMessage', {
+            playerName: '🏟 SİSTEM', message: '🎮 Maç başladı!',
+            team: 'spectator', system: true
+        });
+    }
+
+    _localSpawnPlayers() {
+        // Remove existing player discs
+        const toRemove = [];
+        for (let i = 0; i < this.physics.discs.length; i++) {
+            if (this.physics.discs[i].isPlayer) toRemove.push(i);
+        }
+        for (const idx of toRemove.sort((a, b) => b - a)) {
+            this.physics.discs.splice(idx, 1);
+        }
+
+        // Find which team the local player is on
+        const myPlayer = this.currentRoomData?.players?.find(p => p.id === this.network.playerId);
+        // Default to 'red' if spectator (spectators don't get a disc)
+        const myTeam = (myPlayer?.team === 'red' || myPlayer?.team === 'blue') ? myPlayer.team : 'red';
+
+        const playerPhysics = {
+            radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
+            acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+        };
+
+        const spawnDist = this._currentStadium?.spawnDistance || 170;
+
+        // Spawn the local player's disc
+        const spawnX = myTeam === 'red' ? -spawnDist : spawnDist;
+        const disc = this.physics.addPlayerDisc(playerPhysics, myTeam, spawnX, 0);
+        disc.id = this.network.playerId;
+        disc._playerName = this.playerName;
+        disc.color = myTeam === 'red' ? 'c70000' : '00008c';
+        disc.colors = [disc.color];
+        disc.avatarColor = 'FFFFFF';
+        disc.ownerId = this.network.playerId;
+    }
+
+    _localStopGame() {
+        this._localGameState = 'stopped';
+        this._triggerLocalEvent('gameStopped', {
+            reason: 'Stopped by admin',
+            roomData: this.currentRoomData
+        });
+    }
+
+    /** Handle goal scoring in local mode (called from _gameLoop) */
+    _localHandleGoal(scoredOnTeam) {
+        // scoredOnTeam = the team whose goal was scored on (they conceded)
+        const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';
+
+        if (scoringTeam === 'red') this._localScoreRed++;
+        else this._localScoreBlue++;
+
+        // Set goal state
+        this._localGameState = 'goal';
+        this._localGoalPauseTicks = 3 * 60; // 3 seconds at 60Hz
+        this._localGoalCooldownTicks = this._localTimeElapsed + 60 + 2;
+        this._localKickOffReset = true;
+        this._localKickOffTeam = scoredOnTeam; // conceded team gets kickoff
+
+        // Set physics state
+        this.physics.kickOffReset = true;
+        this.physics.kickOffTeam = scoredOnTeam;
+        this.physics.inGoalPause = true;
+
+        // Update scoreboard
+        this.scoreboard.update(this._localScoreRed, this._localScoreBlue, Math.floor(this._localTimeElapsed / 60));
+        this.scoreboard.showGoal(scoringTeam);
+        this.audio.playGoal();
+
+        // Chat message
+        this.chat.addMessage({
+            message: `⚽ GOL! ${scoringTeam === 'red' ? 'Kırmızı' : 'Mavi'} takım skoru: ${this._localScoreRed} - ${this._localScoreBlue}`,
+            system: true
+        });
+    }
+
+    /** Handle game over in local mode */
+    _localGameOver() {
+        const winner = this._localScoreRed > this._localScoreBlue ? 'red' : 'blue';
+        this._localGameState = 'ended';
+
+        const winTeamStr = winner === 'red' ? 'Kırmızı' : 'Mavi';
+        const root = document.documentElement;
+        const color = winner === 'red'
+            ? (getComputedStyle(root).getPropertyValue('--red-team') || '#c70000')
+            : (getComputedStyle(root).getPropertyValue('--blue-team') || '#00008c');
+
+        const overlay = document.createElement('div');
+        overlay.className = 'game-over-overlay';
+        overlay.innerHTML = `
+            <h1 style="color: ${color}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
+            <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${this._localScoreRed} - ${this._localScoreBlue}</p>
+        `;
+        document.body.appendChild(overlay);
+
+        setTimeout(() => {
+            if (document.body.contains(overlay)) document.body.removeChild(overlay);
+            this.stopGame();
+            this._localGameState = 'stopped';
+            this._localTimeElapsed = 0;
+            if (this.currentRoomData) {
+                this.currentRoomData.game = {
+                    ...this.currentRoomData.game,
+                    state: 'stopped',
+                    scoreRed: this._localScoreRed,
+                    scoreBlue: this._localScoreBlue
+                };
+                this.ui.showScreen('roomLobby', this.currentRoomData);
+            } else {
+                this.ui.showScreen('mainMenu');
+            }
+        }, 3000);
     }
 
     // ============================================
@@ -376,6 +618,14 @@ class GokBallApp {
             alert('Sunucuya bağlı değilsiniz! Lütfen sayfayı yenileyin.');
             return;
         }
+
+        // Local mode: create room entirely on the client side
+        if (this.network.isLocal) {
+            this._createLocalRoom(options);
+            return;
+        }
+
+        // Server mode: send to server
         this.network.createRoom(options);
     }
 
@@ -384,9 +634,15 @@ class GokBallApp {
     }
 
     leaveRoom() {
-        this.network.leaveRoom();
+        if (!this.network.isLocal) {
+            this.network.leaveRoom();
+        }
         this.stopGame();
         this.currentRoomData = null;
+        this._localGameState = 'stopped';
+        this._localTimeElapsed = 0;
+        this._localScoreRed = 0;
+        this._localScoreBlue = 0;
         this.ui.showScreen('mainMenu');
     }
 
@@ -455,30 +711,96 @@ class GokBallApp {
             this.physics.myPlayerId = this.network.socket.id;
         }
 
-        // Send input to server
+        // Send input (no-op in local mode with fake socket)
         this.network.sendInput(inputState);
 
-        // Fixed Timestep Physics (60Hz) - ROOT CAUSE FIX FOR TELEPORTING
+        // Fixed Timestep Physics (60Hz)
         const now = performance.now();
         const dt = now - (this.lastPhysTime || now);
         this.lastPhysTime = now;
-        
-        // Accumulate time since last frame (cap to avoid spiral of death)
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
 
-        const stepSize = 1000 / 60; // Standard 60Hz physics
+        const stepSize = 1000 / 60;
         while (this.accumulator >= stepSize) {
-            // RUN FULL PREDICTION AT FIXED 60HZ
-            if (this._serverGameState === 'playing') {
-                // Prevent remote players from endlessly moving locally based on last key press
-                for (const disc of this.physics.discs) {
-                    if (disc.isPlayer) {
-                        disc.input = { up: false, down: false, left: false, right: false, kick: false };
+            if (this._localGameState === 'playing' || this._serverGameState === 'playing') {
+                // --- LOCAL MODE: Full game state management ---
+                if (this.network.isLocal) {
+                    // Local mode game loop
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer) {
+                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
+                        }
                     }
+                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    if (myDisc) myDisc.input = inputState;
+
+                    const result = this.physics.step();
+
+                    // Check for goals
+                    if (result.goalTeam && this._localGameState === 'playing') {
+                        if (this._localTimeElapsed >= this._localGoalCooldownTicks) {
+                            this._localHandleGoal(result.goalTeam);
+                        }
+                    }
+
+                    // Advance time
+                    if (!this.physics.kickOffReset) {
+                        this._localTimeElapsed++;
+                    }
+
+                    // Check time limit
+                    if (this._localTimeLimit > 0 && this._localTimeElapsed / 60 >= this._localTimeLimit) {
+                        if (this._localScoreRed !== this._localScoreBlue) {
+                            this._localGameOver();
+                        }
+                    }
+
+                    // Update scoreboard
+                    this.scoreboard.update(this._localScoreRed, this._localScoreBlue, Math.floor(this._localTimeElapsed / 60));
+
+                } else {
+                    // --- SERVER MODE: prediction only ---
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer) {
+                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
+                        }
+                    }
+                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    if (myDisc) myDisc.input = inputState;
+                    this.physics.step();
                 }
-                const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                if (myDisc) myDisc.input = inputState; // CRUCIAL: Must update local input BEFORE prediction!
+            } else if (this._localGameState === 'goal') {
+                // Goal pause: physics still runs (ball keeps moving)
                 this.physics.step();
+                this._localGoalPauseTicks--;
+
+                if (this._localGoalPauseTicks <= 0) {
+                    // Reset ball to center
+                    if (this.physics.ballDisc) {
+                        this.physics.ballDisc.pos.x = 0;
+                        this.physics.ballDisc.pos.y = 0;
+                        this.physics.ballDisc.speed.x = 0;
+                        this.physics.ballDisc.speed.y = 0;
+                        this.physics.ballDisc.color = 'FFB82E';
+                    }
+
+                    // Check score limit
+                    if (this._localScoreLimit > 0 &&
+                        (this._localScoreRed >= this._localScoreLimit || this._localScoreBlue >= this._localScoreLimit)) {
+                        this._localGameOver();
+                        this.accumulator -= stepSize;
+                        continue;
+                    }
+
+                    // Reset positions for next kickoff
+                    this.physics.kickOffReset = true;
+                    this.physics.kickOffTeam = this._localKickOffTeam;
+                    this.physics.inGoalPause = false;
+                    this.physics.resetPositions();
+                    this._localSpawnPlayers();
+                    this._localGameState = 'playing';
+                    this._serverGameState = 'playing';
+                }
             }
 
             this.accumulator -= stepSize;

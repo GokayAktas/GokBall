@@ -10,6 +10,7 @@ export class NetworkManager {
         this.connected = false;
         this.playerId = null;
         this.callbacks = {};
+        this.isLocal = false;
     }
 
     /**
@@ -190,11 +191,44 @@ export class NetworkManager {
         }
     }
 
+    /**
+     * Connect in local (offline) mode — no server needed.
+     * Creates a fake socket so the rest of the app works unchanged.
+     */
+    connectLocal() {
+        if (this.connected) return Promise.resolve(this.playerId);
+
+        return new Promise((resolve) => {
+            this.isLocal = true;
+            this.connected = true;
+            const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+            this.playerId = localId;
+
+            this.socket = {
+                id: localId,
+                connected: true,
+                emit: (event, data) => {
+                    console.log('[Network][Local] emit:', event, data);
+                },
+                on: () => {},
+                disconnect: () => {
+                    this.connected = false;
+                    this.isLocal = false;
+                    this.socket = null;
+                }
+            };
+
+            console.log('[Network] Connected locally:', this.playerId);
+            resolve(this.playerId);
+        });
+    }
+
     disconnect() {
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
         }
         this.connected = false;
+        this.isLocal = false;
     }
-}
+

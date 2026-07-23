@@ -97,8 +97,15 @@ export class CreateRoom {
           </div>
         </div>
 
-        <!-- Room type always cloud now -->
-        <input type="hidden" id="roomType" value="cloud" />
+        <!-- Room Type Selector -->
+        <div class="input-group" style="margin-top: 8px;">
+          <label>Oda Türü</label>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary room-type-btn" id="roomTypeCloud" data-type="cloud" style="flex:1;">☁️ Bulut (Online)</button>
+            <button class="btn btn-primary room-type-btn" id="roomTypeLocal" data-type="local" style="flex:1;">🖥️ Yerel (Offline)</button>
+          </div>
+          <input type="hidden" id="roomType" value="local" />
+        </div>
  
         <button class="btn btn-primary btn-lg btn-block" id="btnCreate">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -171,10 +178,53 @@ export class CreateRoom {
       reader.readAsText(file);
     });
 
+    // Room Type Toggle
+    this._setupRoomTypeToggle();
+
     // Create button
     document.getElementById('btnCreate')?.addEventListener('click', () => {
       this._createRoom();
     });
+  }
+
+  _setupRoomTypeToggle() {
+    const cloudBtn = document.getElementById('roomTypeCloud');
+    const localBtn = document.getElementById('roomTypeLocal');
+    const roomTypeInput = document.getElementById('roomType');
+    const passwordGroup = document.getElementById('roomPassword')?.closest('.input-group');
+
+    const setActive = (type) => {
+      roomTypeInput.value = type;
+      if (type === 'cloud') {
+        // In local mode, warn user but still allow (creates local room anyway)
+        if (this.app.network.isLocal) {
+          if (!this._cloudWarningShown) {
+            this._cloudWarningShown = true;
+            alert('⚠️ Sunucuya bağlı değilsiniz. "Bulut (Online)" modu kullanılamaz.\n\nOda yerel (offline) modda oluşturulacak.');
+          }
+        }
+        cloudBtn.className = 'btn btn-primary room-type-btn';
+        localBtn.className = 'btn btn-secondary room-type-btn';
+        if (passwordGroup) passwordGroup.style.display = '';
+      } else {
+        localBtn.className = 'btn btn-primary room-type-btn';
+        cloudBtn.className = 'btn btn-secondary room-type-btn';
+        if (passwordGroup) passwordGroup.style.display = 'none';
+      }
+    };
+
+    cloudBtn?.addEventListener('click', () => setActive('cloud'));
+    localBtn?.addEventListener('click', () => setActive('local'));
+
+    // Reset warning flag on show
+    this._cloudWarningShown = false;
+
+    // Local is default when no server
+    if (this.app.network.isLocal) {
+      setActive('local');
+    } else {
+      setActive('cloud');
+    }
   }
 
   _createRoom() {
@@ -203,7 +253,8 @@ export class CreateRoom {
     const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
 
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
-    const roomType = 'cloud'; // Only cloud mode
+    const roomTypeEl = document.getElementById('roomType');
+    const roomType = roomTypeEl?.value || 'local';
 
     const options = {
       name,
@@ -215,6 +266,11 @@ export class CreateRoom {
       roomType,
       playerName: this.app.playerName || 'Player'
     };
+
+    // If local mode, disable password (not needed)
+    if (roomType === 'local') {
+      options.password = '';
+    }
 
     // If custom stadium uploaded
     if (this._customStadium && stadiumValue === 'custom') {
