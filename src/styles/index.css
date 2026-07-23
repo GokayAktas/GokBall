@@ -763,6 +763,7 @@ select.input option {
   background: #0a121b;
   display: flex;
   align-items: center;
+  flex-direction: row;
 }
 
 .chat-box.collapsed .chat-messages {
@@ -777,8 +778,10 @@ select.input option {
   border-top: none;
   background: transparent;
   height: 40px;
+  width: 100%;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0;
 }
 
@@ -786,18 +789,42 @@ select.input option {
   font-size: var(--font-sm);
   height: 40px;
   line-height: 40px;
-  padding: 0 var(--space-md);
+  padding: 0 0 0 12px;
   background: transparent;
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-box.collapsed .chat-send {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  order: 1;
+}
+
+.chat-box.collapsed .chat-send svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-box.collapsed .chat-send:hover {
+  color: white;
 }
 
 .chat-box.collapsed .chat-toggle-btn-small {
   height: 40px;
+  width: 36px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  order: 2;
 }
 
 .chat-resizer {
@@ -1944,20 +1971,20 @@ select.input option {
 /* ============================================
    Resume Animation (White Rectangle Shrink)
    ============================================ */
-.resume-animation {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 300px;
+.resume-rect {
+  width: 175px;
   height: 80px;
-  transform: translate(-50%, -50%);
   background: white;
-  z-index: 2500;
-  pointer-events: none;
+  border-radius: 2px;
+  margin: 20px auto 0;
+  transition: none;
+}
+
+.resume-rect.animating {
   animation: resumeShrink 3s linear forwards;
 }
 
 @keyframes resumeShrink {
-  0%   { width: 300px; height: 80px; opacity: 1; }
+  0%   { width: 175px; height: 80px; opacity: 1; }
   100% { width: 0px;    height: 80px; opacity: 0; }
 }

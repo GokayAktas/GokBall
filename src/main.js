@@ -562,7 +562,7 @@ class GokBallApp {
         }
     }
 
-    _showPauseOverlay() {
+    _showPauseOverlay(showResumeRect) {
         document.getElementById('gameCanvas')?.classList.add('paused');
         
         // Remove existing overlay
@@ -577,8 +577,25 @@ class GokBallApp {
                 <span class="pause-subtitle">DURDURULDU</span>
             </div>
             <div class="pause-hint">Devam etmek için P tuşuna basın</div>
+            ${showResumeRect ? '<div class="resume-rect" id="resumeRect"></div>' : ''}
         `;
         document.body.appendChild(overlay);
+        
+        if (showResumeRect) {
+            // Start rectangle shrink animation
+            const rect = document.getElementById('resumeRect');
+            if (rect) {
+                // Force reflow
+                void rect.offsetWidth;
+                rect.classList.add('animating');
+                
+                // After animation completes (3s), remove everything
+                setTimeout(() => {
+                    this._removePauseOverlay();
+                    document.getElementById('gameCanvas')?.classList.remove('paused');
+                }, 3200);
+            }
+        }
     }
 
     _removePauseOverlay() {
@@ -589,7 +606,6 @@ class GokBallApp {
 
     _resumeGame() {
         this._isPaused = false;
-        this._removePauseOverlay();
         
         // Notify non-host players via server
         this.network.socket?.emit('pauseGame', { paused: false });
@@ -597,22 +613,12 @@ class GokBallApp {
         // Send authority state immediately
         this._sendAuthorityState();
         
-        // Play resume animation
-        this._playResumeAnimation();
+        // Keep text visible during animation, show rectangle below hint
+        this._showPauseOverlay(true);
     }
 
     _playResumeAnimation() {
-        // Create the white rectangle animation
-        const anim = document.createElement('div');
-        anim.id = 'resumeAnimation';
-        anim.className = 'resume-animation';
-        document.body.appendChild(anim);
-        
-        // Remove after animation completes
-        setTimeout(() => {
-            const el = document.getElementById('resumeAnimation');
-            if (el) el.remove();
-        }, 3200);
+        // No longer used - handled by _showPauseOverlay(true)
     }
 
     /** Update a player's disc when team changes mid-game (host only) */
@@ -632,12 +638,22 @@ class GokBallApp {
         } else {
             // Update or create player disc for new team
             if (existingDisc) {
+                // Move to new team's spawn position
+                const spawnDist = this._currentStadium?.spawnDistance || 170;
+                const dir = playerData.team === 'red' ? -1 : 1;
+                existingDisc.pos.x = dir * spawnDist;
+                existingDisc.pos.y = 0;
+                existingDisc.speed.x = 0;
+                existingDisc.speed.y = 0;
+                
                 // Update existing disc's team and color
                 existingDisc.team = playerData.team;
                 existingDisc.color = playerData.team === 'red' ? 'c70000' : '00008c';
                 existingDisc.colors = [existingDisc.color];
                 existingDisc._playerName = playerData.name;
                 existingDisc._avatar = playerData.avatar || '1';
+                existingDisc._spawnPos.x = existingDisc.pos.x;
+                existingDisc._spawnPos.y = existingDisc.pos.y;
                 
                 // Update collision group for new team
                 existingDisc.cGroup = CollisionFlags[playerData.team] || CollisionFlags.all;
@@ -861,8 +877,8 @@ class GokBallApp {
                 this._showPauseOverlay();
             } else {
                 this._isPaused = false;
-                this._removePauseOverlay();
-                this._playResumeAnimation();
+                // Keep text visible + show resume rectangle animation
+                this._showPauseOverlay(true);
             }
             if (this.inGameMenu.isVisible) {
                 this.inGameMenu.render(this.currentRoomData);

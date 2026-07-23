@@ -584,6 +584,9 @@ export class Physics {
         for (const disc of this.discs) {
             if (!disc.isPlayer || !disc.team) continue;
             
+            // Only constrain the NON-kickoff team (kickoff team can enter the circle)
+            if (disc.team === this.kickOffTeam) continue;
+            
             const absY = Math.abs(disc.pos.y);
             
             // Calculate max allowed x based on center circle curve
@@ -604,13 +607,13 @@ export class Physics {
             
             // Apply constraint based on team
             if (disc.team === 'red') {
-                // Red team: can't go past maxX to the right
+                // Red team (non-kickoff): can't go past maxX to the right
                 if (disc.pos.x > maxX) {
                     disc.pos.x = maxX;
                     if (disc.speed.x > 0) disc.speed.x *= -0.5;
                 }
             } else if (disc.team === 'blue') {
-                // Blue team: can't go past -maxX to the left (mirror of red)
+                // Blue team (non-kickoff): can't go past -maxX to the left (mirror of red)
                 const minX = -maxX;
                 if (disc.pos.x < minX) {
                     disc.pos.x = minX;
