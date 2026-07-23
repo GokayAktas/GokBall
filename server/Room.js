@@ -775,6 +775,7 @@ export class Room {
         return {
             id: this.id,
             adminId: this.hostId,
+            creatorId: this.creatorId,
             name: this.name,
             players: this.getPlayerList(),
             teamsLocked: this.teamsLocked,

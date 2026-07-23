@@ -749,8 +749,8 @@ select.input option {
   /* For collapsed state */
   display: flex;
   flex-direction: column;
-  background: rgba(0, 9, 38, 0.6);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 9, 38, 0.85);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   z-index: 1000;
@@ -833,38 +833,46 @@ select.input option {
   /* Space for the header icon area */
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .chat-message {
-  font-size: var(--font-xs);
-  line-height: 1.4;
-  padding: 2px 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  padding: 4px 8px;
   white-space: pre-wrap;
+  color: #E8F0F8;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .chat-message-system {
-  color: var(--text-muted);
+  color: #AAB8C5;
   font-style: italic;
+  font-size: 0.75rem;
+  background: transparent;
 }
 
 .chat-message-author {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 0.85rem;
 }
 
 .chat-input-row {
   display: flex;
   border-top: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .chat-input {
   flex: 1;
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-md) var(--space-md);
   background: transparent;
   border: none;
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: var(--font-sm);
+  font-size: var(--font-md);
   outline: none;
 }
 
@@ -874,7 +882,7 @@ select.input option {
   border: none;
   color: white;
   cursor: pointer;
-  font-size: var(--font-sm);
+  font-size: var(--font-md);
   transition: background var(--transition-fast);
 }
 

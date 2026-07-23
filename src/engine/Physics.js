@@ -693,7 +693,27 @@ export class Physics {
                 y: Math.round(d.pos.y * 100) / 100,
                 sx: Math.round(d.speed.x * 100) / 100,
                 sy: Math.round(d.speed.y * 100) / 100,
-                kicking: d.kicking
+                kicking: d.kicking,
+                // Player metadata - CRUCIAL for non-host clients!
+                isPlayer: d.isPlayer,
+                id: d.id,
+                team: d.team,
+                color: d.color,
+                colors: d.colors,
+                colorAngle: d.colorAngle,
+                avatarColor: d.avatarColor,
+                name: d._playerName,
+                avatar: d._avatar || d.avatar,
+                radius: d.radius,
+                damping: d.damping,
+                acceleration: d.acceleration,
+                kickingAcceleration: d.kickingAcceleration,
+                kickingDamping: d.kickingDamping,
+                kickStrength: d.kickStrength,
+                bCoef: d.bCoef,
+                invMass: d.invMass,
+                cMask: d.cMask,
+                cGroup: d.cGroup
             }))
         };
     }
