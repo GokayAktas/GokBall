@@ -107,7 +107,7 @@ io.on('connection', (socket) => {
             scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
             timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180,
             stadium: options.stadium || null,
-            roomType: options.roomType || 'cloud'
+            roomType: 'host'
         });
 
         rooms.set(room.id, room);
@@ -240,17 +240,6 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (room && room.game.state === 'playing') {
             room.game.setPlayerInput(socket.id, input);
-        }
-    });
-
-    // --- Authority Update (Local/P2P Host Mode) ---
-    // In local mode, the Admin's client calculates physics and sends the authoritative state here.
-    socket.on('authorityState', (state) => {
-        const room = getPlayerRoom(socket.id);
-        if (room && room.roomType === 'local' && socket.id === room.hostId) {
-            // Apply admin's state to server and broadcast to everyone else
-            room.game.applyAuthorityState(state);
-            // Optimization: We could skip server tick in local mode, but for now we just sync.
         }
     });
 
@@ -397,36 +386,14 @@ function leaveCurrentRoom(socket) {
 
     const room = rooms.get(roomId);
     if (room) {
-        // For local rooms: if creator leaves, Room.removePlayer kicks everyone
-        // We need to clean up all those players' entries from playerRooms
-        const isLocalCreator = room.roomType === 'local' && socket.id === room.creatorId;
+        const remaining = room.removePlayer(socket.id);
+        socket.leave(roomId);
 
-        if (isLocalCreator) {
-            // Collect all player socket IDs before removal
-            const allPlayerIds = [...room.players.keys()];
-
-            const remaining = room.removePlayer(socket.id);
-            socket.leave(roomId);
-
-            // Clean up playerRooms for all players in the closed room
-            for (const pid of allPlayerIds) {
-                playerRooms.delete(pid);
-            }
-
-            // Always delete the room since creator left
+        // Delete empty rooms
+        if (remaining === 0) {
             room.game.stop();
             rooms.delete(roomId);
-            console.log(`[Server] Local room closed (host left): ${roomId}`);
-        } else {
-            const remaining = room.removePlayer(socket.id);
-            socket.leave(roomId);
-
-            // Delete empty rooms
-            if (remaining === 0) {
-                room.game.stop();
-                rooms.delete(roomId);
-                console.log(`[Server] Room deleted: ${roomId}`);
-            }
+            console.log(`[Server] Room deleted: ${roomId}`);
         }
     }
 

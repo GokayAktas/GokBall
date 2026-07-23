@@ -110,7 +110,6 @@ export class Physics {
         this.segments = [];
         this.planes = [];
         this.goals = [];
-        this.isLocalAuthorityMode = false;
         this.predictionThreshold = 10; // Lower threshold = more frequent but smaller corrections
         this.ballDisc = null;
         this.myPlayerId = null; // Local player ID for self-highlighting

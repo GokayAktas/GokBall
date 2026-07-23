@@ -169,11 +169,11 @@ export class Room {
         this.name = options.name || 'GokBall Room';
         this.password = options.password || '';
         this.maxPlayers = Math.min(options.maxPlayers || 12, 24);
-        this.roomType = options.roomType || 'cloud';
+        this.roomType = 'host';
         this.players = new Map(); // socketId -> Player
         this.bannedIPs = new Set();
         this.hostId = null;
-        this.creatorId = null; // The original room creator (important for local mode)
+        this.creatorId = null; // The original room creator
         this.teamsLocked = false;
         this._closing = false; // Flag to prevent recursive cleanup
 
@@ -190,11 +190,6 @@ export class Room {
             red: { angle: 0, textColor: 'FFFFFF', colors: ['D32F2F'] },
             blue: { angle: 0, textColor: 'FFFFFF', colors: ['1565C0'] }
         };
-
-        // Local-mode authority broadcast control: throttle admin state broadcasts
-        // to avoid flooding the room when Admin is sending high-frequency updates.
-        this._lastAuthorityBroadcast = 0;
-        this._minAuthorityBroadcastMs = 50; // ~20Hz
 
         // Persist lobby chat for in-game display
         this.chatHistory = [];
@@ -269,26 +264,6 @@ export class Room {
         const player = this.players.get(socketId);
         if (!player) return;
 
-        // === LOCAL MODE: If the creator leaves, close the entire room ===
-        if (this.roomType === 'local' && socketId === this.creatorId && !this._closing) {
-            this._closing = true;
-            this.game.stop();
-
-            // Kick all remaining players with a message
-            for (const [id, p] of this.players) {
-                if (id !== socketId) {
-                    p.socket.emit('playerKicked', {
-                        reason: 'Oda kurucusu ayrıldığı için oda kapatıldı.',
-                        hostLeft: true
-                    });
-                    p.socket.disconnect();
-                }
-            }
-
-            this.players.clear();
-            return 0; // Signal to delete this room
-        }
-
         // Remove player disc from game if playing
         if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
             const discIdx = this.game.playerDiscs.get(socketId);
@@ -301,7 +276,7 @@ export class Room {
 
         this.players.delete(socketId);
 
-        // Transfer admin if host left (only for cloud mode — local mode creator exit already handled above)
+        // Transfer admin if host left
         if (this.hostId === socketId && this.players.size > 0) {
             const newHost = this.players.values().next().value;
             newHost.isAdmin = true;

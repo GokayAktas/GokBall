@@ -10,32 +10,33 @@ export class NetworkManager {
         this.connected = false;
         this.playerId = null;
         this.callbacks = {};
-        this.isLocal = false;
+        this.ping = 0;
+        this._lastPingTime = 0;
     }
 
     /**
      * Connect to the game server
      */
-    connect() {
+    connect(serverUrl) {
         return new Promise((resolve, reject) => {
-            // Production URL: Use VITE_SERVER_URL if DEFINED, otherwise fallback to current origin
-            // Note: localhost vite proxy works with empty string
-            const serverUrl = import.meta.env.VITE_SERVER_URL || '';
-            console.log('[Network] Connecting to:', serverUrl || 'Current Host');
+            // Default: connect to current host (production) or use provided URL
+            const url = serverUrl || import.meta.env.VITE_SERVER_URL || '';
+            console.log('[Network] Connecting to:', url || 'Current Host');
 
-            // Connection timeout to prevent hanging (e.g. on Vercel where no WS server exists)
+            // Connection timeout
             const connectTimeout = setTimeout(() => {
                 this._cleanupConnection();
                 reject(new Error('Connection timeout (5s)'));
             }, 5000);
             
-            this.socket = io(serverUrl, {
-                transports: ['websocket'],
-                reconnection: false, // No auto-reconnect — we handle fallback ourselves
+            this.socket = io(url, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: 3,
+                reconnectionDelay: 1000,
                 timeout: 5000
             });
 
-            // Ensure ping interval is cleaned up on any connection outcome
             const cleanupAll = () => {
                 clearTimeout(connectTimeout);
                 if (this._pingInterval) {
@@ -82,7 +83,6 @@ export class NetworkManager {
             this.socket.on('adminUpdate', (data) => this._trigger('adminUpdate', data));
 
             // Custom Ping tracking
-            this.ping = 0;
             this.socket.on('pong', () => {
                 if (this._lastPingTime) {
                     this.ping = Date.now() - this._lastPingTime;
@@ -207,38 +207,6 @@ export class NetworkManager {
         }
     }
 
-    /**
-     * Connect in local (offline) mode — no server needed.
-     * Creates a fake socket so the rest of the app works unchanged.
-     */
-    connectLocal() {
-        if (this.connected) return Promise.resolve(this.playerId);
-
-        return new Promise((resolve) => {
-            this.isLocal = true;
-            this.connected = true;
-            const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
-            this.playerId = localId;
-
-            this.socket = {
-                id: localId,
-                connected: true,
-                emit: (event, data) => {
-                    console.log('[Network][Local] emit:', event, data);
-                },
-                on: () => {},
-                disconnect: () => {
-                    this.connected = false;
-                    this.isLocal = false;
-                    this.socket = null;
-                }
-            };
-
-            console.log('[Network] Connected locally:', this.playerId);
-            resolve(this.playerId);
-        });
-    }
-
     /** Clean up connection resources */
     _cleanupConnection() {
         if (this._pingInterval) {
@@ -246,11 +214,7 @@ export class NetworkManager {
             this._pingInterval = null;
         }
         if (this.socket) {
-            if (typeof this.socket.disconnect === 'function') {
-                this.socket.disconnect();
-            } else if (typeof this.socket.close === 'function') {
-                this.socket.close();
-            }
+            this.socket.disconnect();
             this.socket = null;
         }
     }
@@ -258,6 +222,4 @@ export class NetworkManager {
     disconnect() {
         this._cleanupConnection();
         this.connected = false;
-        this.isLocal = false;
     }
-}
