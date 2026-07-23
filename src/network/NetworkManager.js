@@ -22,15 +22,30 @@ export class NetworkManager {
             // Note: localhost vite proxy works with empty string
             const serverUrl = import.meta.env.VITE_SERVER_URL || '';
             console.log('[Network] Connecting to:', serverUrl || 'Current Host');
+
+            // Connection timeout to prevent hanging (e.g. on Vercel where no WS server exists)
+            const connectTimeout = setTimeout(() => {
+                this._cleanupConnection();
+                reject(new Error('Connection timeout (5s)'));
+            }, 5000);
             
             this.socket = io(serverUrl, {
                 transports: ['websocket'],
-                reconnection: true,
-                reconnectionDelay: 1000,
-                reconnectionAttempts: 10
+                reconnection: false, // No auto-reconnect — we handle fallback ourselves
+                timeout: 5000
             });
 
+            // Ensure ping interval is cleaned up on any connection outcome
+            const cleanupAll = () => {
+                clearTimeout(connectTimeout);
+                if (this._pingInterval) {
+                    clearInterval(this._pingInterval);
+                    this._pingInterval = null;
+                }
+            };
+
             this.socket.on('connect', () => {
+                cleanupAll();
                 this.connected = true;
                 this.playerId = this.socket.id;
                 console.log('[Network] Connected:', this.playerId);
@@ -44,6 +59,7 @@ export class NetworkManager {
             });
 
             this.socket.on('connect_error', (err) => {
+                cleanupAll();
                 console.error('[Network] Connection error:', err.message);
                 reject(err);
             });
@@ -223,11 +239,24 @@ export class NetworkManager {
         });
     }
 
-    disconnect() {
+    /** Clean up connection resources */
+    _cleanupConnection() {
+        if (this._pingInterval) {
+            clearInterval(this._pingInterval);
+            this._pingInterval = null;
+        }
         if (this.socket) {
-            this.socket.disconnect();
+            if (typeof this.socket.disconnect === 'function') {
+                this.socket.disconnect();
+            } else if (typeof this.socket.close === 'function') {
+                this.socket.close();
+            }
             this.socket = null;
         }
+    }
+
+    disconnect() {
+        this._cleanupConnection();
         this.connected = false;
         this.isLocal = false;
     }

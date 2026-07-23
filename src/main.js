@@ -91,7 +91,7 @@ class GokBallApp {
             this.physics.myPlayerId = this.network.playerId;
             console.log('[GokBall] Connected to server');
         } catch (err) {
-            console.warn('[GokBall] Server unavailable, switching to local/offline mode:', err.message);
+            console.warn('[GokBall] Server unavailable, switching to local/offline mode:', err?.message || err);
             try {
                 await this.network.connectLocal();
                 this.physics.myPlayerId = this.network.playerId;
