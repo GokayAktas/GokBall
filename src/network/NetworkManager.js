@@ -12,6 +12,15 @@ export class NetworkManager {
         this.callbacks = {};
         this.ping = 0;
         this._lastPingTime = 0;
+        this.pingHistory = [];
+        this.minPing = Infinity;
+        this.maxPing = 0;
+        this.jitter = 0;
+        this.packetLoss = 0;
+        this._sentPackets = 0;
+        this._lostPackets = 0;
+        this._lastSentPingId = 0;
+        this._pendingPings = new Map(); // pingId -> sendTime
     }
 
     /**
@@ -82,11 +91,31 @@ export class NetworkManager {
             this.socket.on('chatMessage', (data) => this._trigger('chatMessage', data));
             this.socket.on('adminUpdate', (data) => this._trigger('adminUpdate', data));
 
-            // Custom Ping tracking
+            // Custom Ping tracking with jitter/avg/min stats
             this.socket.on('pong', () => {
                 if (this._lastPingTime) {
-                    this.ping = Date.now() - this._lastPingTime;
-                    this._trigger('pingUpdate', { ping: this.ping });
+                    const rtt = Date.now() - this._lastPingTime;
+                    this.ping = rtt;
+                    
+                    // Track history for jitter/min/avg (rolling 20 samples)
+                    this.pingHistory.push(rtt);
+                    if (this.pingHistory.length > 20) this.pingHistory.shift();
+                    this.minPing = Math.min(...this.pingHistory);
+                    this.maxPing = Math.max(...this.pingHistory);
+                    
+                    // Calculate jitter (avg deviation from mean)
+                    const avg = this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length;
+                    let jitterSum = 0;
+                    for (const p of this.pingHistory) jitterSum += Math.abs(p - avg);
+                    this.jitter = Math.round(jitterSum / this.pingHistory.length);
+                    
+                    this._trigger('pingUpdate', {
+                        ping: this.ping,
+                        jitter: this.jitter,
+                        minPing: this.minPing,
+                        maxPing: this.maxPing,
+                        avgPing: Math.round(avg)
+                    });
                 }
             });
 
@@ -95,7 +124,7 @@ export class NetworkManager {
                     this._lastPingTime = Date.now();
                     this.socket.emit('ping');
                 }
-            }, 1000);
+            }, 500); // 500ms ping interval for more responsive stats
 
             this.socket.on('playerKicked', (data) => this._trigger('playerKicked', data));
             this.socket.on('stadiumChanged', (data) => this._trigger('stadiumChanged', data));
@@ -136,7 +165,13 @@ export class NetworkManager {
     // === Game Actions ===
 
     sendInput(input) {
-        this.socket.emit('input', input);
+        this._inputSeqNum = (this._inputSeqNum || 0) + 1;
+        // Send with sequence number for reconciliation
+        this.socket.emit('input', { ...input, _seq: this._inputSeqNum });
+    }
+
+    getInputSeqNum() {
+        return this._inputSeqNum || 0;
     }
 
     startGame() {

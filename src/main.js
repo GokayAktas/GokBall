@@ -20,6 +20,7 @@ import { Scoreboard } from './ui/components/Scoreboard.js';
 import { InGameMenu } from './ui/components/InGameMenu.js';
 import { SettingsModal } from './ui/components/SettingsModal.js';
 import { AudioManager } from './engine/AudioManager.js';
+import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 
 class GokBallApp {
     constructor() {
@@ -43,6 +44,10 @@ class GokBallApp {
 
         // Server game state tracking
         this._serverGameState = 'stopped';
+
+        // Snapshot interpolation buffer for non-host clients
+        this._snapshotBuffer = new SnapshotBuffer(80); // 80ms interpolation delay
+        this._lastSnapshotTime = 0;
 
         // Host-authority mode (room creator runs physics)
         this._isHostAuthority = false;
@@ -150,15 +155,21 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
+            <div class="stat-item" style="font-size:10px;color:rgba(166,197,215,0.5);"><span id="jitterValue">0</span>ms jitter</div>
             <div class="stat-item stat-fps"><span class="stat-icon">⚡</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
 
-        // Ping update listener
+        // Ping update listener with jitter
         this.network.on('pingUpdate', (data) => {
             const pingEl = document.getElementById('pingValue');
-            if (!pingEl) return;
-            pingEl.textContent = data.ping;
+            if (pingEl) pingEl.textContent = data.ping;
+            const jitterEl = document.getElementById('jitterValue');
+            if (jitterEl) jitterEl.textContent = data.jitter || 0;
+            // Adjust interpolation delay based on jitter
+            if (this._snapshotBuffer) {
+                this._snapshotBuffer.adjustDelay(data.jitter || 0);
+            }
         });
 
         // Room Update -> Update InGameMenu if visible
@@ -395,17 +406,31 @@ class GokBallApp {
                 }
 
             } else {
-                // --- CLIENT MODE: Local player prediction only ---
-                // Apply server state first (handled in _handleGameState via applyState)
-                // Then run local prediction ONLY for the local player disc.
-                // This gives responsive controls while keeping other discs driven by server.
+                // --- CLIENT MODE: Local prediction + remote interpolation ---
                 if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
-                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    const myId = this.network.socket?.id;
+                    const myDisc = this.physics.discs.find(d => d.id === myId);
+
+                    // Interpolate remote players from snapshot buffer
+                    const interp = this._snapshotBuffer.getInterpolatedState(Date.now());
+                    if (interp && interp.physics && interp.physics.discs) {
+                        for (const sd of interp.physics.discs) {
+                            // Skip local player — we predict locally
+                            const remoteDisc = this.physics.discs.find(d => d.id === sd.id || d.ownerId === sd.id);
+                            if (!remoteDisc) continue;
+                            if (sd.id === myId || remoteDisc.id === myId) continue;
+                            // Smoothly move remote disc toward interpolated position
+                            remoteDisc.pos.x += (sd.x - remoteDisc.pos.x) * 0.35;
+                            remoteDisc.pos.y += (sd.y - remoteDisc.pos.y) * 0.35;
+                            remoteDisc.speed.x = sd.sx;
+                            remoteDisc.speed.y = sd.sy;
+                            remoteDisc.kicking = sd.kicking;
+                        }
+                    }
+
+                    // Local player: immediate prediction
                     if (myDisc && myDisc.isPlayer) {
-                        // Apply local input to our disc
                         myDisc.input = inputState;
-                        
-                        // Apply acceleration
                         let ax = 0, ay = 0;
                         if (inputState.up) ay -= 1;
                         if (inputState.down) ay += 1;
@@ -417,15 +442,11 @@ class GokBallApp {
                             myDisc.speed.x += (ax / accelMag) * currentAccel;
                             myDisc.speed.y += (ay / accelMag) * currentAccel;
                         }
-                        
-                        // Apply damping and move
                         const damp = myDisc.kicking ? (myDisc.kickingDamping || 0.96) : (myDisc.damping || 0.96);
                         myDisc.speed.x *= damp;
                         myDisc.speed.y *= damp;
                         myDisc.pos.x += myDisc.speed.x;
                         myDisc.pos.y += myDisc.speed.y;
-                        
-                        // Reset input after applying (don't leave stale input on disc)
                         myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
                 }
@@ -990,6 +1011,11 @@ class GokBallApp {
 
         // Set goal pause flag
         this.physics.inGoalPause = (state.state === 'goal');
+
+        // Add to interpolation buffer for non-host clients
+        if (!this._isHost() || !this._isHostAuthority) {
+            this._snapshotBuffer.addSnapshot(Date.now(), state);
+        }
 
         // Detect kicks for sound effects
         if (state.physics && state.physics.discs) {

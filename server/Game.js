@@ -23,6 +23,7 @@ export class Game {
         this.goalPauseTicks = 0;
         this.overtimeEnabled = true;
         this.playerDiscs = new Map(); // playerId -> disc index
+        this._lastInputSeq = new Map(); // playerId -> last processed seq number
     }
 
     rebuildPlayerDiscMap() {
@@ -203,8 +204,14 @@ export class Game {
         // Extra safety: ensure the disc actually belongs to this player
         if (!disc || disc.ownerId !== playerId) return;
 
-        // Apply input
-        disc.input = input;
+        // Track input sequence number for reconciliation
+        if (input && input._seq !== undefined) {
+            this._lastInputSeq.set(playerId, input._seq);
+        }
+
+        // Apply input (strip _seq before applying to disc)
+        const cleanInput = { up: !!input.up, down: !!input.down, left: !!input.left, right: !!input.right, kick: !!input.kick };
+        disc.input = cleanInput;
     }
 
     _startLoop() {
@@ -432,12 +439,24 @@ export class Game {
             }
         }
 
+        // Collect last processed input seq per team for client reconciliation
+        let lastInputRed = 0;
+        let lastInputBlue = 0;
+        for (const [pid, seq] of this._lastInputSeq) {
+            const p = this.room.players.get(pid);
+            if (!p) continue;
+            if (p.team === 'red' && seq > lastInputRed) lastInputRed = seq;
+            if (p.team === 'blue' && seq > lastInputBlue) lastInputBlue = seq;
+        }
+
         return {
             state: this.state,
             physics: this.physics.getState(),
             scoreRed: this.scoreRed,
             scoreBlue: this.scoreBlue,
-            time: Math.floor(this.timeElapsed / this.tickRate)
+            time: Math.floor(this.timeElapsed / this.tickRate),
+            lastInputRed,
+            lastInputBlue
         };
     }
 
