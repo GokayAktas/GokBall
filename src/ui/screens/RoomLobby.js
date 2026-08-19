@@ -93,56 +93,52 @@ export class RoomLobby {
             <button class="btn btn-primary btn-block btn-lg" id="btnStartGame" style="font-weight: 800; font-size: 16px; letter-spacing: 1px; border-radius: 8px;">OYUNU BAŞLAT</button>
             
             <!-- Admin Tools -->
-            <div style="margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px;">
-              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; justify-content: center; margin-bottom: 12px;">
-                <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="display:flex; align-items:center; gap:6px; height:36px;">
-                   <span id="lockIcon"></span> <span id="lockText">Takımları Kilitle</span>
-                </button>
-                <button class="btn btn-sm" id="btnToggleOvertime" style="display:flex; align-items:center; gap:6px; height:36px; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.3); color: #ffd54f; border-radius: 10px;">
-                  ⏱ <span id="overtimeText">Uzatma Var</span>
-                </button>
-                <label class="btn btn-secondary btn-sm" style="cursor:pointer; padding: 4px 8px; height:36px; border-radius: 10px;">
-                  📁 Saha Yükle
-                  <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
-                </label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; justify-content: center; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px;">
+              <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="display:flex; align-items:center; gap:6px; height:36px; border-radius: 10px;">
+                 <span id="lockIcon"></span> <span id="lockText">Takımları Kilitle</span>
+              </button>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SAHA</span>
+                 <select id="lobbyStadiumSelect" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 110px; border-radius: 10px; background-color: rgba(15,82,186,0.1);">
+                   <option value="small">Küçük (1v1)</option>
+                   <option value="futsal">Futsal (3v3)</option>
+                   <option value="classic">Klasik (3v3)</option>
+                   <option value="big">Büyük (5v5)</option>
+                   <option value="huge">Devasa (7v7)</option>
+                   <option value="custom" disabled hidden>Özel Saha</option>
+                 </select>
               </div>
-              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; justify-content: center;">
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                   <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SAHA</span>
-                   <select id="lobbyStadiumSelect" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 110px; border-radius: 10px; background-color: rgba(15,82,186,0.1);">
-                     <option value="small">Küçük (1v1)</option>
-                     <option value="futsal">Futsal (3v3)</option>
-                     <option value="classic">Klasik (3v3)</option>
-                     <option value="big">Büyük (5v5)</option>
-                     <option value="huge">Devasa (7v7)</option>
-                     <option value="custom" disabled hidden>Özel Saha</option>
-                   </select>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                   <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">GOL LİMİTİ</span>
-                   <select id="lobbyScoreLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(231,76,60,0.1);">
-                     <option value="1">1 Gol</option><option value="3">3 Gol</option><option value="5">5 Gol</option><option value="10">10 Gol</option><option value="0">Sınırsız</option>
-                   </select>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                   <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SÜRE</span>
-                   <select id="lobbyTimeLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 100px; border-radius: 10px; background-color: rgba(46,204,113,0.1);">
-                     <option value="60">1 Dakika</option><option value="180">3 Dakika</option><option value="300">5 Dakika</option><option value="600">10 Dakika</option><option value="0">Sınırsız</option>
-                   </select>
-                </div>
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                   <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">HIZ</span>
-                   <select id="lobbySpeedMultiplier" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(241,196,15,0.1);">
-                     <option value="0.50">x0.50</option>
-                     <option value="0.75">x0.75</option>
-                     <option value="1.00">x1.00</option>
-                     <option value="1.25">x1.25</option>
-                     <option value="1.50">x1.50</option>
-                     <option value="1.75">x1.75</option>
-                     <option value="2.00">x2.00</option>
-                   </select>
-                </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">GOL LİMİTİ</span>
+                 <select id="lobbyScoreLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(231,76,60,0.1);">
+                   <option value="1">1 Gol</option><option value="3">3 Gol</option><option value="5">5 Gol</option><option value="10">10 Gol</option><option value="0">Sınırsız</option>
+                 </select>
               </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SÜRE</span>
+                 <select id="lobbyTimeLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 100px; border-radius: 10px; background-color: rgba(46,204,113,0.1);">
+                   <option value="60">1 Dakika</option><option value="180">3 Dakika</option><option value="300">5 Dakika</option><option value="600">10 Dakika</option><option value="0">Sınırsız</option>
+                 </select>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">HIZ</span>
+                 <select id="lobbySpeedMultiplier" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(241,196,15,0.1);">
+                   <option value="0.50">x0.50</option>
+                   <option value="0.75">x0.75</option>
+                   <option value="1.00">x1.00</option>
+                   <option value="1.25">x1.25</option>
+                   <option value="1.50">x1.50</option>
+                   <option value="1.75">x1.75</option>
+                   <option value="2.00">x2.00</option>
+                 </select>
+              </div>
+              <button class="btn btn-sm" id="btnToggleOvertime" style="display:flex; align-items:center; gap:6px; height:36px; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.3); color: #ffd54f; border-radius: 10px;">
+                ⏱ <span id="overtimeText">Uzatma Var</span>
+              </button>
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer; padding: 4px 8px; height:36px; border-radius: 10px;">
+                📁 Saha Yükle
+                <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
+              </label>
             </div>
           </div>
         </div>
