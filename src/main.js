@@ -315,6 +315,15 @@ class GokBallApp {
                     // Step physics
                     const result = this.physics.step();
 
+                    // Play kick sound for host (clients get it via goalScored/authorityState)
+                    if (result.kickHappened) {
+                        const now = Date.now();
+                        if (!this._lastKickSound || now - this._lastKickSound > 150) {
+                            this.audio.playKick();
+                            this._lastKickSound = now;
+                        }
+                    }
+
                     // Check for goals
                     if (result.goalTeam && this._hostGameState === 'playing') {
                         this._hostHandleGoal(result.goalTeam);
@@ -379,17 +388,11 @@ class GokBallApp {
                 }
 
             } else {
-                // --- CLIENT MODE: Normal prediction ---
-                if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
-                    for (const disc of this.physics.discs) {
-                        if (disc.isPlayer) {
-                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
-                        }
-                    }
-                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                    if (myDisc) myDisc.input = inputState;
-                    this.physics.step();
-                }
+                // --- CLIENT MODE: Do NOT run local physics prediction ---
+                // Non-host clients rely entirely on server authoritative state.
+                // Running local physics without knowing other players' inputs
+                // causes them to freeze and then teleport when server state arrives.
+                // The applyState() method handles smooth interpolation.
             }
 
             this.accumulator -= stepSize;
@@ -402,7 +405,10 @@ class GokBallApp {
 
         // Render
         if (this._currentStadium) {
-            this.renderer.render(this.camera, this._currentStadium, this.physics, {});
+            this.renderer.render(this.camera, this._currentStadium, this.physics, {
+                kickOffReset: this.physics.kickOffReset,
+                kickOffTeam: this.physics.kickOffTeam
+            });
         }
 
         // Calculate FPS
@@ -537,7 +543,16 @@ class GokBallApp {
 
         setTimeout(() => {
             if (document.body.contains(overlay)) document.body.removeChild(overlay);
+            // Notify server that host-authority game has ended
+            this.network.socket?.emit('stopGame');
+            this._isHostAuthority = false;
+            this._hostGameState = 'stopped';
             this.stopGame();
+            if (this.currentRoomData) {
+                this.ui.showScreen('roomLobby', this.currentRoomData);
+            } else {
+                this.ui.showScreen('roomList');
+            }
         }, 3000);
     }
 
@@ -823,6 +838,12 @@ class GokBallApp {
             setTimeout(() => {
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
                 this.stopGame();
+                // Transition back to room lobby
+                if (this.currentRoomData) {
+                    this.ui.showScreen('roomLobby', this.currentRoomData);
+                } else {
+                    this.ui.showScreen('roomList');
+                }
             }, 3000);
         });
 
@@ -835,6 +856,8 @@ class GokBallApp {
         
         // Game stopped (admin clicked stop)
         this.network.on('gameStopped', (data) => {
+            this._isHostAuthority = false;
+            this._hostGameState = 'stopped';
             if (this.gameRunning) {
                 this.stopGame();
                 if (this.currentRoomData) {
@@ -899,6 +922,29 @@ class GokBallApp {
                 if (data.teamsLocked !== undefined) this.currentRoomData.teamsLocked = data.teamsLocked;
                 if (data.players) this.currentRoomData.players = data.players;
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+        });
+
+        // Team Colors Updated (from /colors command or setTeamColors)
+        this.network.on('teamColorsUpdated', (data) => {
+            if (this.currentRoomData) {
+                if (!this.currentRoomData.teamColors) this.currentRoomData.teamColors = {};
+                if (data.team && data.teamColors) {
+                    this.currentRoomData.teamColors[data.team] = data.teamColors;
+                }
+                // Apply to local physics discs if game is running
+                if (this.gameRunning && data.team && data.teamColors) {
+                    const team = data.team;
+                    const tc = data.teamColors;
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer && disc.team === team) {
+                            disc.color = tc.colors[0];
+                            disc.colors = tc.colors;
+                            disc.colorAngle = tc.angle;
+                            disc.avatarColor = tc.textColor;
+                        }
+                    }
+                }
             }
         });
     }

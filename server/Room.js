@@ -716,6 +716,13 @@ export class Room {
                                 });
                                 this.broadcast('gameState', this.game._getGameState());
                             }
+
+                            // Broadcast teamColorsUpdated so clients update their local state
+                            this.broadcast('teamColorsUpdated', {
+                                team,
+                                teamColors: this.teamColors[team],
+                                allTeamColors: this.teamColors
+                            });
                         } else {
                             player.socket.emit('chatMessage', {
                                 playerName: 'SISTEM',
