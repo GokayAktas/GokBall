@@ -176,6 +176,7 @@ export class Room {
         this.creatorId = null; // The original room creator
         this.teamsLocked = false;
         this._closing = false; // Flag to prevent recursive cleanup
+        this.playerSpeedMultiplier = options.playerSpeedMultiplier || 1.0;
 
         // Stadium Selection
         if (options.stadium && typeof options.stadium === 'string') {
@@ -250,6 +251,7 @@ export class Room {
             players: this.getPlayerList(),
             stadium: this.stadium,
             teamColors: this.teamColors,
+            playerSpeedMultiplier: this.playerSpeedMultiplier,
             game: this.game.getInfo(),
             teamsLocked: this.teamsLocked,
             chatHistory: this.chatHistory.slice(),
@@ -789,6 +791,7 @@ export class Room {
             stadium: this.stadium,
             teamColors: this.teamColors,
             roomType: this.roomType,
+            playerSpeedMultiplier: this.playerSpeedMultiplier,
             game: this.game.getInfo(),
             chatHistory: this.chatHistory.slice()
         };

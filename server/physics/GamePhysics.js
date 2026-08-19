@@ -271,9 +271,13 @@ export class GamePhysics {
 
         for (const disc of this.discs) {
             if (!disc.isPlayer || !disc.team) continue;
-            if (disc.team === this.kickOffTeam) continue; // Kickoff team moves freely
-
+            
             const isRed = disc.team === 'red';
+            const isKickoffTeam = disc.team === this.kickOffTeam;
+
+            // Both teams are constrained to their own half + center circle
+            // Opposing team (non-kickoff) stays on own side + cannot enter center circle
+            // Kickoff team stays on own side but CAN enter center circle
 
             // Constraint 1: Stay on own side of center line
             if (isRed) {
@@ -288,26 +292,30 @@ export class GamePhysics {
                 }
             }
 
-            // Constraint 2: Cannot enter center circle
-            const distSq = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
-            const minDist = kickOffRadius + disc.radius;
-            if (distSq < minDist * minDist) {
-                const dist = Math.sqrt(distSq);
-                if (dist > 0) {
-                    const pushX = (disc.pos.x / dist) * minDist;
-                    const pushY = (disc.pos.y / dist) * minDist;
-                    disc.pos.x = pushX;
-                    disc.pos.y = pushY;
-                    const nx = pushX / minDist;
-                    const ny = pushY / minDist;
-                    const vn = disc.speed.x * nx + disc.speed.y * ny;
-                    if (vn < 0) {
-                        disc.speed.x -= 1.5 * vn * nx;
-                        disc.speed.y -= 1.5 * vn * ny;
+            // Constraint 3: Center circle
+            // Non-kickoff team: cannot enter center circle at all
+            // Kickoff team: CAN enter center circle (no constraint)
+            if (!isKickoffTeam) {
+                const distSq = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
+                const minDist = kickOffRadius + disc.radius;
+                if (distSq < minDist * minDist) {
+                    const dist = Math.sqrt(distSq);
+                    if (dist > 0) {
+                        const pushX = (disc.pos.x / dist) * minDist;
+                        const pushY = (disc.pos.y / dist) * minDist;
+                        disc.pos.x = pushX;
+                        disc.pos.y = pushY;
+                        const nx = pushX / minDist;
+                        const ny = pushY / minDist;
+                        const vn = disc.speed.x * nx + disc.speed.y * ny;
+                        if (vn < 0) {
+                            disc.speed.x -= 1.5 * vn * nx;
+                            disc.speed.y -= 1.5 * vn * ny;
+                        }
+                    } else {
+                        disc.pos.x = isRed ? -minDist : minDist;
+                        disc.speed.x = 0;
                     }
-                } else {
-                    disc.pos.x = isRed ? -minDist : minDist;
-                    disc.speed.x = 0;
                 }
             }
         }

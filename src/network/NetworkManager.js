@@ -186,6 +186,10 @@ export class NetworkManager {
         this.socket.emit('setTimeLimit', limit);
     }
 
+    setSpeedMultiplier(multiplier) {
+        this.socket.emit('setSpeedMultiplier', multiplier);
+    }
+
     // === Event system ===
 
     on(event, callback) {

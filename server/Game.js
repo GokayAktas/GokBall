@@ -102,8 +102,16 @@ export class Game {
 
     _spawnPlayers() {
         this._removeAllPlayerDiscs();
-        const playerPhysics = this.stadiumData.playerPhysics || {};
+        const basePlayerPhysics = this.stadiumData.playerPhysics || {};
         const spawnDist = this.stadiumData.spawnDistance || 170;
+
+        // Apply speed multiplier from room settings
+        const speedMult = this.room.playerSpeedMultiplier || 1.0;
+        const playerPhysics = {
+            ...basePlayerPhysics,
+            acceleration: (basePlayerPhysics.acceleration || 0.1) * speedMult,
+            kickingAcceleration: (basePlayerPhysics.kickingAcceleration || 0.07) * speedMult,
+        };
 
         const redPlayers = this.room.getTeamPlayers('red');
         const bluePlayers = this.room.getTeamPlayers('blue');

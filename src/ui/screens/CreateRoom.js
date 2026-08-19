@@ -80,6 +80,21 @@ export class CreateRoom {
           </div>
 
           <div class="input-group">
+            <label for="speedMultiplier">Oyuncu Hızı: <span id="speedMultiplierValue" class="value-highlight">x1.00</span></label>
+            <select id="speedMultiplier" class="input">
+              <option value="0.50">x0.50</option>
+              <option value="0.75">x0.75</option>
+              <option value="1.00" selected>x1.00</option>
+              <option value="1.25">x1.25</option>
+              <option value="1.50">x1.50</option>
+              <option value="1.75">x1.75</option>
+              <option value="2.00">x2.00</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group">
             <label>Saha</label>
             <div style="display:flex; gap: var(--space-sm);">
               <select id="stadiumSelect" class="input" style="flex:1;">
@@ -118,17 +133,24 @@ export class CreateRoom {
     const sliders = [
       { id: 'maxPlayers', display: 'maxPlayersValue' },
       { id: 'scoreLimit', display: 'scoreLimitValue', labels: { '0': 'Limit Yok' } },
-      { id: 'timeLimit', display: 'timeLimitValue', labels: { '0': 'Limit Yok' } }
+      { id: 'timeLimit', display: 'timeLimitValue', labels: { '0': 'Limit Yok' } },
+      { id: 'speedMultiplier', display: 'speedMultiplierValue', prefix: 'x' }
     ];
 
-    sliders.forEach(({ id, display, labels }) => {
+    sliders.forEach(({ id, display, labels, prefix }) => {
       const slider = document.getElementById(id);
       const span = document.getElementById(display);
       if (!slider || !span) return;
 
       const update = () => {
         const val = slider.value;
-        span.textContent = (labels && labels[val]) ? labels[val] : val;
+        if (labels && labels[val]) {
+          span.textContent = labels[val];
+        } else if (prefix) {
+          span.textContent = prefix + val;
+        } else {
+          span.textContent = val;
+        }
       };
 
       slider.addEventListener('change', update);
@@ -200,6 +222,7 @@ export class CreateRoom {
     const timeLimitVal = document.getElementById('timeLimit')?.value;
     const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
 
+    const speedMultiplier = parseFloat(document.getElementById('speedMultiplier')?.value) || 1.0;
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
     const options = {
       name,
@@ -207,6 +230,7 @@ export class CreateRoom {
       maxPlayers,
       scoreLimit,
       timeLimit,
+      playerSpeedMultiplier: speedMultiplier,
       stadium: stadiumValue,
       playerName: this.app.playerName || 'Player'
     };

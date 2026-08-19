@@ -85,6 +85,7 @@ export class RoomLobby {
           <div class="lobby-info-row">
             <div>Süre Limiti: <span id="timeLimitInfo">${data?.game?.timeLimit === 0 ? '∞' : Math.floor((data?.game?.timeLimit || 180) / 60)}</span> dk</div>
             <div>Skor Limiti: <span id="scoreLimitInfo">${data?.game?.scoreLimit === 0 ? '∞' : (data?.game?.scoreLimit || 3)}</span></div>
+            <div>Oyuncu Hızı: <span id="speedInfo">x${(data?.playerSpeedMultiplier || 1.0).toFixed(2)}</span></div>
             <div>Saha: <span id="stadiumName">${this._esc(data?.stadium?.name || 'Klasik')}</span></div>
           </div>
 
@@ -109,6 +110,15 @@ export class RoomLobby {
               </select>
               <select id="lobbyTimeLimit" class="input" style="padding: 4px 8px; font-size: 11px; height: 32px; min-width: 90px;">
                  <option value="60">1 Dakika</option><option value="180">3 Dakika</option><option value="300">5 Dakika</option><option value="600">10 Dakika</option><option value="0">Sınırsız</option>
+              </select>
+              <select id="lobbySpeedMultiplier" class="input" style="padding: 4px 8px; font-size: 11px; height: 32px; min-width: 80px;">
+                 <option value="0.50">x0.50 Hız</option>
+                 <option value="0.75">x0.75 Hız</option>
+                 <option value="1.00">x1.00 Hız</option>
+                 <option value="1.25">x1.25 Hız</option>
+                 <option value="1.50">x1.50 Hız</option>
+                 <option value="1.75">x1.75 Hız</option>
+                 <option value="2.00">x2.00 Hız</option>
               </select>
               <button class="btn btn-sm" id="btnToggleOvertime" style="display:flex; align-items:center; gap:6px; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.3); color: #ffd54f;">
                 ⏱ <span id="overtimeText">Uzatma Var</span>
@@ -225,6 +235,15 @@ export class RoomLobby {
       this._updateOvertimeUI();
       this.app.network.socket.emit('setOvertime', this.overtimeEnabled);
     });
+
+    // Speed Multiplier
+    const speedSelect = document.getElementById('lobbySpeedMultiplier');
+    if (speedSelect) {
+      speedSelect.value = data?.playerSpeedMultiplier || 1.0;
+      speedSelect.addEventListener('change', (e) => {
+        this.app.network.socket.emit('setSpeedMultiplier', parseFloat(e.target.value));
+      });
+    }
 
     // Lobby stadium change
     const stadiumSelect = document.getElementById('lobbyStadiumSelect');
@@ -383,6 +402,12 @@ export class RoomLobby {
       if (data.overtimeEnabled !== undefined) {
         this.overtimeEnabled = data.overtimeEnabled;
         this._updateOvertimeUI();
+      }
+      if (data.playerSpeedMultiplier !== undefined) {
+        const sel = document.getElementById('lobbySpeedMultiplier');
+        if (sel) sel.value = data.playerSpeedMultiplier;
+        const info = document.getElementById('speedInfo');
+        if (info) info.textContent = 'x' + parseFloat(data.playerSpeedMultiplier).toFixed(2);
       }
       if (data.players) {
         this._updatePlayers(data.players);

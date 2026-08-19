@@ -106,6 +106,7 @@ io.on('connection', (socket) => {
             maxPlayers: options.maxPlayers || 12,
             scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
             timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180,
+            playerSpeedMultiplier: options.playerSpeedMultiplier || 1.0,
             stadium: options.stadium || null,
             roomType: 'host'
         });
@@ -435,6 +436,20 @@ io.on('connection', (socket) => {
         if (player?.isAdmin) {
             room.game.overtimeEnabled = !!enabled;
             room.broadcast('roomUpdate', { overtimeEnabled: room.game.overtimeEnabled });
+        }
+    });
+
+    // --- Speed Multiplier ---
+    socket.on('setSpeedMultiplier', (multiplier) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        const player = room.players.get(socket.id);
+        if (player?.isAdmin) {
+            const val = parseFloat(multiplier);
+            if (isFinite(val) && val > 0 && val <= 3) {
+                room.playerSpeedMultiplier = Math.round(val * 100) / 100;
+                room.broadcast('roomUpdate', { playerSpeedMultiplier: room.playerSpeedMultiplier });
+            }
         }
     });
 
