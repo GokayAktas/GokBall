@@ -341,23 +341,9 @@ export class Renderer {
         const ctx = this.ctx;
         const bg = stadium.bg;
         const fieldH = bg.height || 170;
-        const fieldW = bg.width || 370;
         const kickOffRadius = bg.kickOffRadius || 75;
 
         ctx.save();
-
-        // Subtle half-field tint for the restricted team
-        const restrictedTeam = kickOffTeam === 'red' ? 'blue' : 'red';
-        const tintR = restrictedTeam === 'red' ? 199 : 0;
-        const tintG = 0;
-        const tintB = restrictedTeam === 'red' ? 0 : 140;
-
-        ctx.fillStyle = `rgba(${tintR}, ${tintG}, ${tintB}, 0.07)`;
-        if (restrictedTeam === 'red') {
-            ctx.fillRect(-fieldW, -fieldH, fieldW, fieldH * 2);
-        } else {
-            ctx.fillRect(0, -fieldH, fieldW, fieldH * 2);
-        }
 
         // Dashed center line
         ctx.setLineDash([12, 8]);

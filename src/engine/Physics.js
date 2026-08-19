@@ -584,40 +584,47 @@ export class Physics {
         for (const disc of this.discs) {
             if (!disc.isPlayer || !disc.team) continue;
             
-            // Only constrain the NON-kickoff team (kickoff team can enter the circle)
+            // Only constrain the NON-kickoff team (kickoff team can move freely)
             if (disc.team === this.kickOffTeam) continue;
             
-            const absY = Math.abs(disc.pos.y);
-            
-            // Calculate max allowed x based on center circle curve
-            let maxX;
-            if (absY < kickOffRadius) {
-                // Inside center circle area: boundary follows circle's edge
-                // Circle: x² + y² = R² → x = sqrt(R² - y²)
-                const circleEdgeX = Math.sqrt(kickOffRadius * kickOffRadius - absY * absY);
-                // Player's right edge (pos.x + radius) can't exceed circle's right edge
-                // So: pos.x + radius <= circleEdgeX → pos.x <= circleEdgeX - radius
-                maxX = circleEdgeX - disc.radius;
-            } else {
-                // Above/below center circle: boundary is center line
-                // Player's right edge can't exceed center line
-                // So: pos.x + radius <= 0 → pos.x <= -radius
-                maxX = -disc.radius;
-            }
-            
-            // Apply constraint based on team
-            if (disc.team === 'red') {
-                // Red team (non-kickoff): can't go past maxX to the right
-                if (disc.pos.x > maxX) {
-                    disc.pos.x = maxX;
+            const isRed = disc.team === 'red';
+
+            // Constraint 1: Stay on own side of center line
+            if (isRed) {
+                if (disc.pos.x > -disc.radius) {
+                    disc.pos.x = -disc.radius;
                     if (disc.speed.x > 0) disc.speed.x *= -0.5;
                 }
-            } else if (disc.team === 'blue') {
-                // Blue team (non-kickoff): can't go past -maxX to the left (mirror of red)
-                const minX = -maxX;
-                if (disc.pos.x < minX) {
-                    disc.pos.x = minX;
+            } else {
+                if (disc.pos.x < disc.radius) {
+                    disc.pos.x = disc.radius;
                     if (disc.speed.x < 0) disc.speed.x *= -0.5;
+                }
+            }
+
+            // Constraint 2: Cannot enter center circle at all
+            const distSq = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
+            const minDist = kickOffRadius + disc.radius;
+            if (distSq < minDist * minDist) {
+                const dist = Math.sqrt(distSq);
+                if (dist > 0) {
+                    // Push disc to circle edge along direction from center
+                    const pushX = (disc.pos.x / dist) * minDist;
+                    const pushY = (disc.pos.y / dist) * minDist;
+                    disc.pos.x = pushX;
+                    disc.pos.y = pushY;
+                    // Reflect velocity away from center
+                    const nx = pushX / minDist;
+                    const ny = pushY / minDist;
+                    const vn = disc.speed.x * nx + disc.speed.y * ny;
+                    if (vn < 0) {
+                        disc.speed.x -= 1.5 * vn * nx;
+                        disc.speed.y -= 1.5 * vn * ny;
+                    }
+                } else {
+                    // Disc at exact center — push to own side outside circle
+                    disc.pos.x = isRed ? -minDist : minDist;
+                    disc.speed.x = 0;
                 }
             }
         }

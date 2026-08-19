@@ -349,7 +349,14 @@ class GokBallApp {
                 }
 
                 else if (this._hostGameState === 'goal') {
-                    // Goal pause: physics still runs
+                    // Goal pause: clear all player inputs so they don't keep moving
+                    for (const disc of this.physics.discs) {
+                        if (disc.isPlayer) {
+                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
+                            disc.kicking = false;
+                        }
+                    }
+                    // Physics still runs (for ball momentum), but players don't move
                     this.physics.step();
                     this._hostGoalPauseTicks--;
 
@@ -388,11 +395,40 @@ class GokBallApp {
                 }
 
             } else {
-                // --- CLIENT MODE: Do NOT run local physics prediction ---
-                // Non-host clients rely entirely on server authoritative state.
-                // Running local physics without knowing other players' inputs
-                // causes them to freeze and then teleport when server state arrives.
-                // The applyState() method handles smooth interpolation.
+                // --- CLIENT MODE: Local player prediction only ---
+                // Apply server state first (handled in _handleGameState via applyState)
+                // Then run local prediction ONLY for the local player disc.
+                // This gives responsive controls while keeping other discs driven by server.
+                if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
+                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+                    if (myDisc && myDisc.isPlayer) {
+                        // Apply local input to our disc
+                        myDisc.input = inputState;
+                        
+                        // Apply acceleration
+                        let ax = 0, ay = 0;
+                        if (inputState.up) ay -= 1;
+                        if (inputState.down) ay += 1;
+                        if (inputState.left) ax -= 1;
+                        if (inputState.right) ax += 1;
+                        const accelMag = Math.sqrt(ax * ax + ay * ay);
+                        if (accelMag > 0) {
+                            const currentAccel = myDisc.kicking ? (myDisc.kickingAcceleration || 0.07) : (myDisc.acceleration || 0.1);
+                            myDisc.speed.x += (ax / accelMag) * currentAccel;
+                            myDisc.speed.y += (ay / accelMag) * currentAccel;
+                        }
+                        
+                        // Apply damping and move
+                        const damp = myDisc.kicking ? (myDisc.kickingDamping || 0.96) : (myDisc.damping || 0.96);
+                        myDisc.speed.x *= damp;
+                        myDisc.speed.y *= damp;
+                        myDisc.pos.x += myDisc.speed.x;
+                        myDisc.pos.y += myDisc.speed.y;
+                        
+                        // Reset input after applying (don't leave stale input on disc)
+                        myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
+                    }
+                }
             }
 
             this.accumulator -= stepSize;
