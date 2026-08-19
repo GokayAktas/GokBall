@@ -275,31 +275,18 @@ export class GamePhysics {
             const isRed = disc.team === 'red';
             const isKickoffTeam = disc.team === this.kickOffTeam;
 
-            // Both teams are constrained to their own half + center circle
-            // Opposing team (non-kickoff) stays on own side + cannot enter center circle
-            // Kickoff team stays on own side but CAN enter center circle
+            // Non-kickoff team: own half + cannot enter center circle
+            // Kickoff team: own half + entire center circle (can cross into opponent half within circle)
 
-            // Constraint 1: Stay on own side of center line
-            if (isRed) {
-                if (disc.pos.x > -disc.radius) {
-                    disc.pos.x = -disc.radius;
-                    if (disc.speed.x > 0) disc.speed.x *= -0.5;
-                }
-            } else {
-                if (disc.pos.x < disc.radius) {
-                    disc.pos.x = disc.radius;
-                    if (disc.speed.x < 0) disc.speed.x *= -0.5;
-                }
-            }
+            // Check if disc is inside the center circle
+            const distSqCenter = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
+            const inCircle = distSqCenter < (kickOffRadius + disc.radius) * (kickOffRadius + disc.radius);
 
-            // Constraint 3: Center circle
-            // Non-kickoff team: cannot enter center circle at all
-            // Kickoff team: CAN enter center circle (no constraint)
+            // Constraint 1: Center circle block for non-kickoff team
             if (!isKickoffTeam) {
-                const distSq = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
-                const minDist = kickOffRadius + disc.radius;
-                if (distSq < minDist * minDist) {
-                    const dist = Math.sqrt(distSq);
+                if (inCircle) {
+                    const dist = Math.sqrt(distSqCenter);
+                    const minDist = kickOffRadius + disc.radius;
                     if (dist > 0) {
                         const pushX = (disc.pos.x / dist) * minDist;
                         const pushY = (disc.pos.y / dist) * minDist;
@@ -315,6 +302,22 @@ export class GamePhysics {
                     } else {
                         disc.pos.x = isRed ? -minDist : minDist;
                         disc.speed.x = 0;
+                    }
+                }
+            }
+
+            // Constraint 2: Stay on own side of center line
+            // Kickoff team is exempt if they are inside the center circle
+            if (!isKickoffTeam || !inCircle) {
+                if (isRed) {
+                    if (disc.pos.x > -disc.radius) {
+                        disc.pos.x = -disc.radius;
+                        if (disc.speed.x > 0) disc.speed.x *= -0.5;
+                    }
+                } else {
+                    if (disc.pos.x < disc.radius) {
+                        disc.pos.x = disc.radius;
+                        if (disc.speed.x < 0) disc.speed.x *= -0.5;
                     }
                 }
             }
