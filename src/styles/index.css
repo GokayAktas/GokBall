@@ -1989,8 +1989,8 @@ select.input option {
    Resume Animation (White Rectangle Shrink)
    ============================================ */
 .resume-rect {
-  width: 175px;
-  height: 80px;
+  width: 40px;
+  height: 140px;
   background: white;
   border-radius: 2px;
   margin: 20px auto 0;
@@ -2002,6 +2002,6 @@ select.input option {
 }
 
 @keyframes resumeShrink {
-  0%   { width: 175px; height: 80px; opacity: 1; }
-  100% { width: 0px;    height: 80px; opacity: 0; }
+  0%   { width: 40px; height: 140px; opacity: 1; }
+  100% { width: 0px;  height: 140px; opacity: 0; }
 }

@@ -650,14 +650,23 @@ class GokBallApp {
         if (!this._isHost() || !this._isHostAuthority) return;
         if (this._hostGameState !== 'playing' && !this._isPaused) return;
         
-        this._isPaused = !this._isPaused;
+        // If resume animation is playing, cancel it and re-pause
+        if (this._resumeAnimating) {
+            this._cancelResumeAnimation();
+            this._showPauseOverlay();
+            this.network.socket?.emit('pauseGame', { paused: true });
+            if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            return;
+        }
         
         if (this._isPaused) {
-            this._showPauseOverlay();
-            // Notify non-host players via server
-            this.network.socket?.emit('pauseGame', { paused: true });
+            // Resume: show shrink animation first, then actually resume
+            this._showResumeAnimation();
         } else {
-            this._resumeGame();
+            // Pause immediately
+            this._isPaused = true;
+            this._showPauseOverlay();
+            this.network.socket?.emit('pauseGame', { paused: true });
         }
         
         // Update InGameMenu if visible
@@ -666,7 +675,7 @@ class GokBallApp {
         }
     }
 
-    _showPauseOverlay(showResumeRect) {
+    _showPauseOverlay() {
         document.getElementById('gameCanvas')?.classList.add('paused');
         
         // Remove existing overlay
@@ -681,24 +690,50 @@ class GokBallApp {
                 <span class="pause-subtitle">DURDURULDU</span>
             </div>
             <div class="pause-hint">Devam etmek için P tuşuna basın</div>
-            ${showResumeRect ? '<div class="resume-rect" id="resumeRect"></div>' : ''}
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    _showResumeAnimation() {
+        this._resumeAnimating = true;
+        document.getElementById('gameCanvas')?.classList.add('paused');
+        this._removePauseOverlay();
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'pauseOverlay';
+        overlay.className = 'pause-overlay';
+        overlay.innerHTML = `
+            <div class="pause-text-container">
+                <span class="pause-title">OYUN</span>
+                <span class="pause-subtitle">DURDURULDU</span>
+            </div>
+            <div class="pause-hint">Devam etmek için P tuşuna basın</div>
+            <div class="resume-rect" id="resumeRect"></div>
         `;
         document.body.appendChild(overlay);
         
-        if (showResumeRect) {
-            // Start rectangle shrink animation
-            const rect = document.getElementById('resumeRect');
-            if (rect) {
-                // Force reflow
-                void rect.offsetWidth;
-                rect.classList.add('animating');
-                
-                // After animation completes (3s), remove everything
-                setTimeout(() => {
-                    this._removePauseOverlay();
-                    document.getElementById('gameCanvas')?.classList.remove('paused');
-                }, 3200);
-            }
+        const rect = document.getElementById('resumeRect');
+        if (rect) {
+            void rect.offsetWidth;
+            rect.classList.add('animating');
+            
+            // After animation completes, THEN resume the game
+            this._resumeTimeout = setTimeout(() => {
+                this._resumeAnimating = false;
+                this._isPaused = false;
+                this._removePauseOverlay();
+                document.getElementById('gameCanvas')?.classList.remove('paused');
+                this.network.socket?.emit('pauseGame', { paused: false });
+                this._sendAuthorityState();
+            }, 3200);
+        }
+    }
+
+    _cancelResumeAnimation() {
+        this._resumeAnimating = false;
+        if (this._resumeTimeout) {
+            clearTimeout(this._resumeTimeout);
+            this._resumeTimeout = null;
         }
     }
 
@@ -708,22 +743,7 @@ class GokBallApp {
         document.getElementById('gameCanvas')?.classList.remove('paused');
     }
 
-    _resumeGame() {
-        this._isPaused = false;
-        
-        // Notify non-host players via server
-        this.network.socket?.emit('pauseGame', { paused: false });
-        
-        // Send authority state immediately
-        this._sendAuthorityState();
-        
-        // Keep text visible during animation, show rectangle below hint
-        this._showPauseOverlay(true);
-    }
 
-    _playResumeAnimation() {
-        // No longer used - handled by _showPauseOverlay(true)
-    }
 
     /** Update a player's disc when team changes mid-game (host only) */
     _hostUpdatePlayerDisc(playerId, players) {
