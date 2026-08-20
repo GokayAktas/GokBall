@@ -4,7 +4,7 @@
  * All game logic runs on the server (host's machine), clients do prediction
  */
 import { NetworkManager } from './network/NetworkManager.js';
-import { Physics, CollisionFlags } from './engine/Physics.js';
+import { Physics, CollisionFlags, Disc } from './engine/Physics.js';
 import { Renderer } from './engine/Renderer.js';
 import { Camera } from './engine/Camera.js';
 import { InputManager } from './engine/InputManager.js';
@@ -414,21 +414,46 @@ class GokBallApp {
                     // Interpolate remote players from snapshot buffer
                     const interp = this._snapshotBuffer.getInterpolatedState(Date.now());
                     if (interp && interp.physics && interp.physics.discs) {
-                        for (const sd of interp.physics.discs) {
-                            // Skip local player — we predict locally
-                            const remoteDisc = this.physics.discs.find(d => d.id === sd.id || d.ownerId === sd.id);
-                            if (!remoteDisc) continue;
-                            if (sd.id === myId || remoteDisc.id === myId) continue;
-                            // Smoothly move remote disc toward interpolated position
-                            remoteDisc.pos.x += (sd.x - remoteDisc.pos.x) * 0.35;
-                            remoteDisc.pos.y += (sd.y - remoteDisc.pos.y) * 0.35;
-                            remoteDisc.speed.x = sd.sx;
-                            remoteDisc.speed.y = sd.sy;
-                            remoteDisc.kicking = sd.kicking;
+                        for (let si = 0; si < interp.physics.discs.length; si++) {
+                            const sd = interp.physics.discs[si];
+                            const localDisc = this.physics.discs[si];
+                            if (!localDisc) continue;
+
+                            if (sd.isPlayer && (sd.id === myId || localDisc.id === myId)) {
+                                // Local player: reconcile against server position
+                                const dx = sd.x - localDisc.pos.x;
+                                const dy = sd.y - localDisc.pos.y;
+                                const distSq = dx * dx + dy * dy;
+                                if (distSq > 100 * 100) {
+                                    // Large desync: snap to server position
+                                    localDisc.pos.x = sd.x;
+                                    localDisc.pos.y = sd.y;
+                                    localDisc.speed.x = sd.sx;
+                                    localDisc.speed.y = sd.sy;
+                                } else if (distSq > 4 * 4) {
+                                    // Small drift: gently correct
+                                    localDisc.pos.x += dx * 0.15;
+                                    localDisc.pos.y += dy * 0.15;
+                                }
+                            } else if (!sd.isPlayer) {
+                                // Ball & non-player discs: interpolate from snapshot
+                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.4;
+                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.4;
+                                localDisc.speed.x = sd.sx;
+                                localDisc.speed.y = sd.sy;
+                                if (sd.color !== undefined) localDisc.color = sd.color;
+                            } else {
+                                // Remote players: smoothly interpolate toward server position
+                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.35;
+                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.35;
+                                localDisc.speed.x = sd.sx;
+                                localDisc.speed.y = sd.sy;
+                                localDisc.kicking = sd.kicking;
+                            }
                         }
                     }
 
-                    // Local player: immediate prediction
+                    // Local player: immediate prediction (runs AFTER reconciliation)
                     if (myDisc && myDisc.isPlayer) {
                         myDisc.input = inputState;
                         let ax = 0, ay = 0;
@@ -511,9 +536,16 @@ class GokBallApp {
             this.physics.discs.splice(idx, 1);
         }
 
-        const pp = this._currentStadium?.playerPhysics || {
+        const basePP = this._currentStadium?.playerPhysics || {
             radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
             acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+        };
+        // Apply speed multiplier from room settings
+        const speedMult = this.currentRoomData?.playerSpeedMultiplier || 1.0;
+        const pp = {
+            ...basePP,
+            acceleration: (basePP.acceleration || 0.1) * speedMult,
+            kickingAcceleration: (basePP.kickingAcceleration || 0.065) * speedMult,
         };
         const spawnDist = this._currentStadium?.spawnDistance || 170;
 
@@ -1041,13 +1073,69 @@ class GokBallApp {
             }
         }
 
-        // Apply physics state from server
+        // Sync metadata (colors, physics params, kickoff state) without overwriting positions.
+        // Positions are handled by the interpolation buffer in the game loop.
         if (state.physics) {
-            this.physics.applyState(state.physics);
+            this._syncPhysicsMetadata(state.physics);
         }
 
         // Update scoreboard
         this.scoreboard.update(state.scoreRed, state.scoreBlue, state.time);
+    }
+
+    /**
+     * Sync physics metadata from server without touching positions.
+     * Positions are handled by the interpolation buffer to prevent
+     * teleporting and player overlap on clients.
+     */
+    _syncPhysicsMetadata(physicsState) {
+        if (!physicsState.discs) return;
+
+        // Sync kickoff state
+        if (physicsState.kickOffReset !== undefined) this.physics.kickOffReset = physicsState.kickOffReset;
+        if (physicsState.kickOffTeam !== undefined) this.physics.kickOffTeam = physicsState.kickOffTeam;
+
+        // Sync disc array length
+        while (this.physics.discs.length < physicsState.discs.length) {
+            this.physics.discs.push(new Disc());
+        }
+        while (this.physics.discs.length > physicsState.discs.length) {
+            this.physics.discs.pop();
+        }
+
+        for (let i = 0; i < physicsState.discs.length; i++) {
+            const sd = physicsState.discs[i];
+            const disc = this.physics.discs[i];
+            if (!disc) continue;
+
+            // Sync metadata only (team, colors, physics params for prediction accuracy)
+            if (sd.isPlayer !== undefined) {
+                disc.isPlayer = sd.isPlayer;
+                disc.team = sd.team;
+                if (sd.name) disc._playerName = sd.name;
+                if (sd.avatar) disc.avatar = sd.avatar;
+                if (sd.id) disc.id = sd.id;
+                if (sd.color !== undefined) disc.color = sd.color;
+                if (sd.colors !== undefined) disc.colors = sd.colors;
+                if (sd.colorAngle !== undefined) disc.colorAngle = sd.colorAngle;
+                if (sd.avatarColor !== undefined) disc.avatarColor = sd.avatarColor;
+                if (sd.damping !== undefined) disc.damping = sd.damping;
+                if (sd.acceleration !== undefined) disc.acceleration = sd.acceleration;
+                if (sd.kickingAcceleration !== undefined) disc.kickingAcceleration = sd.kickingAcceleration;
+                if (sd.kickingDamping !== undefined) disc.kickingDamping = sd.kickingDamping;
+                if (sd.kickStrength !== undefined) disc.kickStrength = sd.kickStrength;
+                if (sd.bCoef !== undefined) disc.bCoef = sd.bCoef;
+                if (sd.invMass !== undefined) disc.invMass = sd.invMass;
+                if (sd.cMask !== undefined) disc.cMask = sd.cMask;
+                if (sd.cGroup !== undefined) disc.cGroup = sd.cGroup;
+                if (sd.radius !== undefined) disc.radius = sd.radius;
+            } else if (sd.color !== undefined) {
+                disc.color = sd.color;
+            }
+            if (sd.kicking !== undefined) disc.kicking = sd.kicking;
+            if (sd.typing !== undefined) disc.typing = sd.typing;
+            if (sd.radius !== undefined && !sd.isPlayer) disc.radius = sd.radius;
+        }
     }
 }
 

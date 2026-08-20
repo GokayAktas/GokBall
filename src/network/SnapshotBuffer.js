@@ -103,16 +103,10 @@ export class SnapshotBuffer {
         const discsA = stateA.physics.discs;
         const discsB = stateB.physics.discs;
         
-        // Match discs by id
-        const matchedA = new Map();
-        const matchedB = new Map();
-        
-        for (const d of discsA) matchedA.set(d.id, d);
-        for (const d of discsB) matchedB.set(d.id, d);
-        
-        // Interpolate all discs in B that also exist in A
-        for (const dB of discsB) {
-            const dA = matchedA.get(dB.id);
+        // Match discs by index (same index = same entity: ball, posts, players)
+        for (let i = 0; i < discsB.length; i++) {
+            const dB = discsB[i];
+            const dA = discsA[i];
             
             if (dA) {
                 // Interpolate position

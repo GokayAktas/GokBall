@@ -251,7 +251,7 @@ export class RoomLobby {
     // Speed Multiplier
     const speedSelect = document.getElementById('lobbySpeedMultiplier');
     if (speedSelect) {
-      speedSelect.value = data?.playerSpeedMultiplier || 1.0;
+      speedSelect.value = parseFloat(data?.playerSpeedMultiplier || 1.0).toFixed(2);
       speedSelect.addEventListener('change', (e) => {
         this.app.network.socket.emit('setSpeedMultiplier', parseFloat(e.target.value));
       });
@@ -377,8 +377,22 @@ export class RoomLobby {
     });
 
     this._registerHandler('stadiumChanged', (data) => {
+      // Update roomData with new stadium
+      if (data.stadium) {
+        this.roomData = { ...this.roomData, stadium: data.stadium };
+      }
       const el = document.getElementById('stadiumName');
       if (el) el.textContent = data.stadium?.name || 'Custom';
+      // Update the stadium select dropdown to reflect the change
+      const stadiumSelect = document.getElementById('lobbyStadiumSelect');
+      if (stadiumSelect && data.stadium) {
+        const name = data.stadium.name;
+        if (name === 'Küçük') stadiumSelect.value = 'small';
+        else if (name === 'Futsal 3v3') stadiumSelect.value = 'futsal';
+        else if (name === 'Klasik') stadiumSelect.value = 'classic';
+        else if (name === 'Büyük') stadiumSelect.value = 'big';
+        else if (name === 'Devasa') stadiumSelect.value = 'huge';
+      }
       this._addSystemMessage('Saha değiştirildi: ' + (data.stadium?.name || 'Custom'));
     });
 
@@ -417,7 +431,7 @@ export class RoomLobby {
       }
       if (data.playerSpeedMultiplier !== undefined) {
         const sel = document.getElementById('lobbySpeedMultiplier');
-        if (sel) sel.value = data.playerSpeedMultiplier;
+        if (sel) sel.value = parseFloat(data.playerSpeedMultiplier).toFixed(2);
         const info = document.getElementById('speedInfo');
         if (info) info.textContent = 'x' + parseFloat(data.playerSpeedMultiplier).toFixed(2);
       }
