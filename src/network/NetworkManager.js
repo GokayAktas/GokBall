@@ -90,6 +90,12 @@ export class NetworkManager {
             this.socket.on('gameOver', (data) => this._trigger('gameOver', data));
             this.socket.on('chatMessage', (data) => this._trigger('chatMessage', data));
             this.socket.on('adminUpdate', (data) => this._trigger('adminUpdate', data));
+            // Map system events
+            this.socket.on('mapChanged', (data) => this._trigger('mapChanged', data));
+            this.socket.on('mapSync', (data) => this._trigger('mapSync', data));
+            this.socket.on('mapList', (data) => this._trigger('mapList', data));
+            // Legacy
+            this.socket.on('stadiumChanged', (data) => this._trigger('stadiumChanged', data));
 
             // Custom Ping tracking with jitter/avg/min stats
             this.socket.on('pong', () => {
@@ -204,6 +210,18 @@ export class NetworkManager {
 
     changeStadium(stadiumData) {
         this.socket.emit('changeStadium', stadiumData);
+    }
+
+    changeMap(mapId) {
+        this.socket.emit('changeMap', mapId);
+    }
+
+    requestMap(mapId) {
+        this.socket.emit('requestMap', { mapId });
+    }
+
+    getMapList() {
+        this.socket.emit('getMapList');
     }
 
     // === Admin: Update team colors at runtime ===

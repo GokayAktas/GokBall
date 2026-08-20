@@ -42,6 +42,11 @@ class GokBallApp {
         this.gameRunning = false;
         this.stadiumData = null;
 
+        // Map cache: hash -> mapData (avoids re-downloading identical maps)
+        this._mapCache = new Map();
+        this._currentMapId = null;
+        this._currentMapHash = null;
+
         // Server game state tracking
         this._serverGameState = 'stopped';
 
@@ -834,7 +839,15 @@ class GokBallApp {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
             this.stadiumData = data.stadium;
+            this._currentMapId = data.mapId || null;
+            this._currentMapHash = data.mapHash || null;
             this.physics.myPlayerId = this.network.socket?.id;
+
+            // Request authoritative map data from server (hash-based dedup)
+            if (data.mapId) {
+                this.network.requestMap(data.mapId);
+            }
+
             if (data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal')) {
                 this.startGame(data);
             } else {
@@ -1058,21 +1071,74 @@ class GokBallApp {
             }
         });
 
-        // Stadium Changed - update local stadium and reload physics + renderer if game is running
+        // Stadium Changed (legacy) - kept for backward compat
         this.network.on('stadiumChanged', (data) => {
             if (data.stadium) {
-                this.stadiumData = data.stadium;
-                if (this.currentRoomData) {
-                    this.currentRoomData.stadium = data.stadium;
-                }
-                // If a game is already running, reload the stadium into physics and renderer
-                if (this.gameRunning) {
-                    this.physics.loadStadium(data.stadium);
-                    this._currentStadium = data.stadium;
-                    this.renderer._stadiumDirty = true;
-                }
+                this._applyMapData(data.stadium);
             }
         });
+
+        // Map Changed (new server-authoritative system)
+        // Server notifies all clients that the active map has changed.
+        // The event includes the full stadium data for atomic swap.
+        this.network.on('mapChanged', (data) => {
+            if (data.stadium) {
+                // Cache the map by hash for future dedup
+                if (data.mapHash && data.mapData) {
+                    this._mapCache.set(data.mapHash, data.mapData);
+                }
+                this._currentMapId = data.mapId || null;
+                this._currentMapHash = data.mapHash || null;
+                this._applyMapData(data.stadium);
+            }
+        });
+
+        // Map Sync - server sends full map data (on join or requestMap response)
+        // Includes dedup: if client already has the hash, skip loading
+        this.network.on('mapSync', (data) => {
+            if (!data.mapData) return;
+
+            // Hash-based dedup: if we already have this exact map, skip reload
+            if (data.mapHash && this._mapCache.has(data.mapHash)) {
+                console.log(`[MapSystem] Map ${data.mapId} already cached (hash: ${data.mapHash}), skipping reload`);
+                // Still update references even if skipping reload
+                this._currentMapId = data.mapId;
+                this._currentMapHash = data.mapHash;
+                const cachedData = this._mapCache.get(data.mapHash);
+                this._applyMapData(cachedData);
+                return;
+            }
+
+            // Cache and apply
+            if (data.mapHash) {
+                this._mapCache.set(data.mapHash, data.mapData);
+            }
+            this._currentMapId = data.mapId;
+            this._currentMapHash = data.mapHash;
+            this._applyMapData(data.mapData);
+        });
+
+        // Map List - available maps for room creation / lobby UI
+        this.network.on('mapList', (data) => {
+            this._availableMaps = data;
+        });
+    }
+
+    /**
+     * Apply map data atomically: update roomData, physics, and renderer.
+     * This is the single point where map geometry changes on the client.
+     */
+    _applyMapData(stadium) {
+        this.stadiumData = stadium;
+        if (this.currentRoomData) {
+            this.currentRoomData.stadium = stadium;
+        }
+        // If a game is already running, atomically swap the stadium
+        if (this.gameRunning) {
+            this.physics.loadStadium(stadium);
+            this._currentStadium = stadium;
+            this.renderer._stadiumDirty = true;
+        }
     }
 
     _handleGameState(state) {

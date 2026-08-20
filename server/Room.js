@@ -4,6 +4,7 @@
  */
 import { Player } from './Player.js';
 import { Game } from './Game.js';
+import { MapManager } from './MapManager.js';
 
 // Stadium Generator
 function createStadium(name, fieldW, fieldH, spawnDist = 170) {
@@ -87,79 +88,14 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
     };
 }
 
+// Maps are now managed centrally by MapManager
+// Legacy STADIUMS object kept for backward compatibility
 const STADIUMS = {
-    small: createStadium("Küçük", 250, 120, 120),
-    classic: createStadium("Klasik", 370, 170, 170),
-    futsal: {
-        name: "Futsal 3v3",
-        width: 480, height: 260, spawnDistance: 170,
-        bg: { 
-            type: "grass", width: 420, height: 220, 
-            kickOffRadius: 75, cornerRadius: 0, 
-            color: "4A4A4A", stripeColor: "4A4A4A", bgColor: "3A3A3A",
-            lineColor: "FFFFFF", showCenterLine: true, showKickOffCircle: true,
-            centerLineColor: "666666", useStarballImage: true
-        },
-        vertexes: [
-            { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] }, // 0
-            { x: -420, y: 75, bCoef: 0.1, cMask: ["ball"] },  // 1: Higher goal post
-            { x: -420, y: -75, bCoef: 0.1, cMask: ["ball"] }, // 2: Higher goal post
-            { x: -420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 3
-            { x: 420, y: 220, bCoef: 0.1, cMask: ["ball"] },  // 4
-            { x: 420, y: 75, bCoef: 0.1, cMask: ["ball"] },   // 5: Higher goal post
-            { x: 420, y: -75, bCoef: 0.1, cMask: ["ball"] },  // 6: Higher goal post
-            { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] }, // 7
-            { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] }, // 8
-            { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] }, // 9
-            { x: -460, y: 75, bCoef: 0.1, cMask: ["ball"] },  // 10: Rectangular higher
-            { x: -460, y: -75, bCoef: 0.1, cMask: ["ball"] }, // 11: Rectangular higher
-            { x: 460, y: 75, bCoef: 0.1, cMask: ["ball"] },   // 12: Rectangular higher
-            { x: 460, y: -75, bCoef: 0.1, cMask: ["ball"] }   // 13: Rectangular higher
-        ],
-        segments: [
-            // Outer Lines (White)
-            { v0: 0, v1: 8, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 8, v1: 4, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 3, v1: 9, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 9, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 0, v1: 1, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 2, v1: 3, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 4, v1: 5, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            { v0: 6, v1: 7, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
-            // Goals (Gray Rectangular - Sharp Corners)
-            { v0: 1, v1: 10, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 10, v1: 11, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 11, v1: 2, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 5, v1: 12, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 12, v1: 13, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] },
-            { v0: 13, v1: 6, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] }
-        ],
-        goals: [
-            { p0: [-420, 75], p1: [-420, -75], team: "red" },
-            { p0: [420, 75], p1: [420, -75], team: "blue" }
-        ],
-        discs: [
-            { pos: [0, 0], radius: 6.4, invMass: 1.6, bCoef: 0.4, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
-            // Posts (Red/Blue Dots)
-            { pos: [-420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
-            { pos: [-420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
-            { pos: [420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] },
-            { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
-        ],
-        planes: [
-            { normal: [0, 1], dist: -250, bCoef: 0.1, cMask: ["all"] }, // 220 + 2*15 (approx)
-            { normal: [0, -1], dist: -250, bCoef: 0.1, cMask: ["all"] },
-            { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
-            { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
-        ],
-        playerPhysics: {
-            radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-            acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 5.0
-        },
-        ballPhysics: "disc0"
-    },
-    big: createStadium("Büyük", 550, 270, 300),
-    huge: createStadium("Devasa", 750, 370, 450)
+    small:  MapManager.getMap('small'),
+    classic: MapManager.getMap('classic'),
+    futsal: MapManager.getMap('futsal'),
+    big:    MapManager.getMap('big'),
+    huge:   MapManager.getMap('huge'),
 };
 
 let roomIdCounter = 1;
@@ -179,12 +115,14 @@ export class Room {
         this._closing = false; // Flag to prevent recursive cleanup
         this.playerSpeedMultiplier = options.playerSpeedMultiplier || 1.0;
 
-        // Stadium Selection
+        // Map Selection (server-authoritative)
         if (options.stadium && typeof options.stadium === 'string') {
-            this.stadium = STADIUMS[options.stadium] || STADIUMS.classic;
+            this.mapId = MapManager.isValid(options.stadium) ? options.stadium : 'classic';
         } else {
-            this.stadium = options.stadium || STADIUMS.classic;
+            this.mapId = 'classic';
         }
+        this.stadium = MapManager.getMap(this.mapId);
+        this.mapHash = MapManager.getHash(this.mapId);
 
         // Default team colors aligned with frontend "champions" theme.
         // Colors stored without # to be compatible with existing code paths.
@@ -559,21 +497,45 @@ export class Room {
     }
 
     /**
-     * Change stadium
+     * Change map (server-authoritative, hash-based dedup)
+     * @param {string} adminId - The requesting player's socket ID
+     * @param {string} mapId   - The map ID from the registry
+     */
+    changeMap(adminId, mapId) {
+        const admin = this.players.get(adminId);
+        if (!admin || !admin.isAdmin) return;
+        if (this.game.state === 'playing') return;
+        if (!MapManager.isValid(mapId)) return;
+
+        // Dedup: skip if same map is already active
+        if (this.mapId === mapId) return;
+
+        this.mapId = mapId;
+        this.stadium = MapManager.getMap(mapId);
+        this.mapHash = MapManager.getHash(mapId);
+        this.game.setStadium(this.stadium);
+        this.broadcast('mapChanged', { mapId, mapHash: this.mapHash, stadium: this.stadium });
+    }
+
+    /**
+     * Legacy changeStadium - resolves string IDs via MapManager
      */
     changeStadium(adminId, stadiumData) {
+        if (typeof stadiumData === 'string') {
+            return this.changeMap(adminId, stadiumData);
+        }
+        // Custom HBS data: register as a temporary map
         const admin = this.players.get(adminId);
         if (!admin || !admin.isAdmin) return;
         if (this.game.state === 'playing') return;
 
-        let finalStadium = stadiumData;
-        if (typeof stadiumData === 'string' && STADIUMS[stadiumData]) {
-            finalStadium = STADIUMS[stadiumData];
-        }
-
-        this.stadium = finalStadium;
-        this.game.setStadium(finalStadium);
-        this.broadcast('stadiumChanged', { stadium: finalStadium });
+        const tempId = 'custom_' + Date.now();
+        MapManager.registerMap(tempId, stadiumData);
+        this.mapId = tempId;
+        this.stadium = stadiumData;
+        this.mapHash = MapManager.getHash(tempId);
+        this.game.setStadium(this.stadium);
+        this.broadcast('mapChanged', { mapId: this.mapId, mapHash: this.mapHash, stadium: this.stadium });
     }
 
     /**
@@ -790,6 +752,8 @@ export class Room {
             players: this.getPlayerList(),
             teamsLocked: this.teamsLocked,
             stadium: this.stadium,
+            mapId: this.mapId,
+            mapHash: this.mapHash,
             teamColors: this.teamColors,
             roomType: this.roomType,
             playerSpeedMultiplier: this.playerSpeedMultiplier,
@@ -806,6 +770,7 @@ export class Room {
             playerCount: this.players.size,
             maxPlayers: this.maxPlayers,
             stadiumName: this.stadium.name || 'Classic',
+            mapId: this.mapId,
             gameState: this.game.state,
             scoreRed: this.game.scoreRed,
             scoreBlue: this.game.scoreBlue,

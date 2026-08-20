@@ -270,7 +270,11 @@ export class RoomLobby {
       else stadiumSelect.value = 'custom';
 
       stadiumSelect.addEventListener('change', (e) => {
-        this.app.network.changeStadium(e.target.value);
+        const val = e.target.value;
+        if (val && val !== 'custom') {
+          // Use new server-authoritative map system
+          this.app.network.changeMap(val);
+        }
       });
     }
 

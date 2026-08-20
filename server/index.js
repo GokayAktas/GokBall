@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { Room } from './Room.js';
+import { MapManager } from './MapManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -403,7 +404,33 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- Stadium ---
+    // --- Map (new server-authoritative system) ---
+    socket.on('changeMap', (mapId) => {
+        const room = getPlayerRoom(socket.id);
+        if (room) room.changeMap(socket.id, mapId);
+    });
+
+    // --- Map Sync: client requests full map data by ID ---
+    socket.on('requestMap', (data) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        const mapId = data?.mapId || room.mapId;
+        const mapData = MapManager.getMap(mapId);
+        const mapHash = MapManager.getHash(mapId);
+        socket.emit('mapSync', {
+            mapId,
+            mapHash,
+            mapData,
+            senderMapHash: room.mapHash // for client-side dedup check
+        });
+    });
+
+    // --- Map List: get all available maps ---
+    socket.on('getMapList', () => {
+        socket.emit('mapList', MapManager.getMapList());
+    });
+
+    // --- Stadium (legacy) ---
     socket.on('changeStadium', (stadiumData) => {
         const room = getPlayerRoom(socket.id);
         if (room) room.changeStadium(socket.id, stadiumData);
