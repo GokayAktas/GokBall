@@ -1036,6 +1036,16 @@ class GokBallApp {
                 }
             }
         });
+
+        // Stadium Changed - update local stadium data so host loads correct map
+        this.network.on('stadiumChanged', (data) => {
+            if (data.stadium) {
+                this.stadiumData = data.stadium;
+                if (this.currentRoomData) {
+                    this.currentRoomData.stadium = data.stadium;
+                }
+            }
+        });
     }
 
     _handleGameState(state) {

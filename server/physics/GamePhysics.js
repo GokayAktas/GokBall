@@ -306,18 +306,28 @@ export class GamePhysics {
                 }
             }
 
-            // Constraint 2: Stay on own side of center line
+            // Constraint 2: Stay on own side of center line (invisible wall at x=0)
             // Kickoff team is exempt if they are inside the center circle
             if (!isKickoffTeam || !inCircle) {
                 if (isRed) {
-                    if (disc.pos.x > -disc.radius) {
+                    // Red cannot cross center line (x=0) to the right
+                    const penetration = disc.pos.x + disc.radius;
+                    if (penetration > 0) {
                         disc.pos.x = -disc.radius;
-                        if (disc.speed.x > 0) disc.speed.x *= -0.5;
+                        // Reflect velocity off the invisible wall
+                        if (disc.speed.x > 0) {
+                            disc.speed.x *= -0.3;
+                        }
                     }
                 } else {
-                    if (disc.pos.x < disc.radius) {
+                    // Blue cannot cross center line (x=0) to the left
+                    const penetration = disc.radius - disc.pos.x;
+                    if (penetration > 0) {
                         disc.pos.x = disc.radius;
-                        if (disc.speed.x < 0) disc.speed.x *= -0.5;
+                        // Reflect velocity off the invisible wall
+                        if (disc.speed.x < 0) {
+                            disc.speed.x *= -0.3;
+                        }
                     }
                 }
             }
