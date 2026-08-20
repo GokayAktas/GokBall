@@ -12,6 +12,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
     const goalDepth = Math.round(fieldW * (40 / classicFieldW));
     const goalWidth = Math.round(fieldH * (64 / classicFieldH));
     const goalBackWidth = Math.round(goalWidth * (44 / 64));
+    const kickOffRadius = Math.round(fieldH * (75 / classicFieldH));
 
     return {
         name,
@@ -20,7 +21,7 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
         spawnDistance: spawnDist,
         bg: {
             type: "grass", width: fieldW, height: fieldH,
-            kickOffRadius: 75, cornerRadius: 0,
+            kickOffRadius, cornerRadius: 0,
             color: "699057", stripeColor: "7B9F6C", bgColor: "718D5A",
             lineColor: "C7E6BD", showCenterLine: true, showKickOffCircle: true
         },

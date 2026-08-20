@@ -343,7 +343,8 @@ io.on('connection', (socket) => {
         if (!player || !player.isAdmin) return;
 
         if (room.hostId && socket.id === room.hostId) {
-            // Host-authority: tell host to stop game via relay
+            // Host-authority: reset game state so admin can change stadium etc.
+            room.game.state = 'stopped';
             io.to(room.id).emit('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
         } else {
             room.game.stop();

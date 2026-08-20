@@ -1037,12 +1037,18 @@ class GokBallApp {
             }
         });
 
-        // Stadium Changed - update local stadium data so host loads correct map
+        // Stadium Changed - update local stadium and reload physics + renderer if game is running
         this.network.on('stadiumChanged', (data) => {
             if (data.stadium) {
                 this.stadiumData = data.stadium;
                 if (this.currentRoomData) {
                     this.currentRoomData.stadium = data.stadium;
+                }
+                // If a game is already running, reload the stadium into physics and renderer
+                if (this.gameRunning) {
+                    this.physics.loadStadium(data.stadium);
+                    this._currentStadium = data.stadium;
+                    this.renderer._stadiumDirty = true;
                 }
             }
         });
