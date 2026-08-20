@@ -4,7 +4,7 @@
  */
 
 export class SnapshotBuffer {
-    constructor(interpolationDelay = 100) {
+    constructor(interpolationDelay = 50) {
         this.buffer = []; // Array of { time, state }
         this.interpolationDelay = interpolationDelay; // ms
         this.maxBufferSize = 20; // Keep last 20 snapshots

@@ -436,16 +436,16 @@ class GokBallApp {
                                     localDisc.pos.y += dy * 0.15;
                                 }
                             } else if (!sd.isPlayer) {
-                                // Ball & non-player discs: interpolate from snapshot
-                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.4;
-                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.4;
+                                // Ball & non-player discs: interpolate from snapshot (snappy)
+                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.55;
+                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.55;
                                 localDisc.speed.x = sd.sx;
                                 localDisc.speed.y = sd.sy;
                                 if (sd.color !== undefined) localDisc.color = sd.color;
                             } else {
-                                // Remote players: smoothly interpolate toward server position
-                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.35;
-                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.35;
+                                // Remote players: smooth but responsive interpolation
+                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.5;
+                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.5;
                                 localDisc.speed.x = sd.sx;
                                 localDisc.speed.y = sd.sy;
                                 localDisc.kicking = sd.kicking;
@@ -804,8 +804,9 @@ class GokBallApp {
     /** Send authoritative state to server (relayed to other players) */
     _sendAuthorityState() {
         this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
-        // Send at ~30fps (every other frame at 60fps)
-        if (this._hostAuthoritySendCounter % 2 !== 0) return;
+        // Send every frame for responsive non-host clients (~60fps)
+        // if (this._hostAuthoritySendCounter % 2 !== 0) return;
+
 
         this.network.socket?.emit('authorityState', {
             state: this._hostGameState,
