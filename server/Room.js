@@ -5,6 +5,7 @@
 import { Player } from './Player.js';
 import { Game } from './Game.js';
 import { MapManager } from './MapManager.js';
+import { normalizeHex, normalizeAngle } from './utils/colors.js';
 
 // Stadium Generator
 function createStadium(name, fieldW, fieldH, spawnDist = 170) {
@@ -127,8 +128,8 @@ export class Room {
         // Default team colors aligned with frontend "champions" theme.
         // Colors stored without # to be compatible with existing code paths.
         this.teamColors = options.teamColors || {
-            red: { angle: 0, textColor: 'FFFFFF', colors: ['D32F2F'] },
-            blue: { angle: 0, textColor: 'FFFFFF', colors: ['1565C0'] }
+            red: { angle: 0, avatarColor: 'FFFFFF', colors: ['D32F2F'] },
+            blue: { angle: 0, avatarColor: 'FFFFFF', colors: ['1565C0'] }
         };
 
         // Persist lobby chat for in-game display
@@ -309,7 +310,7 @@ export class Room {
                         disc.color = this.teamColors[team].colors[0];
                         disc.colors = this.teamColors[team].colors;
                         disc.colorAngle = this.teamColors[team].angle;
-                        disc.avatarColor = this.teamColors[team].textColor;
+                        disc.avatarColor = this.teamColors[team].avatarColor || this.teamColors[team].textColor || 'FFFFFF';
                     } else {
                         disc.color = team === 'red' ? 'c70000' : '00008c';
                         disc.colors = [disc.color];
@@ -432,7 +433,7 @@ export class Room {
                         disc.color = this.teamColors[team].colors[0];
                         disc.colors = this.teamColors[team].colors;
                         disc.colorAngle = this.teamColors[team].angle;
-                        disc.avatarColor = this.teamColors[team].textColor;
+                        disc.avatarColor = this.teamColors[team].avatarColor || this.teamColors[team].textColor || 'FFFFFF';
                     } else {
                         disc.color = team === 'red' ? 'c70000' : '00008c';
                         disc.colors = [disc.color];
@@ -624,9 +625,9 @@ export class Room {
         return (Math.floor(Math.random() * 99) + 1).toString();
     }
 
+    /** @deprecated Use normalizeHex from utils/colors.js instead */
     _normalizeColor(value) {
-        const cleaned = (value || '').replace('#', '').trim().toUpperCase();
-        return /^[0-9A-F]{6}$/.test(cleaned) ? cleaned : null;
+        return normalizeHex(value);
     }
 
     _applyAvatarToDisc(player) {
@@ -640,6 +641,25 @@ export class Room {
             disc.avatar = player.avatar;
             disc._avatar = player.avatar;
         }
+    }
+
+    /**
+     * Apply current teamColors to all discs of a given team.
+     * Called when colors change mid-game.
+     */
+    _applyTeamColorsToDiscs(team) {
+        if (this.game.state !== 'playing' && this.game.state !== 'countdown' && this.game.state !== 'goal') return;
+        const tc = this.teamColors?.[team];
+        if (!tc) return;
+        this.game.physics.discs.forEach(d => {
+            if (d.isPlayer && d.team === team) {
+                d.color = tc.colors[0];
+                d.colors = tc.colors;
+                d.colorAngle = tc.angle;
+                d.avatarColor = tc.avatarColor;
+            }
+        });
+        this.broadcast('gameState', this.game._getGameState());
     }
 
     _handleCommand(player, cmd) {
@@ -662,61 +682,80 @@ export class Room {
                     const team = teamArg === 'kirmizi' || teamArg === 'kırmızı' ? 'red'
                         : teamArg === 'mavi' ? 'blue'
                             : teamArg;
-                    if (team === 'red' || team === 'blue') {
-                        if (parts.length < 5) {
-                            player.socket.emit('chatMessage', {
-                                playerName: 'SISTEM',
-                                message: 'Kullanım: /colors (takım) (açı) (yazı rengi) (renk1) [renk2] [renk3] [renk4]',
-                                system: true
-                            });
-                            break;
-                        }
+                    if (team !== 'red' && team !== 'blue') {
+                        player.socket.emit('chatMessage', {
+                            playerName: 'SISTEM',
+                            message: 'Geçersiz takım. Kullanım: /colors red|blue ...',
+                            system: true
+                        });
+                        break;
+                    }
 
-                        const angle = Number.parseInt(parts[2], 10);
-                        const textColor = this._normalizeColor(parts[3]);
-                        const colors = parts.slice(4).map(c => this._normalizeColor(c)).filter(Boolean);
-                        
-                        if (Number.isFinite(angle) && textColor && colors.length > 0) {
-                            if (!this.teamColors) this.teamColors = { red: null, blue: null };
-                            this.teamColors[team] = {
-                                angle,
-                                textColor,
-                                colors
-                            };
-                            
-                            // Broadcast update
-                            this.broadcast('chatMessage', {
-                                playerName: 'SİSTEM',
-                                message: `${team.toUpperCase()} takım renkleri güncellendi.`,
-                                system: true
-                            });
+                    // Handle clear/reset
+                    if (parts[2]?.toLowerCase() === 'clear' || parts[2]?.toLowerCase() === 'reset') {
+                        const defaults = team === 'red'
+                            ? { angle: 0, avatarColor: 'FFFFFF', colors: ['D32F2F'] }
+                            : { angle: 0, avatarColor: 'FFFFFF', colors: ['1565C0'] };
+                        if (!this.teamColors) this.teamColors = { red: null, blue: null };
+                        this.teamColors[team] = defaults;
 
-                            // Apply to active players if game is running
-                            if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-                                this.game.physics.discs.forEach(d => {
-                                    if (d.isPlayer && d.team === team) {
-                                        d.color = colors[0];
-                                        d.colors = colors;
-                                        d.colorAngle = angle;
-                                        d.avatarColor = textColor;
-                                    }
-                                });
-                                this.broadcast('gameState', this.game._getGameState());
-                            }
+                        // Apply to active players if game is running
+                        this._applyTeamColorsToDiscs(team);
 
-                            // Broadcast teamColorsUpdated so clients update their local state
-                            this.broadcast('teamColorsUpdated', {
-                                team,
-                                teamColors: this.teamColors[team],
-                                allTeamColors: this.teamColors
-                            });
-                        } else {
-                            player.socket.emit('chatMessage', {
-                                playerName: 'SISTEM',
-                                message: 'Renk kodları 6 haneli HEX olmalı. En az 1 renk gerekli. Örnek: /colors red 0 FFFFFF C70000',
-                                system: true
-                            });
-                        }
+                        this.broadcast('teamColorsUpdated', {
+                            team,
+                            teamColors: this.teamColors[team],
+                            allTeamColors: this.teamColors
+                        });
+                        this.broadcast('chatMessage', {
+                            playerName: 'SİSTEM',
+                            message: `${team.toUpperCase()} takım renkleri sıfırlandı.`,
+                            system: true
+                        });
+                        break;
+                    }
+
+                    if (parts.length < 5) {
+                        player.socket.emit('chatMessage', {
+                            playerName: 'SISTEM',
+                            message: 'Kullanım: /colors red|blue <açı> <avatarRenk> <renk1> [renk2] [renk3]\nÖrnek: /colors red 60 FFFFFF F28C28 8A1538\nSıfırla: /colors red clear',
+                            system: true
+                        });
+                        break;
+                    }
+
+                    const angle = normalizeAngle(parts[2]);
+                    const avatarColor = normalizeHex(parts[3]);
+                    const colors = parts.slice(4).map(c => normalizeHex(c)).filter(Boolean);
+                    
+                    if (avatarColor && colors.length > 0) {
+                        if (!this.teamColors) this.teamColors = { red: null, blue: null };
+                        this.teamColors[team] = {
+                            angle,
+                            avatarColor,
+                            colors
+                        };
+
+                        // Apply to active players if game is running
+                        this._applyTeamColorsToDiscs(team);
+
+                        // Broadcast teamColorsUpdated so clients update their local state
+                        this.broadcast('teamColorsUpdated', {
+                            team,
+                            teamColors: this.teamColors[team],
+                            allTeamColors: this.teamColors
+                        });
+                        this.broadcast('chatMessage', {
+                            playerName: 'SİSTEM',
+                            message: `${team.toUpperCase()} takım renkleri güncellendi.`,
+                            system: true
+                        });
+                    } else {
+                        player.socket.emit('chatMessage', {
+                            playerName: 'SISTEM',
+                            message: 'Geçersiz renk. HEX 6 haneli olmalı (örn: FF0000). En az 1 renk gerekli.',
+                            system: true
+                        });
                     }
                 }
                 break;

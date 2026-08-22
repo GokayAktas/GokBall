@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { Room } from './Room.js';
 import { MapManager } from './MapManager.js';
+import { normalizeHex, normalizeAngle } from './utils/colors.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -173,7 +174,7 @@ io.on('connection', (socket) => {
     });
 
     // --- Admin: Set Team Colors at runtime ---
-    // Payload: { team: 'red'|'blue', angle?: number, textColor?: 'FFFFFF', colors: ['C70000','FF5555'] }
+    // HaxBall-compatible: { team, angle, avatarColor, colors[] }
     socket.on('setTeamColors', (payload) => {
         try {
             const room = getPlayerRoom(socket.id);
@@ -188,18 +189,21 @@ io.on('connection', (socket) => {
             const team = (payload.team || '').toLowerCase();
             if (!['red', 'blue'].includes(team)) return;
 
-            const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : 0;
-            const textColor = (payload.textColor || '').replace('#','').trim().toUpperCase() || 'FFFFFF';
-            const colors = Array.isArray(payload.colors) ? payload.colors.map(c => (c||'').replace('#','').trim().toUpperCase()).filter(Boolean) : [];
+            const angle = normalizeAngle(payload.angle);
+            // Accept both avatarColor (HaxBall) and textColor (legacy)
+            const avatarColor = normalizeHex(payload.avatarColor || payload.textColor) || 'FFFFFF';
+            const colors = Array.isArray(payload.colors)
+                ? payload.colors.map(c => normalizeHex(c)).filter(Boolean)
+                : [];
             if (colors.length === 0) {
-                socket.emit('roomError', { error: 'En az bir renk sağlanmalıdır.' });
+                socket.emit('roomError', { error: 'En az bir renk sağlanmalıdır. HEX 6 haneli olmalı (örn: FF0000).' });
                 return;
             }
 
             if (!room.teamColors) room.teamColors = { red: null, blue: null };
             room.teamColors[team] = {
                 angle,
-                textColor,
+                avatarColor,
                 colors
             };
 
@@ -210,17 +214,13 @@ io.on('connection', (socket) => {
                         d.color = colors[0];
                         d.colors = colors;
                         d.colorAngle = angle;
-                        d.avatarColor = textColor;
+                        d.avatarColor = avatarColor;
                     }
                 });
-                // Notify clients with updated game state for immediate sync
                 io.to(room.id).emit('gameState', room.game._getGameState());
             }
 
-            // Broadcast team colors update to room so UIs can update CSS vars
             io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
-
-            // Inform room via chat
             io.to(room.id).emit('chatMessage', { playerName: 'SİSTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
         } catch (e) {
             console.error('[Server] setTeamColors error', e);
@@ -549,7 +549,7 @@ httpServer.listen(PORT, () => {
 
 // --- Optional Admin HTTP Endpoint to change team colors (requires ADMIN_SECRET header) ---
 // POST /admin/rooms/:id/teamColors
-// Body: { team: 'red'|'blue', angle, textColor, colors: [] }
+// Body: { team: 'red'|'blue', angle, avatarColor, colors: [] }
 app.post('/admin/rooms/:id/teamColors', express.json(), (req, res) => {
     const secret = req.header('X-Admin-Secret') || req.header('x-admin-secret');
     if (!process.env.ADMIN_SECRET || !secret || secret !== process.env.ADMIN_SECRET) {
@@ -562,22 +562,22 @@ app.post('/admin/rooms/:id/teamColors', express.json(), (req, res) => {
     const payload = req.body;
     const team = (payload.team || '').toLowerCase();
     if (!['red','blue'].includes(team)) return res.status(400).json({ error: 'Invalid team' });
-    const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : 0;
-    const textColor = (payload.textColor || 'FFFFFF').replace('#','').trim().toUpperCase();
-    const colors = Array.isArray(payload.colors) ? payload.colors.map(c => (c||'').replace('#','').trim().toUpperCase()).filter(Boolean) : [];
-    if (!colors.length) return res.status(400).json({ error: 'At least one color required' });
+    const angle = normalizeAngle(payload.angle);
+    const avatarColor = normalizeHex(payload.avatarColor || payload.textColor) || 'FFFFFF';
+    const colors = Array.isArray(payload.colors) ? payload.colors.map(c => normalizeHex(c)).filter(Boolean) : [];
+    if (!colors.length) return res.status(400).json({ error: 'At least one valid HEX color required' });
 
     if (!room.teamColors) room.teamColors = { red: null, blue: null };
-    room.teamColors[team] = { angle, textColor, colors };
+    room.teamColors[team] = { angle, avatarColor, colors };
 
-    // apply and broadcast similar to socket handler
+    // Apply and broadcast similar to socket handler
     if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
         room.game.physics.discs.forEach(d => {
             if (d.isPlayer && d.team === team) {
                 d.color = colors[0];
                 d.colors = colors;
                 d.colorAngle = angle;
-                d.avatarColor = textColor;
+                d.avatarColor = avatarColor;
             }
         });
         io.to(room.id).emit('gameState', room.game._getGameState());

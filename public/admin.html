@@ -99,7 +99,7 @@
       if (!rid) return alert('Room ID girin');
       const secret = adminSecretEl.value.trim();
       if (!secret) return alert('Admin secret girin');
-      const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), textColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
+      const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), avatarColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
       try {
         const res = await fetch('/admin/rooms/' + encodeURIComponent(rid) + '/teamColors', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret }, body: JSON.stringify(payload)
@@ -115,7 +115,7 @@
       // This will only emit to the server if you are actually connected as that socket (admin client) — useful for testing from admin client page if socket is authenticated
       try {
         const s = io(); // requires socket.io-client served to page; if not available, fallback to HTTP
-        const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), textColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
+        const payload = { team: teamSel.value, angle: parseInt(angle.value||0,10), avatarColor: 'FFFFFF', colors: [primary.value.replace('#','')].concat((extras.value||'').split(',').map(s=>s.replace('#','').trim()).filter(Boolean)) };
         s.emit('setTeamColors', payload);
         resultEl.textContent = 'Emitted via socket (check server logs)';
       } catch (e) {

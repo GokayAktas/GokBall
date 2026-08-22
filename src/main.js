@@ -586,7 +586,7 @@ class GokBallApp {
                     disc.color = tc.colors[0];
                     disc.colors = tc.colors;
                     disc.colorAngle = tc.angle || 0;
-                    disc.avatarColor = tc.textColor || 'FFFFFF';
+                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
                 } else {
                     disc.color = team === 'red' ? 'c70000' : '00008c';
                     disc.colors = [disc.color];
@@ -862,9 +862,18 @@ class GokBallApp {
                 disc.ownerId = playerId;
                 disc._playerName = playerData.name;
                 disc._avatar = playerData.avatar || '1';
-                disc.color = playerData.team === 'red' ? 'c70000' : '00008c';
-                disc.colors = [disc.color];
-                disc.avatarColor = 'FFFFFF';
+                // Apply team colors if available
+                const tc = this.currentRoomData?.teamColors?.[playerData.team];
+                if (tc && tc.colors && tc.colors.length > 0) {
+                    disc.color = tc.colors[0];
+                    disc.colors = tc.colors;
+                    disc.colorAngle = tc.angle || 0;
+                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
+                } else {
+                    disc.color = playerData.team === 'red' ? 'c70000' : '00008c';
+                    disc.colors = [disc.color];
+                    disc.avatarColor = 'FFFFFF';
+                }
             }
         }
     }
@@ -1154,7 +1163,7 @@ class GokBallApp {
                             disc.color = tc.colors[0];
                             disc.colors = tc.colors;
                             disc.colorAngle = tc.angle;
-                            disc.avatarColor = tc.textColor;
+                            disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
                         }
                     }
                 }

@@ -224,9 +224,9 @@ export class NetworkManager {
         this.socket.emit('getMapList');
     }
 
-    // === Admin: Update team colors at runtime ===
+    // === Admin: Update team colors at runtime (HaxBall-compatible) ===
     setTeamColors(payload) {
-        // payload: { team: 'red'|'blue', angle, textColor, colors: [] }
+        // payload: { team: 'red'|'blue', angle, avatarColor, colors: [] }
         if (!this.socket) return;
         this.socket.emit('setTeamColors', payload);
     }

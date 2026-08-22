@@ -144,10 +144,11 @@ export class Game {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
                 if (this.room.teamColors && this.room.teamColors['red']) {
-                    disc.color = this.room.teamColors['red'].colors[0];
-                    disc.colors = this.room.teamColors['red'].colors;
-                    disc.colorAngle = this.room.teamColors['red'].angle;
-                    disc.avatarColor = this.room.teamColors['red'].textColor;
+                    const tc = this.room.teamColors['red'];
+                    disc.color = tc.colors[0];
+                    disc.colors = tc.colors;
+                    disc.colorAngle = tc.angle;
+                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
                 } else {
                     disc.color = 'c70000'; // Default Red
                     disc.colors = ['c70000'];
@@ -172,10 +173,11 @@ export class Game {
                 disc._playerName = p.name;
                 disc._avatar = p.avatar;
                 if (this.room.teamColors && this.room.teamColors['blue']) {
-                    disc.color = this.room.teamColors['blue'].colors[0];
-                    disc.colors = this.room.teamColors['blue'].colors;
-                    disc.colorAngle = this.room.teamColors['blue'].angle;
-                    disc.avatarColor = this.room.teamColors['blue'].textColor;
+                    const tc = this.room.teamColors['blue'];
+                    disc.color = tc.colors[0];
+                    disc.colors = tc.colors;
+                    disc.colorAngle = tc.angle;
+                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
                 } else {
                     disc.color = '00008c'; // Default Blue
                     disc.colors = ['00008c'];
