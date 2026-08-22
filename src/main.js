@@ -573,6 +573,7 @@ class GokBallApp {
 
         const spacing = 40;
         const spawnTeam = (teamPlayers, team, dir) => {
+            const tc = this.currentRoomData?.teamColors?.[team];
             for (let i = 0; i < teamPlayers.length; i++) {
                 const p = teamPlayers[i];
                 const y = (i - (teamPlayers.length - 1) / 2) * spacing;
@@ -581,9 +582,17 @@ class GokBallApp {
                 disc.ownerId = p.id;
                 disc._playerName = p.name;
                 disc._avatar = p.avatar || '1';
-                disc.color = team === 'red' ? 'c70000' : '00008c';
-                disc.colors = [disc.color];
-                disc.avatarColor = 'FFFFFF';
+                if (tc && tc.colors && tc.colors.length > 0) {
+                    disc.color = tc.colors[0];
+                    disc.colors = tc.colors;
+                    disc.colorAngle = tc.angle || 0;
+                    disc.avatarColor = tc.textColor || 'FFFFFF';
+                } else {
+                    disc.color = team === 'red' ? 'c70000' : '00008c';
+                    disc.colors = [disc.color];
+                    disc.colorAngle = 0;
+                    disc.avatarColor = 'FFFFFF';
+                }
             }
         };
 

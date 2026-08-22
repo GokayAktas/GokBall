@@ -48,8 +48,9 @@ export class RoomLobby {
                     <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed" style="padding: 2px 8px;">Katıl</button>
                     <div style="position:relative;" id="jerseyRedWrapper">
-                      <button class="btn btn-xs" id="btnJerseyRed" style="padding:2px 6px; background:rgba(231,76,60,0.15); border:1px solid rgba(231,76,60,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:3px;" title="Kırmızı Forma Seç">
+                      <button class="btn btn-xs" id="btnJerseyRed" style="padding:2px 8px; background:rgba(231,76,60,0.15); border:1px solid rgba(231,76,60,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Kırmızı Forma Seç">
                         <img src="/assets/red_shirt.png" style="width:16px; height:16px;" />
+                        <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
                       </button>
                       <div id="jerseyDropdownRed" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0; background: rgba(10,20,40,0.95); backdrop-filter:blur(16px); border:1px solid var(--border-color); border-radius:12px; padding:8px; max-height:400px; overflow-y:auto; min-width:240px; z-index:100; box-shadow:var(--shadow-lg);"></div>
                     </div>
@@ -80,7 +81,8 @@ export class RoomLobby {
                     <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue" style="padding: 2px 8px;">Katıl</button>
                     <div style="position:relative;" id="jerseyBlueWrapper">
-                      <button class="btn btn-xs" id="btnJerseyBlue" style="padding:2px 6px; background:rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:3px;" title="Mavi Forma Seç">
+                      <button class="btn btn-xs" id="btnJerseyBlue" style="padding:2px 8px; background:rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Mavi Forma Seç">
+                        <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
                         <img src="/assets/blue_shirt.png" style="width:16px; height:16px;" />
                       </button>
                       <div id="jerseyDropdownBlue" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background: rgba(10,20,40,0.95); backdrop-filter:blur(16px); border:1px solid var(--border-color); border-radius:12px; padding:8px; max-height:400px; overflow-y:auto; min-width:240px; z-index:100; box-shadow:var(--shadow-lg);"></div>
@@ -728,6 +730,9 @@ export class RoomLobby {
   }
 
   _setupJerseySelector() {
+    // Track selected jersey per team
+    this._selectedJersey = { red: -1, blue: -1 };
+
     // Jersey presets with flag images
     const presets = [
       { name: 'Galatasaray', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','F28C28','8A1538'], flag: '/assets/tr.png' },
@@ -750,15 +755,15 @@ export class RoomLobby {
       { name: 'Bayern Munich', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','DC052D'], flag: '/assets/de.png' },
       { name: 'Borussia Dortmund', angle: 0, textColor: '000000', colors: ['000000','FDE100'], flag: '/assets/de.png' },
       { name: 'Paris Saint-Germain', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','002A8A','DC0B28','002A8A'], flag: '/assets/fr.png' },
-      { name: 'Türkiye', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','D0021B'], flag: '/assets/tr.png' },
+      { name: 'Türkiye', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','D0021B'], flag: '/assets/globe.png' },
       { name: 'Arjantin', angle: 0, textColor: '000000', colors: ['000000','75AADB','FFFFFF','75AADB'], flag: '/assets/globe.png' },
-      { name: 'İspanya', angle: 0, textColor: 'F1BF00', colors: ['F1BF00','AA151B'], flag: '/assets/es.png' },
-      { name: 'Fransa', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','243567'], flag: '/assets/fr.png' },
-      { name: 'İngiltere', angle: 0, textColor: '000000', colors: ['000000','DEE2E5'], flag: '/assets/uk.png' },
-      { name: 'İtalya', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','0067B1'], flag: '/assets/it.png' },
+      { name: 'İspanya', angle: 0, textColor: 'F1BF00', colors: ['F1BF00','AA151B'], flag: '/assets/globe.png' },
+      { name: 'Fransa', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','243567'], flag: '/assets/globe.png' },
+      { name: 'İngiltere', angle: 0, textColor: '000000', colors: ['000000','DEE2E5'], flag: '/assets/globe.png' },
+      { name: 'İtalya', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','0067B1'], flag: '/assets/globe.png' },
       { name: 'Portekiz', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','9D2639'], flag: '/assets/globe.png' },
       { name: 'Brezilya', angle: 0, textColor: '0f4a36', colors: ['0f4a36','EED04B'], flag: '/assets/globe.png' },
-      { name: 'Almanya', angle: 90, textColor: 'FFFFFF', colors: ['FFFFFF','000000','DD0000','FFCE00'], flag: '/assets/de.png' },
+      { name: 'Almanya', angle: 90, textColor: 'FFFFFF', colors: ['FFFFFF','000000','DD0000','FFCE00'], flag: '/assets/globe.png' },
     ];
 
     // Build a dropdown for a given team ('red' or 'blue')
@@ -766,36 +771,48 @@ export class RoomLobby {
       const dropdown = document.getElementById(dropdownId);
       if (!dropdown) return;
 
-      dropdown.innerHTML = presets.map((p, i) => {
-        const flagHtml = `<img src="${p.flag}" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
-        return `
-          <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:pointer; transition:background 0.15s; font-size:13px; color:var(--text-primary);">
-            ${flagHtml}
-            <span>${p.name}</span>
-          </div>
-        `;
-      }).join('');
+      const renderItems = () => {
+        dropdown.innerHTML = presets.map((p, i) => {
+          const flagHtml = `<img src="${p.flag}" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
+          const isSelected = this._selectedJersey[team] === i;
+          const checkHtml = isSelected ? `<span style="margin-left:auto; color:#4ade80; font-weight:bold; font-size:14px;">✓</span>` : '';
+          const bgStyle = isSelected ? 'background:rgba(15,82,186,0.25);' : '';
+          return `
+            <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:pointer; transition:background 0.15s; font-size:13px; color:var(--text-primary);${bgStyle}">
+              ${flagHtml}
+              <span>${p.name}</span>
+              ${checkHtml}
+            </div>
+          `;
+        }).join('');
 
-      // Hover + click
-      dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
-        item.addEventListener('mouseenter', () => item.style.background = 'rgba(15,82,186,0.2)');
-        item.addEventListener('mouseleave', () => item.style.background = '');
-        item.addEventListener('click', () => {
-          const idx = parseInt(item.dataset.idx);
-          const preset = presets[idx];
-          if (!preset) return;
+        // Hover + click
+        dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
+          item.addEventListener('mouseenter', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = 'rgba(15,82,186,0.2)'; });
+          item.addEventListener('mouseleave', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = ''; });
+          item.addEventListener('click', () => {
+            const idx = parseInt(item.dataset.idx);
+            const preset = presets[idx];
+            if (!preset) return;
 
-          // Apply colors directly via socket event
-          this.app.network.socket.emit('setTeamColors', {
-            team: team,
-            angle: preset.angle,
-            textColor: preset.textColor,
-            colors: preset.colors
+            // Track selection
+            this._selectedJersey[team] = idx;
+
+            // Apply colors directly via socket event
+            this.app.network.socket.emit('setTeamColors', {
+              team: team,
+              angle: preset.angle,
+              textColor: preset.textColor,
+              colors: preset.colors
+            });
+
+            // Re-render to show checkmark
+            renderItems();
+            dropdown.style.display = 'none';
           });
-
-          dropdown.style.display = 'none';
         });
-      });
+      };
+      renderItems();
     };
 
     // Build both dropdowns
