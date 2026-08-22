@@ -663,10 +663,10 @@ export class Room {
                         : teamArg === 'mavi' ? 'blue'
                             : teamArg;
                     if (team === 'red' || team === 'blue') {
-                        if (parts.length !== 7) {
+                        if (parts.length < 5) {
                             player.socket.emit('chatMessage', {
                                 playerName: 'SISTEM',
-                                message: 'Kullanım: /colors (takım) (açı) (yazı rengi) (renk1) (renk2) (renk3)',
+                                message: 'Kullanım: /colors (takım) (açı) (yazı rengi) (renk1) [renk2] [renk3] [renk4]',
                                 system: true
                             });
                             break;
@@ -674,9 +674,9 @@ export class Room {
 
                         const angle = Number.parseInt(parts[2], 10);
                         const textColor = this._normalizeColor(parts[3]);
-                        const colors = parts.slice(4, 7).map(c => this._normalizeColor(c));
+                        const colors = parts.slice(4).map(c => this._normalizeColor(c)).filter(Boolean);
                         
-                        if (Number.isFinite(angle) && textColor && colors.every(Boolean)) {
+                        if (Number.isFinite(angle) && textColor && colors.length > 0) {
                             if (!this.teamColors) this.teamColors = { red: null, blue: null };
                             this.teamColors[team] = {
                                 angle,
@@ -713,7 +713,7 @@ export class Room {
                         } else {
                             player.socket.emit('chatMessage', {
                                 playerName: 'SISTEM',
-                                message: 'Renk kodları 6 haneli HEX olmalı. Örnek: /colors red 60 FFFFFF C70000 FF5555 AA0000',
+                                message: 'Renk kodları 6 haneli HEX olmalı. En az 1 renk gerekli. Örnek: /colors red 0 FFFFFF C70000',
                                 system: true
                             });
                         }
