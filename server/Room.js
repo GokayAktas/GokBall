@@ -275,6 +275,16 @@ export class Room {
         const oldTeam = player.team;
         if (oldTeam === team) return;
 
+        // AFK players cannot join teams (unless admin moves them)
+        if (player.afk && team !== 'spectator') {
+            player.socket.emit('chatMessage', {
+                playerName: 'SİSTEM',
+                message: '💤 AFK modundaysken takıma katılamazsınız. /afk ile AFK modunu kapatın.',
+                system: true
+            });
+            return;
+        }
+
         player.team = team;
 
         // If game is running, handle disc update (just like adminMovePlayer)
@@ -337,16 +347,28 @@ export class Room {
             [allPlayers[i], allPlayers[j]] = [allPlayers[j], allPlayers[i]];
         }
         
-        const teamSize = Math.floor(allPlayers.length / 2);
+        // Separate AFK players and assignable players
+        const assignable = allPlayers.filter(p => !p.afk);
+        const afkPlayers = allPlayers.filter(p => p.afk);
         
-        for (let i = 0; i < allPlayers.length; i++) {
-            const p = allPlayers[i];
+        const teamSize = Math.floor(assignable.length / 2);
+        
+        // Assign non-AFK players to teams
+        for (let i = 0; i < assignable.length; i++) {
+            const p = assignable[i];
             let targetTeam = 'spectator';
             if (i < teamSize) targetTeam = 'red';
             else if (i < teamSize * 2) targetTeam = 'blue';
             
             if (p.team !== targetTeam) {
                 this.adminMovePlayer(adminId, p.id, targetTeam);
+            }
+        }
+        
+        // AFK players stay in spectator
+        for (const p of afkPlayers) {
+            if (p.team !== 'spectator') {
+                this.adminMovePlayer(adminId, p.id, 'spectator');
             }
         }
         this.broadcast('chatMessage', {
@@ -698,11 +720,43 @@ export class Room {
                     }
                 }
                 break;
+            case '/afk':
+                if (player.afk) {
+                    // Toggle off AFK
+                    player.afk = false;
+                    player.afkMatchesLeft = 0;
+                    // Move back to spectator if they were placed
+                    if (player.team !== 'spectator') {
+                        this.changeTeam(senderId, 'spectator');
+                    }
+                    player.socket.emit('chatMessage', {
+                        playerName: 'SİSTEM',
+                        message: '✅ AFk modu kapatıldı. Artık takımlara girebilirsiniz.',
+                        system: true
+                    });
+                } else {
+                    // Toggle on AFK
+                    player.afk = true;
+                    player.afkMatchesLeft = 2;
+                    // Move to spectator if in a team
+                    if (player.team !== 'spectator') {
+                        this.changeTeam(senderId, 'spectator');
+                    }
+                    player.socket.emit('chatMessage', {
+                        playerName: 'SİSTEM',
+                        message: '💤 Başarıyla 2 maç boyunca AFK oldunuz. Tekrar /afk yazarak iptal edebilirsiniz.',
+                        system: true
+                    });
+                }
+                // Broadcast updated player list
+                this.broadcast('roomUpdate', { players: this.getPlayerList() });
+                break;
             case '/komut':
             case '/komutlar':
                 let helpText = "📜 Komutlar:\n";
                 helpText += "👤 /avatar [yazı] - Formandaki yazıyı/emojiyi değiştirir (Max 2 harf)\n";
                 helpText += "🎲 /avatar random - 1 ile 99 arasında rastgele forma numarası verir\n";
+                helpText += "💤 /afk - 2 maç boyunca AFK modunu aç/kapat\n";
                 
                 if (player.isAdmin) {
                     helpText += "\n👑 Admin Komutları:\n";
@@ -732,6 +786,25 @@ export class Room {
                     message: 'Unknown command: ' + command,
                     system: true
                 });
+        }
+    }
+
+    /**
+     * Decrement AFK match counters for all AFK players
+     */
+    _decrementAfkCounters() {
+        for (const player of this.players.values()) {
+            if (player.afk && player.afkMatchesLeft > 0) {
+                player.afkMatchesLeft--;
+                if (player.afkMatchesLeft <= 0) {
+                    player.afk = false;
+                    player.socket.emit('chatMessage', {
+                        playerName: 'SİSTEM',
+                        message: '✅ AFK süreniz doldu. Artık takımlara girebilirsiniz.',
+                        system: true
+                    });
+                }
+            }
         }
     }
 

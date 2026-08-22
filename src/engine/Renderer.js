@@ -270,12 +270,14 @@ export class Renderer {
                 lw = 3;
             }
 
-            // Draw player color stripes (horizontal stripes rotated by colorAngle)
+            // Draw player color stripes matching HaxBall's rendering algorithm
+            // HaxBall angle: 0°=top→bottom, 90°=right→left, 180°=bottom→top
+            // Colors are equal-width horizontal bands rotated by angle
             if (disc.isPlayer && colors.length > 1) {
                 ctx.save();
                 ctx.translate(disc.pos.x, disc.pos.y);
-                // Rotate so that colorAngle represents rotation of the stripes
-                const rot = (angle - 90) * Math.PI / 180; // align 0deg to top
+                // Rotate canvas by angle (clockwise)
+                const rot = angle * Math.PI / 180;
                 ctx.rotate(rot);
 
                 // Clip to circle
@@ -286,12 +288,13 @@ export class Renderer {
                 const w = disc.radius * 2;
                 const h = disc.radius * 2;
                 const num = colors.length;
-                const stripeW = w / num;
+                const stripeH = h / num;
 
+                // Draw horizontal bands: color[0] at top, color[N-1] at bottom
                 for (let i = 0; i < num; i++) {
                     ctx.fillStyle = '#' + colors[i];
-                    const x = -disc.radius + i * stripeW;
-                    ctx.fillRect(x, -disc.radius, stripeW + 1, h);
+                    const y = -disc.radius + i * stripeH;
+                    ctx.fillRect(-disc.radius, y, w, stripeH + 1);
                 }
 
                 ctx.restore();

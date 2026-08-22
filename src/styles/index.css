@@ -1053,7 +1053,7 @@ select.input option {
 
 .volume-slider-popover {
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   width: 32px;
@@ -1077,7 +1077,7 @@ select.input option {
 .volume-container:hover .volume-slider-popover {
   opacity: 1;
   visibility: visible;
-  bottom: calc(100% + 4px);
+  top: calc(100% + 4px);
 }
 
 .volume-slider-popover input[type="range"] {

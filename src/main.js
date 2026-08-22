@@ -331,6 +331,15 @@ class GokBallApp {
                     // Step physics
                     const result = this.physics.step();
 
+                    // Track ball touches for goal attribution (host mode)
+                    if (this.physics.ballDisc) {
+                        const toucher = this.physics.ballDisc.lastTouchedBy;
+                        if (toucher && toucher !== this._hostLastToucher) {
+                            this._hostPrevToucher = this._hostLastToucher;
+                            this._hostLastToucher = toucher;
+                        }
+                    }
+
                     // Play kick sound for host (clients get it via goalScored/authorityState)
                     if (result.kickHappened) {
                         const now = Date.now();
@@ -526,6 +535,9 @@ class GokBallApp {
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
         this._hostTimeLimit = this.currentRoomData?.game?.timeLimit || 180;
+        this._hostLastToucher = null;
+        this._hostPrevToucher = null;
+        this._hostMatchStats = {};
         this._remoteInputs.clear();
         console.log('[GokBall] Host game state initialized');
     }
@@ -594,21 +606,44 @@ class GokBallApp {
         this.physics.kickOffTeam = scoredOnTeam;
         this.physics.inGoalPause = true;
 
+        // Record scorer and assister
+        const scorerName = this._hostLastToucher ? (this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher)?.name || '') : '';
+        const assisterName = (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) ? (this.currentRoomData?.players?.find(p => p.id === this._hostPrevToucher)?.name || '') : '';
+
+        // Track match stats locally
+        if (this._hostLastToucher) {
+            if (!this._hostMatchStats[this._hostLastToucher]) this._hostMatchStats[this._hostLastToucher] = { goals: 0, assists: 0, saves: 0, name: scorerName, team: scoringTeam };
+            this._hostMatchStats[this._hostLastToucher].goals++;
+        }
+        if (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
+            if (!this._hostMatchStats[this._hostPrevToucher]) this._hostMatchStats[this._hostPrevToucher] = { goals: 0, assists: 0, saves: 0, name: assisterName, team: scoringTeam };
+            this._hostMatchStats[this._hostPrevToucher].assists++;
+        }
+
+        // Reset touch tracking for next goal
+        this._hostLastToucher = null;
+        this._hostPrevToucher = null;
+
         // Update scoreboard locally
         this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
         this.scoreboard.showGoal(scoringTeam);
         this.audio.playGoal();
 
-        this.chat.addMessage({
-            message: `\u26bd GOL! ${scoringTeam === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi'} tak\u0131m skoru: ${this._hostScoreRed} - ${this._hostScoreBlue}`,
-            system: true
-        });
+        // Format: 🔴 GOL! PlayerName ⚽ PlayerName 👟
+        const teamEmoji = scoringTeam === 'red' ? '🔴' : '🔵';
+        let goalMsg = `${teamEmoji} GOL!`;
+        if (scorerName) goalMsg += ` ${scorerName} ⚽`;
+        if (assisterName) goalMsg += ` ${assisterName} 👟`;
+        goalMsg += ` (${this._hostScoreRed} - ${this._hostScoreBlue})`;
+        this.chat.addMessage({ message: goalMsg, system: true });
 
         // Send goalScored event to server for relay to other players
         this.network.socket?.emit('hostGoalEvent', {
             team: scoringTeam,
             scoreRed: this._hostScoreRed,
-            scoreBlue: this._hostScoreBlue
+            scoreBlue: this._hostScoreBlue,
+            scorer: scorerName,
+            assister: assisterName
         });
     }
 
@@ -619,6 +654,21 @@ class GokBallApp {
 
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
         const winColor = winner === 'red' ? '#c70000' : '#00008c';
+
+        // Build match stats for chat
+        let statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
+        const statsEntries = Object.entries(this._hostMatchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
+        if (statsEntries.length > 0) {
+            for (const [_, s] of statsEntries) {
+                const parts = [];
+                if (s.goals > 0) parts.push(`⚽${s.goals} Gol`);
+                if (s.assists > 0) parts.push(`👟${s.assists} Asist`);
+                if (s.saves > 0) parts.push(`🧤${s.saves} Kurtarış`);
+                statsMsg += `${s.name}: ${parts.join(' | ')}\n`;
+            }
+        } else {
+            statsMsg += 'İstatistik bulunamadı.';
+        }
 
         // Send game over to server for relay to other players
         this.network.socket?.emit('hostGameOverEvent', {
@@ -632,8 +682,12 @@ class GokBallApp {
         overlay.innerHTML = `
             <h1 style="color: ${winColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
             <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${this._hostScoreRed} - ${this._hostScoreBlue}</p>
+            <div style="color: var(--text-secondary); font-size: 14px; margin-top: 16px; white-space: pre-line; text-align: left; max-width: 400px;">${statsMsg}</div>
         `;
         document.body.appendChild(overlay);
+
+        // Show stats in chat
+        this.chat.addMessage({ message: statsMsg, system: true });
 
         setTimeout(() => {
             if (document.body.contains(overlay)) document.body.removeChild(overlay);
@@ -647,7 +701,7 @@ class GokBallApp {
             } else {
                 this.ui.showScreen('roomList');
             }
-        }, 3000);
+        }, 5000);
     }
 
     /** Toggle pause state (host only) */
@@ -942,22 +996,49 @@ class GokBallApp {
                 this.scoreboard.showGoal(data.team);
             }
             this.audio.playGoal();
-            this.chat.addMessage({
-                message: `\u26bd GOL! ${data.team === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi'} tak\u0131m skoru: ${data.scoreRed} - ${data.scoreBlue}`,
-                system: true
-            });
+            // Format: 🔴 GOL! PlayerName ⚽ PlayerName 👟
+            const teamEmoji = data.team === 'red' ? '🔴' : '🔵';
+            let goalMsg = `${teamEmoji} GOL!`;
+            if (data.scorer) goalMsg += ` ${data.scorer} ⚽`;
+            if (data.assister) goalMsg += ` ${data.assister} 👟`;
+            goalMsg += ` (${data.scoreRed} - ${data.scoreBlue})`;
+            this.chat.addMessage({ message: goalMsg, system: true });
         });
 
         this.network.on('gameOver', (data) => {
             const winnerStr = data.winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
             const winnerColor = data.winner === 'red' ? '#c70000' : '#00008c';
+
+            // Build match stats for chat
+            let statsMsg = '';
+            if (data.matchStats && Object.keys(data.matchStats).length > 0) {
+                statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
+                const entries = Object.entries(data.matchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
+                if (entries.length > 0) {
+                    for (const [_, s] of entries) {
+                        const parts = [];
+                        if (s.goals > 0) parts.push(`⚽${s.goals} Gol`);
+                        if (s.assists > 0) parts.push(`👟${s.assists} Asist`);
+                        if (s.saves > 0) parts.push(`🧤${s.saves} Kurtarış`);
+                        statsMsg += `${s.name}: ${parts.join(' | ')}\n`;
+                    }
+                } else {
+                    statsMsg = '';
+                }
+            }
+
             const overlay = document.createElement('div');
             overlay.className = 'game-over-overlay';
             overlay.innerHTML = `
                 <h1 style="color: ${winnerColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winnerStr} TAKIM KAZANDI!</h1>
                 <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
+                ${statsMsg ? `<div style="color: var(--text-secondary); font-size: 14px; margin-top: 16px; white-space: pre-line; text-align: left; max-width: 400px;">${statsMsg}</div>` : ''}
             `;
             document.body.appendChild(overlay);
+
+            // Show stats in chat
+            if (statsMsg) this.chat.addMessage({ message: statsMsg, system: true });
+
             setTimeout(() => {
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
                 this.stopGame();
@@ -967,7 +1048,7 @@ class GokBallApp {
                 } else {
                     this.ui.showScreen('roomList');
                 }
-            }, 3000);
+            }, 5000);
         });
 
         // Chat messages (in-game)

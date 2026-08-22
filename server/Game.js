@@ -24,6 +24,12 @@ export class Game {
         this.overtimeEnabled = true;
         this.playerDiscs = new Map(); // playerId -> disc index
         this._lastInputSeq = new Map(); // playerId -> last processed seq number
+
+        // Match statistics tracking
+        this._matchStats = {}; // playerId -> { goals, assists, saves, touches }
+        this._touchHistory = []; // ring buffer of recent toucher IDs for goal attribution
+        this._lastToucher = null; // last player who touched the ball
+        this._prevToucher = null; // second-to-last toucher
     }
 
     rebuildPlayerDiscMap() {
@@ -57,6 +63,12 @@ export class Game {
         this.scoreRed = 0;
         this.scoreBlue = 0;
         this.timeElapsed = 0;
+
+        // Reset match statistics
+        this._matchStats = {};
+        this._touchHistory = [];
+        this._lastToucher = null;
+        this._prevToucher = null;
 
         // Start immediately without countdown
         this.state = 'playing';
@@ -273,16 +285,25 @@ export class Game {
                     this.physics.ballDisc.speed.x = 0;
                     this.physics.ballDisc.speed.y = 0;
                     this.physics.ballDisc.color = 'FFB82E';
+                    this.physics.ballDisc.lastTouchedBy = null;
+                    this.physics.ballDisc.lastTouchedTeam = null;
                 }
+                // Reset touch tracking for next goal
+                this._lastToucher = null;
+                this._prevToucher = null;
+                this._touchHistory = [];
 
                 // Check if game should end
                 if (this._checkGameEnd()) {
                     this.state = 'ended';
+                    // Decrement AFK match counters
+                    this.room._decrementAfkCounters();
                     this.room.broadcast('gameOver', {
                         scoreRed: this.scoreRed,
                         scoreBlue: this.scoreBlue,
                         winner: this.scoreRed > this.scoreBlue ? 'red' : 'blue',
-                        roomData: this.room.getRoomData()
+                        roomData: this.room.getRoomData(),
+                        matchStats: this._buildMatchStats()
                     });
                     this._stopLoop();
                     return;
@@ -316,6 +337,29 @@ export class Game {
         while (this.accumulator >= stepSize) {
             const result = this.physics.step();
             if (result.goalTeam) goalTeam = result.goalTeam;
+
+            // Track ball touches for goal attribution (scorer/assist)
+            if (this.physics.ballDisc) {
+                const toucher = this.physics.ballDisc.lastTouchedBy;
+                if (toucher && toucher !== this._lastToucher) {
+                    this._prevToucher = this._lastToucher;
+                    this._lastToucher = toucher;
+                    this._touchHistory.push(toucher);
+                    if (this._touchHistory.length > 10) this._touchHistory.shift();
+
+                    // Track saves: defender touches ball near own goal
+                    const toucherPlayer = this.room.players.get(toucher);
+                    const ball = this.physics.ballDisc;
+                    if (toucherPlayer && toucherPlayer.team) {
+                        const goalX = toucherPlayer.team === 'red' ? -(this.stadiumData?.bg?.width || 370) : (this.stadiumData?.bg?.width || 370);
+                        const distToGoal = Math.abs(ball.pos.x - goalX);
+                        if (distToGoal < 80) {
+                            this._ensurePlayerStats(toucher);
+                            this._matchStats[toucher].saves++;
+                        }
+                    }
+                }
+            }
 
             // Increment time logic safely within loop
             // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
@@ -363,10 +407,12 @@ export class Game {
         if (this.timeLimit > 0 && this.timeElapsed / this.tickRate >= this.timeLimit) {
             if (this.scoreRed !== this.scoreBlue) {
                 this.state = 'ended';
+                this.room._decrementAfkCounters();
                 this.room.broadcast('gameOver', {
                     scoreRed: this.scoreRed,
                     scoreBlue: this.scoreBlue,
-                    winner: this.scoreRed > this.scoreBlue ? 'red' : 'blue'
+                    winner: this.scoreRed > this.scoreBlue ? 'red' : 'blue',
+                    matchStats: this._buildMatchStats()
                 });
                 this._stopLoop();
                 return;
@@ -378,6 +424,27 @@ export class Game {
         this._broadcastCounter = (this._broadcastCounter || 0) + 1;
         if (this._broadcastCounter % 2 === 0) {
             this.room.broadcast('gameState', this._getGameState());
+        }
+    }
+
+    _buildMatchStats() {
+        const stats = {};
+        for (const [playerId, s] of Object.entries(this._matchStats)) {
+            const player = this.room.players.get(playerId);
+            stats[playerId] = {
+                name: player ? player.name : 'Unknown',
+                team: player ? player.team : 'spectator',
+                goals: s.goals || 0,
+                assists: s.assists || 0,
+                saves: s.saves || 0
+            };
+        }
+        return stats;
+    }
+
+    _ensurePlayerStats(playerId) {
+        if (!this._matchStats[playerId]) {
+            this._matchStats[playerId] = { goals: 0, assists: 0, saves: 0 };
         }
     }
 
@@ -394,14 +461,39 @@ export class Game {
         else this.scoreBlue++;
         this.state = 'goal';
         this.physics.kickOffReset = true;
+
+        // Record goal scorer and assister from touch history
+        if (this._lastToucher) {
+            const scorerPlayer = this.room.players.get(this._lastToucher);
+            if (scorerPlayer && scorerPlayer.team === scoringTeam) {
+                this._ensurePlayerStats(this._lastToucher);
+                this._matchStats[this._lastToucher].goals++;
+            }
+        }
+        if (this._prevToucher) {
+            const assisterPlayer = this.room.players.get(this._prevToucher);
+            if (assisterPlayer && assisterPlayer.team === scoringTeam && this._prevToucher !== this._lastToucher) {
+                this._ensurePlayerStats(this._prevToucher);
+                this._matchStats[this._prevToucher].assists++;
+            }
+        }
+
+        // Broadcast goal with scorer/assist info
+        const scorerName = this._lastToucher ? (this.room.players.get(this._lastToucher)?.name || '') : '';
+        const assisterName = (this._prevToucher && this._prevToucher !== this._lastToucher) ? (this.room.players.get(this._prevToucher)?.name || '') : '';
+        this.room.broadcast('goalScored', {
+            team: scoringTeam,
+            scoreRed: this.scoreRed,
+            scoreBlue: this.scoreBlue,
+            scorer: scorerName,
+            assister: assisterName
+        });
         // set cooldown until we allow next goal to be counted (score pause length in ticks)
         // Add a small safety margin to avoid re-processing due to rounding or
         // tick-edge conditions.
         const pauseTicks = 60; // 1 second at 60Hz
         const safetyMargin = 2; // extra ticks
         this._goalCooldownUntil = this.timeElapsed + pauseTicks + safetyMargin;
-        // Broadcast goal
-        this.room.broadcast('goalScored', { team: scoredOnTeam === 'red' ? 'blue' : 'red', scoreRed: this.scoreRed, scoreBlue: this.scoreBlue });
 
         this.state = 'goal';
         this.goalPauseTicks = 3 * this.tickRate; // 3 second pause - ball keeps moving freely during this time
@@ -467,7 +559,8 @@ export class Game {
             scoreBlue: this.scoreBlue,
             time: Math.floor(this.timeElapsed / this.tickRate),
             scoreLimit: this.scoreLimit,
-            timeLimit: this.timeLimit
+            timeLimit: this.timeLimit,
+            matchStats: this._matchStats
         };
     }
 }

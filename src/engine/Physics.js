@@ -338,6 +338,8 @@ export class Physics {
 
         // Change ball color to White on kick
         this.ballDisc.color = 'FFFFFF';
+        this.ballDisc.lastTouchedBy = playerDisc.ownerId || playerDisc.id;
+        this.ballDisc.lastTouchedTeam = playerDisc.team;
         playerDisc._autoKickReleased = true;
 
         const nx = dx / dist;
@@ -393,6 +395,11 @@ export class Physics {
         // Change ball color to White on touch
         if (a === this.ballDisc || b === this.ballDisc) {
             this.ballDisc.color = 'FFFFFF';
+            const playerDisc = a === this.ballDisc ? b : a;
+            if (playerDisc.isPlayer && playerDisc.ownerId) {
+                this.ballDisc.lastTouchedBy = playerDisc.ownerId;
+                this.ballDisc.lastTouchedTeam = playerDisc.team;
+            }
         }
 
         // Relative velocity

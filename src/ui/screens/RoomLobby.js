@@ -139,6 +139,13 @@ export class RoomLobby {
                 📁 Saha Yükle
                 <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
               </label>
+              <div style="position:relative;" id="jerseySelectWrapper">
+                <button class="btn btn-sm" id="btnJerseySelect" style="display:flex; align-items:center; gap:6px; height:36px; background: rgba(15, 82, 186, 0.2); border: 1px solid rgba(15, 82, 186, 0.4); color: var(--ice-blue); border-radius: 10px; cursor:pointer;">
+                  👕 Forma Seç
+                </button>
+                <div id="jerseyDropdown" style="display:none; position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background: rgba(10,20,40,0.95); backdrop-filter:blur(16px); border:1px solid var(--border-color); border-radius:12px; padding:8px; max-height:400px; overflow-y:auto; min-width:220px; z-index:100; box-shadow:var(--shadow-lg);">
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -247,6 +254,9 @@ export class RoomLobby {
       this._updateOvertimeUI();
       this.app.network.socket.emit('setOvertime', this.overtimeEnabled);
     });
+
+    // Jersey (Forma) Selection
+    this._setupJerseySelector();
 
     // Speed Multiplier
     const speedSelect = document.getElementById('lobbySpeedMultiplier');
@@ -710,6 +720,118 @@ export class RoomLobby {
         btnEl.style.color = 'rgba(255, 255, 255, 0.4)';
       }
     }
+  }
+
+  _setupJerseySelector() {
+    const wrapper = document.getElementById('jerseySelectWrapper');
+    const dropdown = document.getElementById('jerseyDropdown');
+    const btn = document.getElementById('btnJerseySelect');
+    if (!wrapper || !dropdown || !btn) return;
+
+    // Team presets: { name, colors (array of 6 hex), mainColor (for preview) }
+    const presets = [
+      { name: 'Galatasaray', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','F28C28','8A1538'], main: '#F28C28' },
+      { name: 'Fenerbahçe', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','FFC900','002D72','FFC900'], main: '#FFC900' },
+      { name: 'Beşiktaş', team: 'red', angle: 0, textColor: '111111', colors: ['111111','FFFFFF'], main: '#111111' },
+      { name: 'Trabzonspor', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','7A1731','2A9FD6','7A1731'], main: '#7A1731' },
+      { name: 'Rizespor', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','13107A','00945F','13107A'], main: '#13107A' },
+      { name: 'Manchester United', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','DA291C'], main: '#DA291C' },
+      { name: 'Manchester City', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','6CABDD'], main: '#6CABDD' },
+      { name: 'Liverpool', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','DA291C'], main: '#DA291C' },
+      { name: 'Arsenal', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','DA291C'], main: '#DA291C' },
+      { name: 'Chelsea', team: 'red', angle: 0, textColor: 'eecc1d', colors: ['eecc1d','034694'], main: '#034694' },
+      { name: 'Aston Villa', team: 'red', angle: 0, textColor: 'bbd2f2', colors: ['bbd2f2','6E303F'], main: '#6E303F' },
+      { name: 'Real Madrid', team: 'red', angle: 0, textColor: '143832', colors: ['143832','FFFFFF'], main: '#FFFFFF' },
+      { name: 'Barcelona', team: 'red', angle: 0, textColor: 'dd9721', colors: ['dd9721','2C3F83','781028'], main: '#2C3F83' },
+      { name: 'Atlético Madrid', team: 'red', angle: 0, textColor: '0f5ac5', colors: ['0f5ac5','FFFFFF','D40424','FFFFFF'], main: '#D40424' },
+      { name: 'Juventus', team: 'red', angle: 0, textColor: 'd4be88', colors: ['d4be88','000000','FFFFFF','000000'], main: '#000000' },
+      { name: 'Inter Milan', team: 'red', angle: 0, textColor: 'f0ba56', colors: ['f0ba56','0068A8','000000','0068A8'], main: '#0068A8' },
+      { name: 'AC Milan', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','000000','AC1F2D','000000'], main: '#AC1F2D' },
+      { name: 'Bayern Munich', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','DC052D'], main: '#DC052D' },
+      { name: 'Borussia Dortmund', team: 'red', angle: 0, textColor: '000000', colors: ['000000','FDE100'], main: '#FDE100' },
+      { name: 'Paris Saint-Germain', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','002A8A','DC0B28','002A8A'], main: '#002A8A' },
+      { name: 'Türkiye', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','D0021B'], main: '#D0021B' },
+      { name: 'Arjantin', team: 'red', angle: 0, textColor: '000000', colors: ['000000','75AADB','FFFFFF','75AADB'], main: '#75AADB' },
+      { name: 'İspanya', team: 'red', angle: 0, textColor: 'F1BF00', colors: ['F1BF00','AA151B'], main: '#AA151B' },
+      { name: 'Fransa', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','243567'], main: '#243567' },
+      { name: 'İngiltere', team: 'red', angle: 0, textColor: '000000', colors: ['000000','DEE2E5'], main: '#DEE2E5' },
+      { name: 'İtalya', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','0067B1'], main: '#0067B1' },
+      { name: 'Portekiz', team: 'red', angle: 0, textColor: 'FFFFFF', colors: ['FFFFFF','9D2639'], main: '#9D2639' },
+      { name: 'Brezilya', team: 'red', angle: 0, textColor: '0f4a36', colors: ['0f4a36','EED04B'], main: '#0f4a36' },
+      { name: 'Almanya', team: 'red', angle: 90, textColor: 'FFFFFF', colors: ['FFFFFF','000000','DD0000','FFCE00'], main: '#DD0000' },
+    ];
+
+    // Build dropdown content with team selector
+    this._jerseyTeam = 'red'; // default team
+    dropdown.innerHTML = `
+      <div style="display:flex; gap:4px; margin-bottom:8px; padding:4px; background:rgba(0,0,0,0.3); border-radius:8px;">
+        <button class="jersey-team-btn" data-team="red" style="flex:1; padding:4px 8px; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; background:rgba(231,76,60,0.3); color:#e74c3c; transition:all 0.15s;">🔴 Kırmızı</button>
+        <button class="jersey-team-btn" data-team="blue" style="flex:1; padding:4px 8px; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; background:rgba(52,152,219,0.1); color:rgba(52,152,219,0.5); transition:all 0.15s;">🔵 Mavi</button>
+      </div>
+      ${presets.map((p, i) => `
+        <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:pointer; transition:background 0.15s; font-size:13px; color:var(--text-primary);">
+          <div style="display:flex; gap:1px; border-radius:4px; overflow:hidden; flex-shrink:0;">
+            ${p.colors.slice(0, 4).map(c => `<div style="width:10px;height:18px;background:#${c};"></div>`).join('')}
+          </div>
+          <span>${p.name}</span>
+        </div>
+      `).join('')}
+    `;
+
+    // Team selector buttons
+    const updateTeamBtns = () => {
+      dropdown.querySelectorAll('.jersey-team-btn').forEach(b => {
+        const t = b.dataset.team;
+        if (t === this._jerseyTeam) {
+          b.style.background = t === 'red' ? 'rgba(231,76,60,0.5)' : 'rgba(52,152,219,0.5)';
+          b.style.color = 'white';
+        } else {
+          b.style.background = 'rgba(255,255,255,0.05)';
+          b.style.color = 'rgba(255,255,255,0.4)';
+        }
+      });
+    };
+    updateTeamBtns();
+    dropdown.querySelectorAll('.jersey-team-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._jerseyTeam = btn.dataset.team;
+        updateTeamBtns();
+      });
+    });
+
+    // Hover effects
+    dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
+      item.addEventListener('mouseenter', () => item.style.background = 'rgba(15,82,186,0.2)');
+      item.addEventListener('mouseleave', () => item.style.background = '');
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.idx);
+        const preset = presets[idx];
+        if (!preset) return;
+
+        // Apply colors to selected team via /colors command
+        const team = this._jerseyTeam || 'red';
+        const colorsStr = preset.colors.join(' ');
+        const cmd = `/colors ${team} ${preset.angle} ${preset.textColor} ${colorsStr}`;
+        this.app.network.sendChat(cmd);
+
+        dropdown.style.display = 'none';
+      });
+    });
+
+    // Toggle dropdown
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isVisible = dropdown.style.display !== 'none';
+      dropdown.style.display = isVisible ? 'none' : 'block';
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!wrapper.contains(e.target)) {
+        dropdown.style.display = 'none';
+      }
+    });
   }
 
   _esc(text) {
