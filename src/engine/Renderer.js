@@ -271,13 +271,13 @@ export class Renderer {
             }
 
             // Draw player color stripes matching HaxBall's rendering algorithm
-            // HaxBall angle: 0°=top→bottom, 90°=right→left, 180°=bottom→top
-            // Colors are equal-width horizontal bands rotated by angle
+            // HaxBall angle: 0°=vertical(left→right), 90°=horizontal(top→bottom)
+            // Canvas default draws horizontal bands, so we add 90° offset
             if (disc.isPlayer && colors.length > 1) {
                 ctx.save();
                 ctx.translate(disc.pos.x, disc.pos.y);
-                // Rotate canvas by angle (clockwise)
-                const rot = angle * Math.PI / 180;
+                // Rotate canvas: +90° offset so angle 0 = vertical stripes (HaxBall compat)
+                const rot = (angle + 90) * Math.PI / 180;
                 ctx.rotate(rot);
 
                 // Clip to circle
