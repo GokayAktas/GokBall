@@ -111,6 +111,11 @@ class GokBallApp {
                 this.lastPhysTime = performance.now();
                 this.accumulator = 0;
             }
+            // Host: when tab is hidden, start a setInterval fallback so physics keeps running
+            // When tab is visible again, clear the fallback (rAF takes over)
+            if (this._isHost() && this._isHostAuthority) {
+                this._toggleHostBackgroundLoop();
+            }
         });
     }
 
@@ -168,7 +173,7 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
-            <div class="stat-item" style="font-size:10px;color:rgba(166,197,215,0.5);"><span id="jitterValue">0</span>ms jitter</div>
+            <div class="stat-item"><span class="stat-value" id="jitterValue">0</span><span class="stat-unit">jit</span></div>
             <div class="stat-item stat-fps"><span class="stat-icon">⚡</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
@@ -282,6 +287,11 @@ class GokBallApp {
             this._animFrame = null;
         }
 
+        // Clean up host background loop
+        if (this._hostBgInterval) {
+            clearInterval(this._hostBgInterval);
+            this._hostBgInterval = null;
+        }
     }
 
 
@@ -534,6 +544,87 @@ class GokBallApp {
         return this.currentRoomData?.creatorId === this.network.socket?.id;
     }
 
+    /**
+     * When the host's tab is hidden, browsers throttle requestAnimationFrame.
+     * This backup interval keeps the physics game loop running even when rAF is paused.
+     */
+    _toggleHostBackgroundLoop() {
+        if (document.hidden && this.gameRunning && this._isHost() && this._isHostAuthority) {
+            // Start backup interval if not already running
+            if (!this._hostBgInterval) {
+                this._hostBgInterval = setInterval(() => {
+                    if (!this.gameRunning) {
+                        clearInterval(this._hostBgInterval);
+                        this._hostBgInterval = null;
+                        return;
+                    }
+                    // Run a mini game loop tick (same as _gameLoop but without rAF)
+                    const now = performance.now();
+                    const dt = now - (this.lastPhysTime || now);
+                    this.lastPhysTime = now;
+                    this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
+                    const stepSize = 1000 / 60;
+                    while (this.accumulator >= stepSize) {
+                        // Only run host physics steps (simplified)
+                        if (this._isHost() && this._isHostAuthority && !this._isPaused) {
+                            if (this._hostGameState === 'playing') {
+                                for (const disc of this.physics.discs) {
+                                    if (!disc.isPlayer) continue;
+                                    disc.input = disc.input || { up: false, down: false, left: false, right: false, kick: false };
+                                }
+                                // Apply remote inputs
+                                for (const [playerId, remoteInput] of this._remoteInputs) {
+                                    const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
+                                    if (remoteDisc) remoteDisc.input = remoteInput;
+                                }
+                                const result = this.physics.step();
+                                if (result.kickHappened) this.audio.playKick();
+                                if (result.goalTeam && this._hostGameState === 'playing') {
+                                    this._hostHandleGoal(result.goalTeam);
+                                }
+                                if (!this.physics.kickOffReset) this._hostTimeElapsed++;
+                                this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+                                this._sendAuthorityState();
+                            } else if (this._hostGameState === 'goal') {
+                                for (const disc of this.physics.discs) {
+                                    if (disc.isPlayer) { disc.input = { up: false, down: false, left: false, right: false, kick: false }; disc.kicking = false; }
+                                }
+                                this.physics.step();
+                                this._hostGoalPauseTicks--;
+                                this._sendAuthorityState();
+                                if (this._hostGoalPauseTicks <= 0) {
+                                    if (this.physics.ballDisc) {
+                                        this.physics.ballDisc.pos.x = 0; this.physics.ballDisc.pos.y = 0;
+                                        this.physics.ballDisc.speed.x = 0; this.physics.ballDisc.speed.y = 0;
+                                        this.physics.ballDisc.color = 'FFB82E';
+                                    }
+                                    if (this._hostScoreLimit > 0 && (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
+                                        this._hostGameOver();
+                                        this.accumulator -= stepSize; continue;
+                                    }
+                                    this.physics.kickOffReset = true;
+                                    this.physics.kickOffTeam = this._hostKickOffTeam;
+                                    this.physics.inGoalPause = false;
+                                    this.physics.resetPositions();
+                                    this._hostGameState = 'playing';
+                                    this._serverGameState = 'playing';
+                                    this._sendAuthorityState();
+                                }
+                            }
+                        }
+                        this.accumulator -= stepSize;
+                    }
+                }, 1000 / 60); // ~60fps
+                console.log('[GokBall] Host background loop started (tab hidden)');
+            }
+        } else if (!document.hidden && this._hostBgInterval) {
+            // Tab is visible again, rAF takes over — clear the interval
+            clearInterval(this._hostBgInterval);
+            this._hostBgInterval = null;
+            console.log('[GokBall] Host background loop stopped (tab visible)');
+        }
+    }
+
     /** Initialize host-authority game mode (state only, spawning happens after startGame) */
     _initHostGame() {
         this._hostScoreRed = 0;
@@ -698,9 +789,26 @@ class GokBallApp {
         const overlay = document.createElement('div');
         overlay.className = 'game-over-overlay';
         overlay.innerHTML = `
-            <h1 style="color: ${winColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winTeamStr} TAKIM KAZANDI!</h1>
-            <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${this._hostScoreRed} - ${this._hostScoreBlue}</p>
-            <div style="color: var(--text-secondary); font-size: 14px; margin-top: 16px; white-space: pre-line; text-align: left; max-width: 400px;">${statsMsg}</div>
+            <div class="game-over-card">
+                <div class="game-over-trophy">🏆</div>
+                <div class="game-over-winner" style="color: ${winColor};">${winTeamStr} TAKIM KAZANDI!</div>
+                <div class="game-over-scores">
+                    <span class="game-over-score game-over-score-red">${this._hostScoreRed}</span>
+                    <span class="game-over-separator">—</span>
+                    <span class="game-over-score game-over-score-blue">${this._hostScoreBlue}</span>
+                </div>
+                <div class="game-over-label">MAÇ SKORU</div>
+                ${statsMsg && statsEntries.length > 0 ? `<div class="game-over-stats">
+                    <div class="game-over-stats-title">📊 İstatistikler</div>
+                    ${statsEntries.map(([_, s]) => {
+                        const parts = [];
+                        if (s.goals > 0) parts.push(`⚽ ${s.goals} Gol`);
+                        if (s.assists > 0) parts.push(`👟 ${s.assists} Asist`);
+                        if (s.saves > 0) parts.push(`🧤 ${s.saves} Kurtarış`);
+                        return `<div class="game-over-stat-row"><span class="game-over-stat-name">${s.name}</span><span class="game-over-stat-values">${parts.join(' &middot; ')}</span></div>`;
+                    }).join('')}
+                </div>` : ''}
+            </div>
         `;
         document.body.appendChild(overlay);
 
@@ -1050,9 +1158,10 @@ class GokBallApp {
 
             // Build match stats for chat
             let statsMsg = '';
+            let entries = [];
             if (data.matchStats && Object.keys(data.matchStats).length > 0) {
                 statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
-                const entries = Object.entries(data.matchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
+                entries = Object.entries(data.matchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
                 if (entries.length > 0) {
                     for (const [_, s] of entries) {
                         const parts = [];
@@ -1069,9 +1178,26 @@ class GokBallApp {
             const overlay = document.createElement('div');
             overlay.className = 'game-over-overlay';
             overlay.innerHTML = `
-                <h1 style="color: ${winnerColor}; text-shadow: 2px 2px 0 rgba(0,0,0,0.6); font-size: 48px; margin: 0; font-weight: bold;">${winnerStr} TAKIM KAZANDI!</h1>
-                <p style="color: var(--text-primary); font-size: 24px; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); margin-top: 10px;">Maç Skoru: ${data.scoreRed} - ${data.scoreBlue}</p>
-                ${statsMsg ? `<div style="color: var(--text-secondary); font-size: 14px; margin-top: 16px; white-space: pre-line; text-align: left; max-width: 400px;">${statsMsg}</div>` : ''}
+                <div class="game-over-card">
+                    <div class="game-over-trophy">🏆</div>
+                    <div class="game-over-winner" style="color: ${winnerColor};">${winnerStr} TAKIM KAZANDI!</div>
+                    <div class="game-over-scores">
+                        <span class="game-over-score game-over-score-red">${data.scoreRed}</span>
+                        <span class="game-over-separator">—</span>
+                        <span class="game-over-score game-over-score-blue">${data.scoreBlue}</span>
+                    </div>
+                    <div class="game-over-label">MAÇ SKORU</div>
+                    ${entries && entries.length > 0 ? `<div class="game-over-stats">
+                        <div class="game-over-stats-title">📊 İstatistikler</div>
+                        ${entries.map(([_, s]) => {
+                            const parts = [];
+                            if (s.goals > 0) parts.push(`⚽ ${s.goals} Gol`);
+                            if (s.assists > 0) parts.push(`👟 ${s.assists} Asist`);
+                            if (s.saves > 0) parts.push(`🧤 ${s.saves} Kurtarış`);
+                            return `<div class="game-over-stat-row"><span class="game-over-stat-name">${s.name}</span><span class="game-over-stat-values">${parts.join(' &middot; ')}</span></div>`;
+                        }).join('')}
+                    </div>` : ''}
+                </div>
             `;
             document.body.appendChild(overlay);
 

@@ -141,7 +141,7 @@ const FUTSAL_MAP = {
         { p0: [460, 75], p1: [460, -75], team: "blue" }
     ],
     discs: [
-        { pos: [0, 0], radius: 9, invMass: 1.2, bCoef: 0.4, damping: 0.985, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
+        { pos: [0, 0], radius: 9, invMass: 1.8, bCoef: 0.8, damping: 0.992, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
         { pos: [-460, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
         { pos: [-460, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
         { pos: [460, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] },
@@ -155,7 +155,7 @@ const FUTSAL_MAP = {
     ],
     playerPhysics: {
         radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,
-        acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 5.0
+        acceleration: 0.11, kickingAcceleration: 0.07, kickingDamping: 0.96, kickStrength: 7.0
     },
     ballPhysics: "disc0"
 };

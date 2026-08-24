@@ -747,10 +747,10 @@ export class RoomLobby {
     // Jersey presets with flag images
     const presets = [
       { name: 'Galatasaray', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','F28C28','8A1538'], flag: '/assets/tr.png' },
-      { name: 'Fenerbahçe', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','FFC900','002D72','FFC900'], flag: '/assets/tr.png' },
+      { name: 'Fenerbahçe', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','FFC900','002D72'], flag: '/assets/tr.png' },
       { name: 'Beşiktaş', angle: 0, avatarColor: '111111', colors: ['111111','FFFFFF'], flag: '/assets/tr.png' },
-      { name: 'Trabzonspor', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','7A1731','2A9FD6','7A1731'], flag: '/assets/tr.png' },
-      { name: 'Rizespor', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','13107A','00945F','13107A'], flag: '/assets/tr.png' },
+      { name: 'Trabzonspor', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','7A1731','2A9FD6'], flag: '/assets/tr.png' },
+      { name: 'Rizespor', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','13107A','00945F'], flag: '/assets/tr.png' },
       { name: 'Manchester United', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','DA291C'], flag: '/assets/uk.png' },
       { name: 'Manchester City', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','6CABDD'], flag: '/assets/uk.png' },
       { name: 'Liverpool', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','DA291C'], flag: '/assets/uk.png' },
@@ -759,22 +759,22 @@ export class RoomLobby {
       { name: 'Aston Villa', angle: 0, avatarColor: 'bbd2f2', colors: ['bbd2f2','6E303F'], flag: '/assets/uk.png' },
       { name: 'Real Madrid', angle: 0, avatarColor: '143832', colors: ['143832','FFFFFF'], flag: '/assets/es.png' },
       { name: 'Barcelona', angle: 0, avatarColor: 'dd9721', colors: ['dd9721','2C3F83','781028'], flag: '/assets/es.png' },
-      { name: 'Atlético Madrid', angle: 0, avatarColor: '0f5ac5', colors: ['0f5ac5','FFFFFF','D40424','FFFFFF'], flag: '/assets/es.png' },
-      { name: 'Juventus', angle: 0, avatarColor: 'd4be88', colors: ['d4be88','000000','FFFFFF','000000'], flag: '/assets/it.png' },
-      { name: 'Inter Milan', angle: 0, avatarColor: 'f0ba56', colors: ['f0ba56','0068A8','000000','0068A8'], flag: '/assets/it.png' },
-      { name: 'AC Milan', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','000000','AC1F2D','000000'], flag: '/assets/it.png' },
+      { name: 'Atlético Madrid', angle: 0, avatarColor: '0f5ac5', colors: ['0f5ac5','FFFFFF','D40424'], flag: '/assets/es.png' },
+      { name: 'Juventus', angle: 0, avatarColor: 'd4be88', colors: ['d4be88','000000','FFFFFF'], flag: '/assets/it.png' },
+      { name: 'Inter Milan', angle: 0, avatarColor: 'f0ba56', colors: ['f0ba56','0068A8','000000'], flag: '/assets/it.png' },
+      { name: 'AC Milan', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','000000','AC1F2D'], flag: '/assets/it.png' },
       { name: 'Bayern Munich', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','DC052D'], flag: '/assets/de.png' },
       { name: 'Borussia Dortmund', angle: 0, avatarColor: '000000', colors: ['000000','FDE100'], flag: '/assets/de.png' },
-      { name: 'Paris Saint-Germain', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','002A8A','DC0B28','002A8A'], flag: '/assets/fr.png' },
+      { name: 'Paris Saint-Germain', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','002A8A','DC0B28'], flag: '/assets/fr.png' },
       { name: 'Türkiye', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','D0021B'], flag: '/assets/globe.png' },
-      { name: 'Arjantin', angle: 0, avatarColor: '000000', colors: ['000000','75AADB','FFFFFF','75AADB'], flag: '/assets/globe.png' },
+      { name: 'Arjantin', angle: 0, avatarColor: '000000', colors: ['000000','75AADB','FFFFFF'], flag: '/assets/globe.png' },
       { name: 'İspanya', angle: 0, avatarColor: 'F1BF00', colors: ['F1BF00','AA151B'], flag: '/assets/globe.png' },
       { name: 'Fransa', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','243567'], flag: '/assets/globe.png' },
       { name: 'İngiltere', angle: 0, avatarColor: '000000', colors: ['000000','DEE2E5'], flag: '/assets/globe.png' },
       { name: 'İtalya', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','0067B1'], flag: '/assets/globe.png' },
       { name: 'Portekiz', angle: 0, avatarColor: 'FFFFFF', colors: ['FFFFFF','9D2639'], flag: '/assets/globe.png' },
       { name: 'Brezilya', angle: 0, avatarColor: '0f4a36', colors: ['0f4a36','EED04B'], flag: '/assets/globe.png' },
-      { name: 'Almanya', angle: 90, avatarColor: 'FFFFFF', colors: ['FFFFFF','000000','DD0000','FFCE00'], flag: '/assets/globe.png' },
+      { name: 'Almanya', angle: 90, avatarColor: 'FFFFFF', colors: ['FFFFFF','DD0000','FFCE00'], flag: '/assets/globe.png' },
     ];
 
     // Build a dropdown for a given team ('red' or 'blue')
@@ -815,12 +815,12 @@ export class RoomLobby {
               this._selectedJersey[team] = idx;
               localStorage.setItem('gokball_selectedJersey', JSON.stringify(this._selectedJersey));
 
-              // Apply colors directly via socket event
+              // Apply colors directly via socket event (max 3 colors)
               this.app.network.socket.emit('setTeamColors', {
                 team: team,
                 angle: preset.angle,
                 avatarColor: preset.avatarColor,
-                colors: preset.colors
+                colors: preset.colors.slice(0, 3)
               });
 
               // Re-render to show checkmark

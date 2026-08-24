@@ -749,7 +749,7 @@ select.input option {
   /* For collapsed state */
   display: flex;
   flex-direction: column;
-  background: rgba(0, 9, 38, 0.85);
+  background: #0a121b;
   backdrop-filter: blur(12px);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
@@ -760,7 +760,6 @@ select.input option {
 
 .chat-box.collapsed {
   height: 40px !important;
-  background: #0a121b;
   display: flex;
   align-items: center;
   flex-direction: row;
@@ -872,13 +871,121 @@ select.input option {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
   z-index: 2000;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   animation: fadeIn 0.3s ease;
+}
+
+.game-over-card {
+  background: linear-gradient(145deg, rgba(10, 20, 40, 0.95), rgba(5, 12, 30, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 48px 56px;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 60px rgba(15, 82, 186, 0.1);
+  animation: gameOverSlideIn 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  max-width: 500px;
+  width: 90vw;
+}
+
+@keyframes gameOverSlideIn {
+  0% { opacity: 0; transform: translateY(30px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.game-over-trophy {
+  font-size: 64px;
+  margin-bottom: 12px;
+  animation: trophyBounce 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55) 0.2s both;
+}
+
+@keyframes trophyBounce {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+.game-over-winner {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  margin-bottom: 16px;
+}
+
+.game-over-scores {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.game-over-score {
+  font-size: 52px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.game-over-score-red { color: #ff4444; }
+.game-over-score-blue { color: #4488ff; }
+
+.game-over-separator {
+  font-size: 36px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+}
+
+.game-over-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.game-over-stats {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+
+.game-over-stats-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.game-over-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.game-over-stat-row:last-child {
+  border-bottom: none;
+}
+
+.game-over-stat-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.game-over-stat-values {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .chat-messages {
@@ -917,33 +1024,39 @@ select.input option {
 
 .chat-input-row {
   display: flex;
-  border-top: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  align-items: center;
 }
 
 .chat-input {
   flex: 1;
-  padding: var(--space-md) var(--space-md);
+  padding: 10px 12px;
   background: transparent;
   border: none;
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: var(--font-md);
+  font-size: 13px;
   outline: none;
 }
 
 .chat-send {
-  padding: var(--space-sm) var(--space-md);
-  background: var(--sapphire);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  background: transparent;
   border: none;
-  color: white;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: var(--font-md);
-  transition: background var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
 .chat-send:hover {
-  background: #1565C0;
+  color: white;
 }
 
 /* ============================================
@@ -1840,46 +1953,46 @@ select.input option {
   bottom: 20px;
   left: 20px;
   display: flex;
-  gap: 10px;
+  gap: 6px;
   z-index: 1000;
   pointer-events: none;
 }
 
 .stat-item {
-  background: linear-gradient(135deg, rgba(0, 9, 38, 0.85), rgba(0, 20, 60, 0.75));
+  background: rgba(0, 9, 38, 0.75);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(166, 197, 215, 0.2);
-  border-radius: 10px;
-  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 5px 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--ice-blue);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  min-width: 80px;
+  color: rgba(214, 230, 243, 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
 }
 
-.stat-ping .stat-icon { color: var(--success, #4caf50); }
-.stat-fps .stat-icon { color: var(--warning, #ffc107); }
+.stat-ping .stat-icon { color: #4caf50; }
+.stat-fps .stat-icon { color: #ffc107; }
 
 .stat-value {
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
-  letter-spacing: 0.5px;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .stat-unit {
-  font-size: 11px;
-  opacity: 0.65;
+  font-size: 10px;
+  opacity: 0.5;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .stat-icon {
-  opacity: 0.9;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .team-clear-btn {
