@@ -51,7 +51,7 @@ class GokBallApp {
         this._serverGameState = 'stopped';
 
         // Snapshot interpolation buffer for non-host clients
-        this._snapshotBuffer = new SnapshotBuffer(80); // 80ms interpolation delay
+        this._snapshotBuffer = new SnapshotBuffer(100); // 100ms interpolation delay for smoother client rendering
         this._lastSnapshotTime = 0;
 
         // Host-authority mode (room creator runs physics)
@@ -104,6 +104,14 @@ class GokBallApp {
         this.frameCount = 0;
         this.lastFpsTime = performance.now();
         this.currentFps = 0;
+
+        // Fix: When tab becomes visible again, reset physTime to avoid huge dt spike
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.gameRunning) {
+                this.lastPhysTime = performance.now();
+                this.accumulator = 0;
+            }
+        });
     }
 
     async init() {
@@ -273,6 +281,7 @@ class GokBallApp {
             cancelAnimationFrame(this._animFrame);
             this._animFrame = null;
         }
+
     }
 
 
@@ -840,12 +849,24 @@ class GokBallApp {
                 
                 // Update existing disc's team and color
                 existingDisc.team = playerData.team;
-                existingDisc.color = playerData.team === 'red' ? 'c70000' : '00008c';
-                existingDisc.colors = [existingDisc.color];
                 existingDisc._playerName = playerData.name;
                 existingDisc._avatar = playerData.avatar || '1';
                 existingDisc._spawnPos.x = existingDisc.pos.x;
                 existingDisc._spawnPos.y = existingDisc.pos.y;
+                
+                // Apply team colors from room settings
+                const tc = this.currentRoomData?.teamColors?.[playerData.team];
+                if (tc && tc.colors && tc.colors.length > 0) {
+                    existingDisc.color = tc.colors[0];
+                    existingDisc.colors = tc.colors;
+                    existingDisc.colorAngle = tc.angle || 0;
+                    existingDisc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
+                } else {
+                    existingDisc.color = playerData.team === 'red' ? 'c70000' : '00008c';
+                    existingDisc.colors = [existingDisc.color];
+                    existingDisc.colorAngle = 0;
+                    existingDisc.avatarColor = 'FFFFFF';
+                }
                 
                 // Update collision group for new team
                 existingDisc.cGroup = CollisionFlags[playerData.team] || CollisionFlags.all;

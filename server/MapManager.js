@@ -96,29 +96,29 @@ function createStadium(name, fieldW, fieldH, spawnDist = 170) {
 
 const FUTSAL_MAP = {
     name: "Futsal 3v3",
-    width: 480, height: 260, spawnDistance: 170,
+    width: 520, height: 260, spawnDistance: 180,
     bg: {
-        type: "grass", width: 420, height: 220,
+        type: "grass", width: 460, height: 220,
         kickOffRadius: 75, cornerRadius: 0,
         color: "4A4A4A", stripeColor: "4A4A4A", bgColor: "3A3A3A",
         lineColor: "FFFFFF", showCenterLine: true, showKickOffCircle: true,
         centerLineColor: "666666", useStarballImage: true
     },
     vertexes: [
-        { x: -420, y: 220, bCoef: 0.1, cMask: ["ball"] },
-        { x: -420, y: 75, bCoef: 0.1, cMask: ["ball"] },
-        { x: -420, y: -75, bCoef: 0.1, cMask: ["ball"] },
-        { x: -420, y: -220, bCoef: 0.1, cMask: ["ball"] },
-        { x: 420, y: 220, bCoef: 0.1, cMask: ["ball"] },
-        { x: 420, y: 75, bCoef: 0.1, cMask: ["ball"] },
-        { x: 420, y: -75, bCoef: 0.1, cMask: ["ball"] },
-        { x: 420, y: -220, bCoef: 0.1, cMask: ["ball"] },
-        { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] },
-        { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] },
+        { x: -460, y: 220, bCoef: 0.1, cMask: ["ball"] },
         { x: -460, y: 75, bCoef: 0.1, cMask: ["ball"] },
         { x: -460, y: -75, bCoef: 0.1, cMask: ["ball"] },
+        { x: -460, y: -220, bCoef: 0.1, cMask: ["ball"] },
+        { x: 460, y: 220, bCoef: 0.1, cMask: ["ball"] },
         { x: 460, y: 75, bCoef: 0.1, cMask: ["ball"] },
-        { x: 460, y: -75, bCoef: 0.1, cMask: ["ball"] }
+        { x: 460, y: -75, bCoef: 0.1, cMask: ["ball"] },
+        { x: 460, y: -220, bCoef: 0.1, cMask: ["ball"] },
+        { x: 0, y: 220, bCoef: 0.1, cMask: [], cGroup: [] },
+        { x: 0, y: -220, bCoef: 0.1, cMask: [], cGroup: [] },
+        { x: -500, y: 75, bCoef: 0.1, cMask: ["ball"] },
+        { x: -500, y: -75, bCoef: 0.1, cMask: ["ball"] },
+        { x: 500, y: 75, bCoef: 0.1, cMask: ["ball"] },
+        { x: 500, y: -75, bCoef: 0.1, cMask: ["ball"] }
     ],
     segments: [
         { v0: 0, v1: 8, vis: true, color: "FFFFFF", bCoef: 1, cMask: ["ball"] },
@@ -137,21 +137,21 @@ const FUTSAL_MAP = {
         { v0: 13, v1: 6, curve: 0, vis: true, color: "666666", bCoef: 0.1, cMask: ["ball"] }
     ],
     goals: [
-        { p0: [-420, 75], p1: [-420, -75], team: "red" },
-        { p0: [420, 75], p1: [420, -75], team: "blue" }
+        { p0: [-460, 75], p1: [-460, -75], team: "red" },
+        { p0: [460, 75], p1: [460, -75], team: "blue" }
     ],
     discs: [
-        { pos: [0, 0], radius: 6.4, invMass: 1.6, bCoef: 0.4, damping: 0.99, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
-        { pos: [-420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
-        { pos: [-420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
-        { pos: [420, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] },
-        { pos: [420, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
+        { pos: [0, 0], radius: 9, invMass: 1.2, bCoef: 0.4, damping: 0.985, color: "FFB82E", cMask: ["all"], cGroup: ["ball"] },
+        { pos: [-460, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
+        { pos: [-460, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "c70000", cMask: ["all"] },
+        { pos: [460, 75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] },
+        { pos: [460, -75], radius: 4, invMass: 0, bCoef: 0.5, color: "00008c", cMask: ["all"] }
     ],
     planes: [
         { normal: [0, 1], dist: -250, bCoef: 0.1, cMask: ["all"] },
         { normal: [0, -1], dist: -250, bCoef: 0.1, cMask: ["all"] },
-        { normal: [1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] },
-        { normal: [-1, 0], dist: -500, bCoef: 0.1, cMask: ["all"] }
+        { normal: [1, 0], dist: -540, bCoef: 0.1, cMask: ["all"] },
+        { normal: [-1, 0], dist: -540, bCoef: 0.1, cMask: ["all"] }
     ],
     playerPhysics: {
         radius: 16.0, bCoef: 0.5, invMass: 0.5, damping: 0.96,

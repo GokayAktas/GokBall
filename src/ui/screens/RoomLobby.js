@@ -48,7 +48,7 @@ export class RoomLobby {
                     <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed" style="padding: 2px 8px;">Katıl</button>
                     <div style="position:relative;" id="jerseyRedWrapper">
-                      <button class="btn btn-xs" id="btnJerseyRed" style="padding:2px 8px; background:rgba(231,76,60,0.15); border:1px solid rgba(231,76,60,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Kırmızı Forma Seç">
+                      <button class="btn btn-xs" id="btnJerseyRed" style="padding:2px 8px; background:rgba(231,76,60,0.15); border:1px solid rgba(231,76,60,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;" title="Kırmızı Forma Seç">
                         <img src="/assets/red_shirt.png" style="width:16px; height:16px;" />
                         <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
                       </button>
@@ -81,7 +81,7 @@ export class RoomLobby {
                     <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
                     <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue" style="padding: 2px 8px;">Katıl</button>
                     <div style="position:relative;" id="jerseyBlueWrapper">
-                      <button class="btn btn-xs" id="btnJerseyBlue" style="padding:2px 8px; background:rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Mavi Forma Seç">
+                      <button class="btn btn-xs" id="btnJerseyBlue" style="padding:2px 8px; background:rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;" title="Mavi Forma Seç">
                         <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
                         <img src="/assets/blue_shirt.png" style="width:16px; height:16px;" />
                       </button>
@@ -197,22 +197,37 @@ export class RoomLobby {
 
     // Team buttons
     document.getElementById('btnJoinRed')?.addEventListener('click', () => {
-      if (this.teamsLocked) {
+      if (this.teamsLocked && !this._isCurrentPlayerAdmin()) {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
+        return;
+      }
+      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
+      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
+        alert('Maç devam ederken takım değiştirilemez!');
         return;
       }
       this.app.network.changeTeam('red');
     });
     document.getElementById('btnJoinBlue')?.addEventListener('click', () => {
-      if (this.teamsLocked) {
+      if (this.teamsLocked && !this._isCurrentPlayerAdmin()) {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
+        return;
+      }
+      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
+      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
+        alert('Maç devam ederken takım değiştirilemez!');
         return;
       }
       this.app.network.changeTeam('blue');
     });
     document.getElementById('btnJoinSpectator')?.addEventListener('click', () => {
-      if (this.teamsLocked) {
+      if (this.teamsLocked && !this._isCurrentPlayerAdmin()) {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
+        return;
+      }
+      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
+      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
+        alert('Maç devam ederken takım değiştirilemez!');
         return;
       }
       this.app.network.changeTeam('spectator');
@@ -462,9 +477,7 @@ export class RoomLobby {
         if (countSpan) countSpan.textContent = data.players.length;
       }
     });
-  }
-
-  _updateAdminVisibility(data) {
+  }    _updateAdminVisibility(data) {
     const myPlayer = data?.players?.find(p => p.id === this.app.network.playerId);
     const isAdmin = myPlayer?.isAdmin;
     
@@ -476,24 +489,38 @@ export class RoomLobby {
     const btnJoinAuto = document.getElementById('btnJoinAuto');
     if (btnJoinAuto) btnJoinAuto.style.display = isAdmin ? '' : 'none';
     
-    // Clear Arrows
-    const isStopped = !data.game || data.game.state === 'stopped' || data.game.state === 'ended';
-    
+    // Clear Arrows - always visible for admin
     const btnClearRed = document.getElementById('btnClearRed');
-    if (btnClearRed) btnClearRed.style.display = (isAdmin && isStopped) ? '' : 'none';
+    if (btnClearRed) btnClearRed.style.display = isAdmin ? '' : 'none';
     
     const btnClearBlue = document.getElementById('btnClearBlue');
-    if (btnClearBlue) btnClearBlue.style.display = (isAdmin && isStopped) ? '' : 'none';
+    if (btnClearBlue) btnClearBlue.style.display = isAdmin ? '' : 'none';
 
-    // Disable Join buttons for non-admins if game is playing or teams are locked
-    const canJoin = isAdmin || (isStopped && !data.teamsLocked);
+    // Join buttons - always show, but disable when locked or game running
+    const isGameRunning = data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal');
+    const canClick = isAdmin || (!data.teamsLocked && !isGameRunning);
     const btnJoinRed = document.getElementById('btnJoinRed');
-    if (btnJoinRed) btnJoinRed.style.display = canJoin ? '' : 'none';
+    if (btnJoinRed) {
+        btnJoinRed.style.display = '';
+        btnJoinRed.disabled = !canClick;
+        btnJoinRed.style.opacity = canClick ? '1' : '0.4';
+        btnJoinRed.style.cursor = canClick ? 'pointer' : 'not-allowed';
+    }
     const btnJoinBlue = document.getElementById('btnJoinBlue');
-    if (btnJoinBlue) btnJoinBlue.style.display = canJoin ? '' : 'none';
-    const btnJoinSpectator = document.getElementById('btnJoinSpec');
-    if (btnJoinSpectator) btnJoinSpectator.style.display = canJoin ? '' : 'none';
-  }
+    if (btnJoinBlue) {
+        btnJoinBlue.style.display = '';
+        btnJoinBlue.disabled = !canClick;
+        btnJoinBlue.style.opacity = canClick ? '1' : '0.4';
+        btnJoinBlue.style.cursor = canClick ? 'pointer' : 'not-allowed';
+    }
+    const btnJoinSpectator = document.getElementById('btnJoinSpectator');
+    if (btnJoinSpectator) {
+        btnJoinSpectator.style.display = '';
+        btnJoinSpectator.disabled = !canClick;
+        btnJoinSpectator.style.opacity = canClick ? '1' : '0.4';
+        btnJoinSpectator.style.cursor = canClick ? 'pointer' : 'not-allowed';
+    }
+}
 
   onHide() {
     this._cleanupHandlers();
@@ -538,23 +565,8 @@ export class RoomLobby {
       }
     }
 
-    // Disable/enable join buttons for non-admins
-    const joinBtns = document.querySelectorAll('.team-join-btn');
-    joinBtns.forEach(btn => {
-      // Only disable if teams are locked AND current user is not admin
-      const myPlayer = this.roomData?.players?.find(p => p.id === this.app.network.playerId);
-      const isAdmin = myPlayer?.isAdmin;
-
-      if (this.teamsLocked && !isAdmin) {
-        btn.style.opacity = '0.4';
-        btn.style.cursor = 'not-allowed';
-        btn.disabled = true;
-      } else {
-        btn.style.opacity = '1';
-        btn.style.cursor = 'pointer';
-        btn.disabled = false;
-      }
-    });
+    // Re-evaluate admin visibility after lock change
+    this._updateAdminVisibility(this.roomData);
   }
 
   _updatePlayers(players) {
@@ -727,11 +739,10 @@ export class RoomLobby {
         btnEl.style.color = 'rgba(255, 255, 255, 0.4)';
       }
     }
-  }
-
-  _setupJerseySelector() {
-    // Track selected jersey per team
-    this._selectedJersey = { red: -1, blue: -1 };
+  }    _setupJerseySelector() {
+    // Track selected jersey per team - persist across re-renders
+    const saved = localStorage.getItem('gokball_selectedJersey');
+    this._selectedJersey = saved ? JSON.parse(saved) : { red: -1, blue: -1 };
 
     // Jersey presets with flag images
     const presets = [
@@ -772,13 +783,17 @@ export class RoomLobby {
       if (!dropdown) return;
 
       const renderItems = () => {
+        const myId = this.app.network.playerId;
+        const isAdmin = this.roomData?.players?.find(p => p.id === myId)?.isAdmin;
+
         dropdown.innerHTML = presets.map((p, i) => {
           const flagHtml = `<img src="${p.flag}" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
           const isSelected = this._selectedJersey[team] === i;
           const checkHtml = isSelected ? `<span style="margin-left:auto; color:#4ade80; font-weight:bold; font-size:14px;">✓</span>` : '';
           const bgStyle = isSelected ? 'background:rgba(15,82,186,0.25);' : '';
+          const cursorStyle = isAdmin ? 'cursor:pointer;' : 'cursor:default; opacity:0.7;';
           return `
-            <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:pointer; transition:background 0.15s; font-size:13px; color:var(--text-primary);${bgStyle}">
+            <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; ${cursorStyle} transition:background 0.15s; font-size:13px; color:var(--text-primary);${bgStyle}">
               ${flagHtml}
               <span>${p.name}</span>
               ${checkHtml}
@@ -786,31 +801,34 @@ export class RoomLobby {
           `;
         }).join('');
 
-        // Hover + click
-        dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
-          item.addEventListener('mouseenter', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = 'rgba(15,82,186,0.2)'; });
-          item.addEventListener('mouseleave', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = ''; });
-          item.addEventListener('click', () => {
-            const idx = parseInt(item.dataset.idx);
-            const preset = presets[idx];
-            if (!preset) return;
+        // Hover + click (admin only)
+        if (isAdmin) {
+          dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
+            item.addEventListener('mouseenter', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = 'rgba(15,82,186,0.2)'; });
+            item.addEventListener('mouseleave', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = ''; });
+            item.addEventListener('click', () => {
+              const idx = parseInt(item.dataset.idx);
+              const preset = presets[idx];
+              if (!preset) return;
 
-            // Track selection
-            this._selectedJersey[team] = idx;
+              // Track selection
+              this._selectedJersey[team] = idx;
+              localStorage.setItem('gokball_selectedJersey', JSON.stringify(this._selectedJersey));
 
-            // Apply colors directly via socket event
-            this.app.network.socket.emit('setTeamColors', {
-              team: team,
-              angle: preset.angle,
-              avatarColor: preset.avatarColor,
-              colors: preset.colors
+              // Apply colors directly via socket event
+              this.app.network.socket.emit('setTeamColors', {
+                team: team,
+                angle: preset.angle,
+                avatarColor: preset.avatarColor,
+                colors: preset.colors
+              });
+
+              // Re-render to show checkmark
+              renderItems();
+              dropdown.style.display = 'none';
             });
-
-            // Re-render to show checkmark
-            renderItems();
-            dropdown.style.display = 'none';
           });
-        });
+        }
       };
       renderItems();
     };
@@ -846,6 +864,11 @@ export class RoomLobby {
         document.querySelectorAll('.jersey-dropdown').forEach(d => d.style.display = 'none');
       }
     });
+  }
+
+  _isCurrentPlayerAdmin() {
+    const myId = this.app.network.playerId;
+    return this.roomData?.players?.find(p => p.id === myId)?.isAdmin || false;
   }
 
   _esc(text) {

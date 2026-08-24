@@ -502,26 +502,33 @@ function leaveCurrentRoom(socket) {
 
     const room = rooms.get(roomId);
     if (room) {
-        // HOST MODE: If host (creator) leaves, kick all other players
+        // HOST MODE: If host (creator) leaves, transfer admin and notify
         if (socket.id === room.creatorId) {
-            // Kick all other players
-            for (const [pid, p] of room.players) {
-                if (pid !== socket.id) {
-                    p.socket.emit('playerKicked', {
-                        reason: 'Oda kurucusu ayr\u0131ld\u0131',
-                        hostLeft: true
-                    });
-                    p.socket.disconnect();
-                }
+            room.players.delete(socket.id);
+            socket.leave(roomId);
+            playerRooms.delete(socket.id);
+
+            // Transfer host to next player
+            if (room.players.size > 0) {
+                const newHost = room.players.values().next().value;
+                newHost.isAdmin = true;
+                room.hostId = newHost.id;
+                room.creatorId = newHost.id;
+                room.broadcast('adminUpdate', {
+                    playerId: newHost.id,
+                    isAdmin: true,
+                    players: room.getPlayerList()
+                });
+                room.broadcast('chatMessage', {
+                    playerName: 'SİSTEM',
+                    message: `👑 Oda sahibi ayrıldı. Yeni sahip: ${newHost.name}`,
+                    system: true
+                });
+            } else {
+                room.game.stop();
+                rooms.delete(roomId);
             }
-            // Stop game and remove room
-            room.game.stop();
-            rooms.delete(roomId);
-            // Only clear players from this specific room
-            for (const pid of room.players.keys()) {
-                playerRooms.delete(pid);
-            }
-            console.log(`[Server] Host left, room closed: ${roomId}`);
+            console.log(`[Server] Host left, transferred ownership: ${roomId}`);
             return;
         }
 
