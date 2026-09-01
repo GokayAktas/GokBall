@@ -296,7 +296,8 @@ io.on('connection', (socket) => {
         socket.to(room.id).emit('gameOver', {
             winner: data.winner,
             scoreRed: data.scoreRed,
-            scoreBlue: data.scoreBlue
+            scoreBlue: data.scoreBlue,
+            matchStats: data.matchStats || {}
         });
     });
 

@@ -11,6 +11,7 @@ export class NetworkManager {
         this.playerId = null;
         this.callbacks = {};
         this.ping = 0;
+        this.hostPing = 0; // Host's ping to server (received via hostPing event)
         this._lastPingTime = 0;
         this.pingHistory = [];
         this.minPing = Infinity;
@@ -131,6 +132,11 @@ export class NetworkManager {
                     this.socket.emit('ping');
                 }
             }, 500); // 500ms ping interval for more responsive stats
+
+            // Host ping broadcast (host -> server -> all clients)
+            this.socket.on('hostPing', (data) => {
+                this.hostPing = data.ping || 0;
+            });
 
             this.socket.on('playerKicked', (data) => this._trigger('playerKicked', data));
             this.socket.on('stadiumChanged', (data) => this._trigger('stadiumChanged', data));

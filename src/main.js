@@ -181,7 +181,11 @@ class GokBallApp {
         // Ping update listener with jitter
         this.network.on('pingUpdate', (data) => {
             const pingEl = document.getElementById('pingValue');
-            if (pingEl) pingEl.textContent = data.ping;
+            if (pingEl) {
+                // Combined ping: player's own + host's connection to server
+                const combinedPing = data.ping + (this.network.hostPing || 0);
+                pingEl.textContent = combinedPing;
+            }
             const jitterEl = document.getElementById('jitterValue');
             if (jitterEl) jitterEl.textContent = data.jitter || 0;
             // Adjust interpolation delay based on jitter
@@ -802,7 +806,8 @@ class GokBallApp {
         this.network.socket?.emit('hostGameOverEvent', {
             winner: winner,
             scoreRed: this._hostScoreRed,
-            scoreBlue: this._hostScoreBlue
+            scoreBlue: this._hostScoreBlue,
+            matchStats: this._hostMatchStats
         });
 
         const overlay = document.createElement('div');
@@ -1043,6 +1048,11 @@ class GokBallApp {
             timeLimit: this._hostTimeLimit,
             kickOffTeam: this._hostKickOffTeam
         });
+
+        // Broadcast host ping to room every 2 seconds (120 frames at 60fps)
+        if (this._hostAuthoritySendCounter % 120 === 0) {
+            this.network.socket?.emit('hostPing', { ping: this.network.ping || 0 });
+        }
     }
 
     /** Setup callback handlers for network events */
