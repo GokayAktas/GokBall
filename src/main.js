@@ -1452,10 +1452,24 @@ class GokBallApp {
             this.physics.discs.pop();
         }
 
+        // Match player discs by ID (not index) to handle team changes correctly.
+        // When a player changes teams, the server removes a disc and adds a new one
+        // at a different index. Matching by index would apply colors to wrong discs.
         for (let i = 0; i < physicsState.discs.length; i++) {
             const sd = physicsState.discs[i];
-            const disc = this.physics.discs[i];
+            let disc = this.physics.discs[i];
             if (!disc) continue;
+
+            // For player discs, find the matching client disc by ID
+            if (sd.isPlayer && sd.id) {
+                const matched = this.physics.discs.find(d => d.isPlayer && d.id === sd.id);
+                if (matched) {
+                    disc = matched;
+                } else {
+                    // New player disc not yet on client - use slot and set ID
+                    disc.id = sd.id;
+                }
+            }
 
             // Sync metadata only (team, colors, physics params for prediction accuracy)
             if (sd.isPlayer !== undefined) {
