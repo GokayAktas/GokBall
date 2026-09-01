@@ -160,6 +160,17 @@ io.on('connection', (socket) => {
 
         socket.emit('roomJoined', result);
         console.log(`[Server] Player ${socket.id} joined room ${room.name}`);
+
+        // If game is running, send full state snapshot immediately for sync
+        if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
+            socket.emit('gameStarted', {
+                scoreRed: room.game.scoreRed,
+                scoreBlue: room.game.scoreBlue,
+                roomData: room.getRoomData(),
+                isHostAuthority: true,
+                state: room.game._getGameState()
+            });
+        }
     });
 
     // --- Leave Room ---

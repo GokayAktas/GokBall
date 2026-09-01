@@ -1950,32 +1950,42 @@ select.input option {
    ============================================ */
 .stats-hud {
   position: fixed;
-  bottom: 20px;
-  left: 20px;
+  bottom: 16px;
+  left: 16px;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   z-index: 1000;
   pointer-events: none;
 }
 
 .stat-item {
-  background: rgba(0, 9, 38, 0.75);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 5px 12px;
+  background: rgba(0, 9, 38, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px 10px;
   display: flex;
   align-items: center;
   gap: 5px;
   font-size: 12px;
   font-weight: 700;
   color: rgba(214, 230, 243, 0.7);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   white-space: nowrap;
+  transition: background 0.2s;
 }
 
+.stat-ping {
+  border-color: rgba(76, 175, 80, 0.2);
+}
 .stat-ping .stat-icon { color: #4caf50; }
-.stat-fps .stat-icon { color: #ffc107; }
+.stat-ping .stat-value { color: #81c784; }
+
+.stat-fps {
+  border-color: rgba(100, 181, 246, 0.2);
+}
+.stat-fps .stat-icon { color: #64b5f6; }
+.stat-fps .stat-value { color: #90caf9; }
 
 .stat-value {
   font-variant-numeric: tabular-nums;
@@ -1985,14 +1995,15 @@ select.input option {
 }
 
 .stat-unit {
-  font-size: 10px;
-  opacity: 0.5;
+  font-size: 9px;
+  opacity: 0.4;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .stat-icon {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .team-clear-btn {

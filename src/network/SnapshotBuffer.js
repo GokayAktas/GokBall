@@ -84,7 +84,7 @@ export class SnapshotBuffer {
      */
     adjustDelay(jitter) {
         // Set delay to 2x jitter + minimum
-        this.interpolationDelay = Math.max(80, jitter * 2 + 50);
+        this.interpolationDelay = Math.max(20, jitter * 2 + 10);
     }
 
     _interpolateStates(stateA, stateB, t) {

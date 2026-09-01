@@ -51,7 +51,7 @@ class GokBallApp {
         this._serverGameState = 'stopped';
 
         // Snapshot interpolation buffer for non-host clients
-        this._snapshotBuffer = new SnapshotBuffer(100); // 100ms interpolation delay for smoother client rendering
+        this._snapshotBuffer = new SnapshotBuffer(30); // 30ms interpolation delay for low-latency rendering
         this._lastSnapshotTime = 0;
 
         // Host-authority mode (room creator runs physics)
@@ -173,8 +173,7 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
-            <div class="stat-item"><span class="stat-value" id="jitterValue">0</span><span class="stat-unit">jit</span></div>
-            <div class="stat-item stat-fps"><span class="stat-icon">⚡</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
+            <div class="stat-item stat-fps"><span class="stat-icon">🎮</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
 
@@ -244,13 +243,7 @@ class GokBallApp {
         this.gameRunning = true;
         this.currentRoomData = roomData;
         this._firstStateReceived = false; // Wait for initial server state before client prediction
-
-        // Load stadium
-        const stadiumData = this.stadiumData || roomData?.stadium;
-        if (stadiumData) {
-            this.physics.loadStadium(stadiumData);
-            this._currentStadium = stadiumData;
-        }
+        this._stadiumLoaded = false; // Defer stadium loading until first gameState for sync guarantee
 
         // Hide UI, show game
         this.ui.hideAll();
@@ -1432,7 +1425,18 @@ class GokBallApp {
 
     _handleGameState(state) {
         // Mark first state received for client prediction guard
-        if (!this._firstStateReceived) this._firstStateReceived = true;
+        if (!this._firstStateReceived) {
+            this._firstStateReceived = true;
+            // Load stadium on first state for sync guarantee
+            if (!this._stadiumLoaded) {
+                const stadiumData = this.stadiumData || this.currentRoomData?.stadium;
+                if (stadiumData) {
+                    this.physics.loadStadium(stadiumData);
+                    this._currentStadium = stadiumData;
+                    this._stadiumLoaded = true;
+                }
+            }
+        }
 
         // Clear interpolation buffer on state transitions to prevent stale data
         if (this._serverGameState !== state.state) {
