@@ -447,12 +447,24 @@ class GokBallApp {
                     // Interpolate remote players from snapshot buffer
                     const interp = this._snapshotBuffer.getInterpolatedState(Date.now());
                     if (interp && interp.physics && interp.physics.discs) {
+                        // Build lookup of local player discs by ID for fast matching
+                        const localById = {};
+                        for (const d of this.physics.discs) {
+                            if (d.isPlayer && d.id) localById[d.id] = d;
+                        }
+
                         for (let si = 0; si < interp.physics.discs.length; si++) {
                             const sd = interp.physics.discs[si];
-                            const localDisc = this.physics.discs[si];
+                            // Match player discs by ID, others by index
+                            let localDisc = null;
+                            if (sd.isPlayer && sd.id && localById[sd.id]) {
+                                localDisc = localById[sd.id];
+                            } else if (!sd.isPlayer) {
+                                localDisc = this.physics.discs[si]; // Ball & static: index
+                            }
                             if (!localDisc) continue;
 
-                            if (sd.isPlayer && (sd.id === myId || localDisc.id === myId)) {
+                            if (sd.isPlayer && sd.id === myId) {
                                 // Local player: reconcile against server position
                                 const dx = sd.x - localDisc.pos.x;
                                 const dy = sd.y - localDisc.pos.y;
@@ -469,9 +481,9 @@ class GokBallApp {
                                     localDisc.pos.y += dy * 0.15;
                                 }
                             } else if (!sd.isPlayer) {
-                                // Ball & non-player discs: interpolate from snapshot (snappy)
-                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.55;
-                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.55;
+                                // Ball & non-player discs: interpolate from snapshot
+                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.4;
+                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.4;
                                 localDisc.speed.x = sd.sx;
                                 localDisc.speed.y = sd.sy;
                                 if (sd.color !== undefined) localDisc.color = sd.color;
@@ -717,14 +729,21 @@ class GokBallApp {
 
         // Record scorer and assister
         const scorerName = this._hostLastToucher ? (this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher)?.name || '') : '';
-        const assisterName = (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) ? (this.currentRoomData?.players?.find(p => p.id === this._hostPrevToucher)?.name || '') : '';
+        // Assister: last toucher on same team as scorer, before the scorer
+        let assisterName = '';
+        if (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
+            const prevPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostPrevToucher);
+            if (prevPlayer && prevPlayer.team === scoringTeam) {
+                assisterName = prevPlayer.name || '';
+            }
+        }
 
         // Track match stats locally
         if (this._hostLastToucher) {
             if (!this._hostMatchStats[this._hostLastToucher]) this._hostMatchStats[this._hostLastToucher] = { goals: 0, assists: 0, saves: 0, name: scorerName, team: scoringTeam };
             this._hostMatchStats[this._hostLastToucher].goals++;
         }
-        if (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
+        if (assisterName) {
             if (!this._hostMatchStats[this._hostPrevToucher]) this._hostMatchStats[this._hostPrevToucher] = { goals: 0, assists: 0, saves: 0, name: assisterName, team: scoringTeam };
             this._hostMatchStats[this._hostPrevToucher].assists++;
         }
@@ -1388,6 +1407,10 @@ class GokBallApp {
     }
 
     _handleGameState(state) {
+        // Clear interpolation buffer on state transitions to prevent stale data
+        if (this._serverGameState !== state.state) {
+            this._snapshotBuffer.clear();
+        }
         this._serverGameState = state.state;
 
         // Set goal pause flag

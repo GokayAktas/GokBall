@@ -282,7 +282,9 @@ io.on('connection', (socket) => {
         socket.to(room.id).emit('goalScored', { 
             team: data.team, 
             scoreRed: data.scoreRed, 
-            scoreBlue: data.scoreBlue 
+            scoreBlue: data.scoreBlue,
+            scorer: data.scorer || '',
+            assister: data.assister || ''
         });
     });
 

@@ -102,14 +102,25 @@ export class SnapshotBuffer {
 
         const discsA = stateA.physics.discs;
         const discsB = stateB.physics.discs;
-        
-        // Match discs by index (same index = same entity: ball, posts, players)
+
+        // Build a lookup of previous discs by ID for player discs
+        const prevById = {};
+        for (const d of discsA) {
+            if (d.isPlayer && d.id) prevById[d.id] = d;
+        }
+
+        // Match discs: player discs by ID, others (ball, posts) by index
         for (let i = 0; i < discsB.length; i++) {
             const dB = discsB[i];
-            const dA = discsA[i];
-            
+            let dA = null;
+
+            if (dB.isPlayer && dB.id && prevById[dB.id]) {
+                dA = prevById[dB.id];
+            } else if (!dB.isPlayer) {
+                dA = discsA[i]; // Ball & static discs: match by index (stable)
+            }
+
             if (dA) {
-                // Interpolate position
                 result.physics.discs.push({
                     ...dB,
                     x: dA.x + (dB.x - dA.x) * t,
@@ -118,11 +129,10 @@ export class SnapshotBuffer {
                     sy: dA.sy + (dB.sy - dA.sy) * t,
                 });
             } else {
-                // New disc (no previous snapshot), use position as-is
                 result.physics.discs.push({ ...dB });
             }
         }
-        
+
         return result;
     }
 
