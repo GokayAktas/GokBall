@@ -243,6 +243,7 @@ class GokBallApp {
 
         this.gameRunning = true;
         this.currentRoomData = roomData;
+        this._firstStateReceived = false; // Wait for initial server state before client prediction
 
         // Load stadium
         const stadiumData = this.stadiumData || roomData?.stadium;
@@ -317,7 +318,11 @@ class GokBallApp {
         this.lastPhysTime = now;
         this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
 
+        // Cap accumulator to max 3 steps to prevent freeze on tab refocus
         const stepSize = 1000 / 60;
+        const maxAccum = stepSize * 3;
+        if (this.accumulator > maxAccum) this.accumulator = maxAccum;
+
         while (this.accumulator >= stepSize) {                // --- HOST MODE: Full authority game loop ---
             if (this._isHost() && this._isHostAuthority) {
 
@@ -444,6 +449,11 @@ class GokBallApp {
 
             } else {
                 // --- CLIENT MODE: Local prediction + remote interpolation ---
+                // Wait for first server state before running client prediction
+                if (!this._firstStateReceived) {
+                    this.accumulator -= stepSize;
+                    continue;
+                }
                 if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
                     const myId = this.network.socket?.id;
                     const myDisc = this.physics.discs.find(d => d.id === myId);
@@ -473,16 +483,20 @@ class GokBallApp {
                                 const dx = sd.x - localDisc.pos.x;
                                 const dy = sd.y - localDisc.pos.y;
                                 const distSq = dx * dx + dy * dy;
-                                if (distSq > 100 * 100) {
-                                    // Large desync: snap to server position
+                                if (distSq > 200 * 200) {
+                                    // Extreme desync (e.g. tab was hidden): snap to server
                                     localDisc.pos.x = sd.x;
                                     localDisc.pos.y = sd.y;
                                     localDisc.speed.x = sd.sx;
                                     localDisc.speed.y = sd.sy;
-                                } else if (distSq > 4 * 4) {
-                                    // Small drift: gently correct
-                                    localDisc.pos.x += dx * 0.15;
-                                    localDisc.pos.y += dy * 0.15;
+                                } else if (distSq > 30 * 30) {
+                                    // Medium desync: moderate correction
+                                    localDisc.pos.x += dx * 0.3;
+                                    localDisc.pos.y += dy * 0.3;
+                                } else if (distSq > 2 * 2) {
+                                    // Small drift: gentle correction
+                                    localDisc.pos.x += dx * 0.1;
+                                    localDisc.pos.y += dy * 0.1;
                                 }
                             } else if (!sd.isPlayer) {
                                 // Ball & non-player discs: interpolate from snapshot
@@ -1417,6 +1431,9 @@ class GokBallApp {
     }
 
     _handleGameState(state) {
+        // Mark first state received for client prediction guard
+        if (!this._firstStateReceived) this._firstStateReceived = true;
+
         // Clear interpolation buffer on state transitions to prevent stale data
         if (this._serverGameState !== state.state) {
             this._snapshotBuffer.clear();
