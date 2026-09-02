@@ -180,6 +180,7 @@ export class NetworkManager {
         this._inputSeqNum = (this._inputSeqNum || 0) + 1;
         // Send with sequence number for reconciliation
         this.socket.emit('input', { ...input, _seq: this._inputSeqNum });
+        return this._inputSeqNum;
     }
 
     getInputSeqNum() {

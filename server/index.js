@@ -273,7 +273,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         // Only accept from the host
         if (socket.id !== room.hostId) return;
-        // Broadcast to everyone EXCEPT the host
+        // Broadcast to everyone EXCEPT the host (includes lastProcessedSeq)
         socket.to(room.id).emit('gameState', state);
     });
 
