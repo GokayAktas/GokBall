@@ -185,11 +185,10 @@ class GokBallApp {
                 const combinedPing = data.ping + (this.network.hostPing || 0);
                 pingEl.textContent = combinedPing;
             }
-            const jitterEl = document.getElementById('jitterValue');
-            if (jitterEl) jitterEl.textContent = data.jitter || 0;
-            // Adjust interpolation delay based on jitter
+            // Dynamic interpolation delay: estimatedLatency + 20ms buffer, clamped 30-50ms
             if (this._snapshotBuffer) {
-                this._snapshotBuffer.adjustDelay(data.jitter || 0);
+                const estimatedLatency = (data.ping + (this.network.hostPing || 0)) / 2;
+                this._snapshotBuffer.interpolationDelay = Math.max(30, Math.min(50, estimatedLatency + 20));
             }
         });
 
@@ -243,12 +242,14 @@ class GokBallApp {
         this.gameRunning = true;
         this.currentRoomData = roomData;
         this._firstStateReceived = false; // Wait for initial server state before client prediction
+        this._stadiumReady = false; // Guard against gameState arriving before stadium loads
 
         // Load stadium immediately so render loop can draw the field
         const stadiumData = this.stadiumData || roomData?.stadium;
         if (stadiumData) {
             this.physics.loadStadium(stadiumData);
             this._currentStadium = stadiumData;
+            this._stadiumReady = true;
         }
 
         // Hide UI, show game
@@ -492,13 +493,17 @@ class GokBallApp {
                                 const dx = sd.x - localDisc.pos.x;
                                 const dy = sd.y - localDisc.pos.y;
                                 const distSq = dx * dx + dy * dy;
-                                if (distSq > 200 * 200) {
-                                    // Extreme desync (e.g. tab was hidden): snap to server
+                                // Dynamic thresholds based on ping
+                                const ping = this.network.ping || 0;
+                                const snapThreshold = Math.max(100, Math.min(200, ping + 50));
+                                const driftThreshold = Math.max(20, Math.min(50, ping / 2 + 15));
+                                if (distSq > snapThreshold * snapThreshold) {
+                                    // Large desync: snap to server
                                     localDisc.pos.x = sd.x;
                                     localDisc.pos.y = sd.y;
                                     localDisc.speed.x = sd.sx;
                                     localDisc.speed.y = sd.sy;
-                                } else if (distSq > 30 * 30) {
+                                } else if (distSq > driftThreshold * driftThreshold) {
                                     // Medium desync: moderate correction
                                     localDisc.pos.x += dx * 0.3;
                                     localDisc.pos.y += dy * 0.3;
@@ -1471,6 +1476,9 @@ class GokBallApp {
     }
 
     _handleGameState(state) {
+        // Skip if stadium hasn't loaded yet (race condition guard)
+        if (this.gameRunning && !this._stadiumReady) return;
+
         // Mark first state received for client prediction guard
         if (!this._firstStateReceived) this._firstStateReceived = true;
 
@@ -1585,9 +1593,15 @@ class GokBallApp {
             } else if (sd.color !== undefined) {
                 disc.color = sd.color;
             }
+            // Sync collision params for ALL discs (ball, posts, etc.)
+            if (sd.cMask !== undefined) disc.cMask = sd.cMask;
+            if (sd.cGroup !== undefined) disc.cGroup = sd.cGroup;
+            if (sd.bCoef !== undefined) disc.bCoef = sd.bCoef;
+            if (sd.invMass !== undefined) disc.invMass = sd.invMass;
+            if (sd.damping !== undefined) disc.damping = sd.damping;
+            if (sd.radius !== undefined) disc.radius = sd.radius;
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
-            if (sd.radius !== undefined && !sd.isPlayer) disc.radius = sd.radius;
         }
     }
 }
