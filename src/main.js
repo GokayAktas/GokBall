@@ -376,6 +376,16 @@ class GokBallApp {
                         }
                     }
 
+                    // Track saves (kick near own goal line)
+                    if (result.saveDetected) {
+                        const savePlayer = this.currentRoomData?.players?.find(p => p.id === result.saveDetected);
+                        const saveName = savePlayer?.name || '';
+                        if (!this._hostMatchStats[result.saveDetected]) {
+                            this._hostMatchStats[result.saveDetected] = { goals: 0, assists: 0, saves: 0, name: saveName, team: savePlayer?.team };
+                        }
+                        this._hostMatchStats[result.saveDetected].saves++;
+                    }
+
                     // Check for goals
                     if (result.goalTeam && this._hostGameState === 'playing') {
                         this._hostHandleGoal(result.goalTeam);
@@ -800,20 +810,18 @@ class GokBallApp {
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
         const winColor = winner === 'red' ? '#c70000' : '#00008c';
 
-        // Build match stats for chat
-        let statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
-        const statsEntries = Object.entries(this._hostMatchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
-        if (statsEntries.length > 0) {
-            for (const [_, s] of statsEntries) {
-                const parts = [];
-                if (s.goals > 0) parts.push(`⚽${s.goals} Gol`);
-                if (s.assists > 0) parts.push(`👟${s.assists} Asist`);
-                if (s.saves > 0) parts.push(`🧤${s.saves} Kurtarış`);
-                statsMsg += `${s.name}: ${parts.join(' | ')}\n`;
-            }
-        } else {
-            statsMsg += 'İstatistik bulunamadı.';
-        }
+        // Calculate points: goals=3, assists=1, saves=0.25
+        const ranked = Object.entries(this._hostMatchStats)
+            .filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0)
+            .map(([id, s]) => ({
+                id, name: s.name, team: s.team,
+                goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0,
+                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+            }))
+            .sort((a, b) => b.points - a.points);
+
+        const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32']; // gold, silver, bronze
+        const medalEmojis = ['🥇', '🥈', '🥉'];
 
         // Send game over to server for relay to other players
         this.network.socket?.emit('hostGameOverEvent', {
@@ -835,22 +843,39 @@ class GokBallApp {
                     <span class="game-over-score game-over-score-blue">${this._hostScoreBlue}</span>
                 </div>
                 <div class="game-over-label">MAÇ SKORU</div>
-                ${statsMsg && statsEntries.length > 0 ? `<div class="game-over-stats">
-                    <div class="game-over-stats-title">📊 İstatistikler</div>
-                    ${statsEntries.map(([_, s]) => {
-                        const parts = [];
-                        if (s.goals > 0) parts.push(`⚽ ${s.goals} Gol`);
-                        if (s.assists > 0) parts.push(`👟 ${s.assists} Asist`);
-                        if (s.saves > 0) parts.push(`🧤 ${s.saves} Kurtarış`);
-                        return `<div class="game-over-stat-row"><span class="game-over-stat-name">${s.name}</span><span class="game-over-stat-values">${parts.join(' &middot; ')}</span></div>`;
+                ${ranked.length > 0 ? `<div class="game-over-rankings">
+                    ${ranked.map((p, i) => {
+                        const color = medalColors[i] || 'rgba(255,255,255,0.7)';
+                        const medal = medalEmojis[i] || '';
+                        const mvp = i === 0 ? '<span class="mvp-badge">⭐ MVP</span>' : '';
+                        const stats = [];
+                        if (p.goals > 0) stats.push(`⚽${p.goals}`);
+                        if (p.assists > 0) stats.push(`👟${p.assists}`);
+                        if (p.saves > 0) stats.push(`🧤${p.saves}`);
+                        return `<div class="ranking-row" style="color:${color}">
+                            <span class="ranking-medal">${medal}</span>
+                            <span class="ranking-name">${p.name}</span>
+                            ${mvp}
+                            <span class="ranking-stats">${stats.join(' ')}</span>
+                            <span class="ranking-points">${p.points} puan</span>
+                        </div>`;
                     }).join('')}
-                </div>` : ''}
+                </div>` : '<div class="game-over-no-stats">İstatistik bulunamadı.</div>'}
             </div>
         `;
         document.body.appendChild(overlay);
 
-        // Show stats in chat
-        this.chat.addMessage({ message: statsMsg, system: true });
+        // Show simplified stats in chat (no saves in chat)
+        if (ranked.length > 0) {
+            let statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
+            for (const p of ranked) {
+                const parts = [];
+                if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
+                if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
+                statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
+            }
+            this.chat.addMessage({ message: statsMsg, system: true });
+        }
 
         setTimeout(() => {
             if (document.body.contains(overlay)) document.body.removeChild(overlay);
@@ -1198,24 +1223,23 @@ class GokBallApp {
             const winnerStr = data.winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
             const winnerColor = data.winner === 'red' ? '#c70000' : '#00008c';
 
-            // Build match stats for chat
-            let statsMsg = '';
-            let entries = [];
+            // Calculate points: goals=3, assists=1, saves=0.25
+            const ranked = [];
             if (data.matchStats && Object.keys(data.matchStats).length > 0) {
-                statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
-                entries = Object.entries(data.matchStats).filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0);
-                if (entries.length > 0) {
-                    for (const [_, s] of entries) {
-                        const parts = [];
-                        if (s.goals > 0) parts.push(`⚽${s.goals} Gol`);
-                        if (s.assists > 0) parts.push(`👟${s.assists} Asist`);
-                        if (s.saves > 0) parts.push(`🧤${s.saves} Kurtarış`);
-                        statsMsg += `${s.name}: ${parts.join(' | ')}\n`;
+                for (const [id, s] of Object.entries(data.matchStats)) {
+                    if (s.goals > 0 || s.assists > 0 || s.saves > 0) {
+                        ranked.push({
+                            id, name: s.name, team: s.team,
+                            goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0,
+                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+                        });
                     }
-                } else {
-                    statsMsg = '';
                 }
+                ranked.sort((a, b) => b.points - a.points);
             }
+
+            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+            const medalEmojis = ['🥇', '🥈', '🥉'];
 
             const overlay = document.createElement('div');
             overlay.className = 'game-over-overlay';
@@ -1229,22 +1253,39 @@ class GokBallApp {
                         <span class="game-over-score game-over-score-blue">${data.scoreBlue}</span>
                     </div>
                     <div class="game-over-label">MAÇ SKORU</div>
-                    ${entries && entries.length > 0 ? `<div class="game-over-stats">
-                        <div class="game-over-stats-title">📊 İstatistikler</div>
-                        ${entries.map(([_, s]) => {
-                            const parts = [];
-                            if (s.goals > 0) parts.push(`⚽ ${s.goals} Gol`);
-                            if (s.assists > 0) parts.push(`👟 ${s.assists} Asist`);
-                            if (s.saves > 0) parts.push(`🧤 ${s.saves} Kurtarış`);
-                            return `<div class="game-over-stat-row"><span class="game-over-stat-name">${s.name}</span><span class="game-over-stat-values">${parts.join(' &middot; ')}</span></div>`;
+                    ${ranked.length > 0 ? `<div class="game-over-rankings">
+                        ${ranked.map((p, i) => {
+                            const color = medalColors[i] || 'rgba(255,255,255,0.7)';
+                            const medal = medalEmojis[i] || '';
+                            const mvp = i === 0 ? '<span class="mvp-badge">⭐ MVP</span>' : '';
+                            const stats = [];
+                            if (p.goals > 0) stats.push(`⚽${p.goals}`);
+                            if (p.assists > 0) stats.push(`👟${p.assists}`);
+                            if (p.saves > 0) stats.push(`🧤${p.saves}`);
+                            return `<div class="ranking-row" style="color:${color}">
+                                <span class="ranking-medal">${medal}</span>
+                                <span class="ranking-name">${p.name}</span>
+                                ${mvp}
+                                <span class="ranking-stats">${stats.join(' ')}</span>
+                                <span class="ranking-points">${p.points} puan</span>
+                            </div>`;
                         }).join('')}
-                    </div>` : ''}
+                    </div>` : '<div class="game-over-no-stats">İstatistik bulunamadı.</div>'}
                 </div>
             `;
             document.body.appendChild(overlay);
 
-            // Show stats in chat
-            if (statsMsg) this.chat.addMessage({ message: statsMsg, system: true });
+            // Show simplified stats in chat (no saves)
+            if (ranked.length > 0) {
+                let statsMsg = '📊 MAÇ İSTATİSTİKLERİ:\n';
+                for (const p of ranked) {
+                    const parts = [];
+                    if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
+                    if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
+                    statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
+                }
+                this.chat.addMessage({ message: statsMsg, system: true });
+            }
 
             setTimeout(() => {
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);

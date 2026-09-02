@@ -304,7 +304,31 @@ export class Physics {
 
         // Check goals
         const goalTeam = this._checkGoals();
-        return { goalTeam, kickHappened };
+
+        // Detect saves: kick near own goal line while ball heading toward goal
+        let saveDetected = null;
+        if (kickHappened && this.ballDisc && this.ballDisc.lastTouchedBy && this.goals.length > 0) {
+            const ball = this.ballDisc;
+            const saverId = ball.lastTouchedBy;
+            const saverDisc = this.discs.find(d => (d.ownerId === saverId || d.id === saverId) && d.isPlayer);
+            if (saverDisc) {
+                const isRed = saverDisc.team === 'red';
+                const goalX = isRed ? -1 : 1; // Own goal direction
+                const goal = this.goals.find(g => {
+                    const gx = (g.p0.x + g.p1.x) / 2;
+                    return (goalX < 0 && gx < 0) || (goalX > 0 && gx > 0);
+                });
+                if (goal) {
+                    const gx = (goal.p0.x + goal.p1.x) / 2;
+                    const distToLine = Math.abs(ball.pos.x - gx);
+                    if (distToLine < 40) {
+                        saveDetected = saverId;
+                    }
+                }
+            }
+        }
+
+        return { goalTeam, kickHappened, saveDetected };
     }
 
     // Removed stepLocalOnly as we will now use full prediction via step()
