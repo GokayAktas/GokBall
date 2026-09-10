@@ -49,21 +49,21 @@ export class UIManager {
         overlay.id = 'customConfirmModal';
         overlay.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.6); z-index: 10000;
+            background: rgba(8,9,12,0.78); z-index: 10000;
             display: flex; justify-content: center; align-items: center;
         `;
 
         const box = document.createElement('div');
         box.style.cssText = `
-            background: var(--bg-card); padding: 25px 35px; border-radius: 12px;
-            box-shadow: var(--shadow-lg); border: 1px solid var(--border-color);
+            background: var(--panel); padding: 25px 35px; border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-lg); border: 2px solid var(--stroke);
             display: flex; flex-direction: column; align-items: center;
-            font-family: 'Inter', sans-serif; min-width: 350px; color: var(--text-primary);
+            font-family: var(--font-family); min-width: 350px; color: var(--text-primary);
         `;
 
         const title = document.createElement('div');
         title.innerHTML = '⚠️ Eylem Onayı';
-        title.style.cssText = `font-weight: 800; font-size: 20px; margin-bottom: 20px; color: var(--accent-purple); text-transform: uppercase;`;
+        title.style.cssText = `font-weight: 700; font-size: 20px; margin-bottom: 20px; color: var(--text-primary); text-transform: uppercase; letter-spacing: 1px;`;
 
         const text = document.createElement('div');
         text.innerHTML = message;
@@ -109,21 +109,21 @@ export class UIManager {
         overlay.id = 'customConfirmModal';
         overlay.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.6); z-index: 10000;
+            background: rgba(8,9,12,0.78); z-index: 10000;
             display: flex; justify-content: center; align-items: center;
         `;
 
         const box = document.createElement('div');
         box.style.cssText = `
-            background: var(--bg-card); padding: 20px 28px; border-radius: 12px;
-            box-shadow: var(--shadow-lg); border: 1px solid var(--border-color);
+            background: var(--panel); padding: 20px 28px; border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-lg); border: 2px solid var(--stroke);
             display: flex; flex-direction: column; align-items: stretch;
-            font-family: 'Inter', sans-serif; min-width: 380px; color: var(--text-primary);
+            font-family: var(--font-family); min-width: 380px; color: var(--text-primary);
         `;
 
         const title = document.createElement('div');
         title.innerHTML = danger ? '⚠️ Onay Gerekiyor' : 'Bilgi';
-        title.style.cssText = `font-weight: 800; font-size: 18px; margin-bottom: 10px; color: var(--accent-purple);`;
+        title.style.cssText = `font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--text-primary); text-transform: uppercase; letter-spacing: 1px;`;
 
         const text = document.createElement('div');
         text.innerHTML = message;
@@ -133,7 +133,7 @@ export class UIManager {
         input.type = 'text';
         input.placeholder = placeholder;
         input.className = 'input';
-        input.style.cssText = `margin-bottom:14px; padding:10px; border-radius:8px; border:1px solid var(--border-color);`;
+        input.style.cssText = `margin-bottom:14px; padding:10px; border-radius:var(--radius-sm); border:2px solid var(--stroke);`;
 
         const btnRow = document.createElement('div');
         btnRow.style.cssText = `display: flex; gap: 12px; justify-content: flex-end;`;

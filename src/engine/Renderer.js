@@ -318,7 +318,7 @@ export class Renderer {
             const avatarChar = disc.avatar || disc._avatar || (disc.isPlayer ? '?' : '');
             if (avatarChar) {
                 ctx.fillStyle = disc.avatarColor ? '#' + disc.avatarColor : '#FFFFFF';
-                ctx.font = `900 ${disc.radius * 1.1}px Inter, "Segoe UI", Tahoma, sans-serif`;
+                ctx.font = `700 ${disc.radius * 1.1}px "Space Grotesk", Inter, "Segoe UI", Tahoma, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(avatarChar, disc.pos.x, disc.pos.y + (disc.radius * 0.05));
@@ -327,7 +327,7 @@ export class Renderer {
             // Name label BELOW other players (NOT self)
             if (disc.isPlayer && !isSelf && (disc._playerName || disc.name)) {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.font = 'bold 11px "Space Grotesk", Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText(disc._playerName || disc.name || "", disc.pos.x, disc.pos.y + disc.radius + 5);

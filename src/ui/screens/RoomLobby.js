@@ -21,99 +21,128 @@ export class RoomLobby {
     div.style.padding = '20px';
 
     div.innerHTML = `
-      <div style="display: flex; gap: 20px; width: 100%; max-width: 1350px; margin: 0 auto; min-height: 600px;">
-        <div class="lobby-new-layout" style="flex: 1;">
-          <div class="lobby-new-header">
-            <div class="header-titles">
-              <h2 id="roomTitle">${this._esc(data?.roomName || 'Oda')}</h2>
-              <div class="header-sub">${this._esc(data?.stadium?.name || 'Klasik')} • <span id="playerCount">${data?.players?.length || 0}</span> Oyuncu</div>
-            </div>
-            <button class="btn btn-danger btn-sm" id="btnLeave" style="font-weight: 700; display:flex; gap:6px; align-items:center; border-radius: 20px; padding: 6px 16px;">
-               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                  <polyline points="16 17 21 12 16 7"></polyline>
-                  <line x1="21" y1="12" x2="9" y2="12"></line>
-               </svg>
-               AYRIL
-            </button>
-          </div>
-          
-          <div class="lobby-divider"></div>
+      <div class="lobby-shell" style="min-height: 600px;">
+        <div class="lobby-main-col">
 
-          <div class="lobby-teams-grid">
+          <!-- ============ ROOM HUD HEADER ============ -->
+          <div class="room-hud">
+            <div class="room-hud-titles">
+              <div class="room-hud-title" id="roomTitle">${this._esc(data?.roomName || 'Oda')}</div>
+              <div class="room-hud-sub">
+                <span>${this._esc(data?.stadium?.name || 'Klasik')}</span>
+                <span class="room-hud-sep">•</span>
+                <span><span id="playerCount">${data?.players?.length || 0}</span> Oyuncu</span>
+              </div>
+            </div>
+            <div class="room-hud-actions">
+              <button class="btn btn-danger btn-sm btn-leave" id="btnLeave" title="Odadan Ayrıl">
+                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                 </svg>
+                 AYRIL
+              </button>
+            </div>
+          </div>
+
+          <!-- ============ TEAM LOBBY ============ -->
+          <div class="lobby-teams">
             <!-- Red Team -->
-            <div class="team-card team-column red" id="teamRed">
-              <div class="team-header red" style="display:flex; justify-content:space-between; align-items:center;">
-                 <div style="display:flex; align-items:center; gap:10px;">
-                    <div class="team-title"><span class="team-dot red"></span> Kırmızı</div>
-                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinRed" style="padding: 2px 8px;">Katıl</button>
+            <div class="team-card red team-column" id="teamRed">
+              <div class="team-header">
+                 <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
+                 <div class="team-header-actions">
+                    <button class="team-join-btn" id="btnJoinRed">Katıl</button>
                     <div style="position:relative;" id="jerseyRedWrapper">
-                      <button class="btn btn-xs" id="btnJerseyRed" style="padding:2px 8px; background:rgba(231,76,60,0.15); border:1px solid rgba(231,76,60,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;" title="Kırmızı Forma Seç">
-                        <img src="/assets/red_shirt.png" style="width:16px; height:16px;" />
-                        <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
+                      <button class="team-kit-btn" id="btnJerseyRed" title="Kırmızı Forma Seç">
+                        <img src="/assets/red_shirt.png" style="width:15px; height:15px;" />
+                        <span>Forma Seç</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                       </button>
-                      <div id="jerseyDropdownRed" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0; background: rgba(10,20,40,0.95); backdrop-filter:blur(16px); border:1px solid var(--border-color); border-radius:12px; padding:8px; max-height:400px; overflow-y:auto; min-width:240px; z-index:100; box-shadow:var(--shadow-lg);"></div>
+                      <div id="jerseyDropdownRed" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0;"></div>
                     </div>
                  </div>
-                 <button class="btn btn-xs team-clear-btn" id="btnClearRed" style="display:none; background:var(--bg-glass); color:var(--text-primary); border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Kırmızı Takımı Boşalt">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                 <button class="team-clear-btn" id="btnClearRed" style="display:none;" title="Kırmızı Takımı Boşalt">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                  </button>
               </div>
               <div class="player-list" id="redPlayers"></div>
             </div>
 
             <!-- Spectators -->
-            <div class="team-card team-column spectator" id="teamSpectator">
-              <div class="team-header spectator">
-                 <div class="team-title"><span class="team-icon">👁️</span> İzleyiciler</div>
-                 <div style="display:flex; gap: 5px;">
-                   <button class="btn btn-xs" id="btnJoinAuto" style="display:none; background: linear-gradient(135deg, var(--accent-purple), var(--accent-royal)); color:var(--text-primary); border:none; padding:4px 8px; border-radius:6px; font-size:16px; cursor:pointer; box-shadow: var(--shadow-sm);" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
-                   <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinSpectator">İzle</button>
+            <div class="team-card spectator team-column" id="teamSpectator">
+              <div class="team-header">
+                 <div class="team-title"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> İzleyiciler</div>
+                 <div class="team-header-actions">
+                   <button class="team-dice-btn" id="btnJoinAuto" style="display:none;" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
+                   <button class="team-join-btn team-join-btn-accent" id="btnJoinSpectator">
+                     <img src="/assets/video_camera.png" alt="" />
+                     İzle
+                   </button>
                  </div>
               </div>
               <div class="player-list" id="spectatorPlayers"></div>
             </div>
 
             <!-- Blue Team -->
-            <div class="team-card team-column blue" id="teamBlue">
-              <div class="team-header blue" style="display:flex; justify-content:space-between; align-items:center; flex-direction:row-reverse;">
-                 <div style="display:flex; align-items:center; gap:10px; flex-direction:row-reverse;">
-                    <div class="team-title" style="flex-direction:row-reverse"><span class="team-dot blue"></span> Mavi</div>
-                    <button class="btn btn-secondary btn-xs team-join-btn" id="btnJoinBlue" style="padding: 2px 8px;">Katıl</button>
-                    <div style="position:relative;" id="jerseyBlueWrapper">
-                      <button class="btn btn-xs" id="btnJerseyBlue" style="padding:2px 8px; background:rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;" title="Mavi Forma Seç">
-                        <span style="font-size:11px; color:rgba(255,255,255,0.7);">Forma Seç</span>
-                        <img src="/assets/blue_shirt.png" style="width:16px; height:16px;" />
-                      </button>
-                      <div id="jerseyDropdownBlue" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background: rgba(10,20,40,0.95); backdrop-filter:blur(16px); border:1px solid var(--border-color); border-radius:12px; padding:8px; max-height:400px; overflow-y:auto; min-width:240px; z-index:100; box-shadow:var(--shadow-lg);"></div>
-                    </div>
-                 </div>
-                 <button class="btn btn-xs team-clear-btn" id="btnClearBlue" style="display:none; background:var(--bg-glass); color:var(--text-primary); border:none; padding:4px; border-radius:4px; cursor:pointer;" title="Mavi Takımı Boşalt">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <div class="team-card blue team-column" id="teamBlue">
+              <div class="team-header">
+                 <button class="team-clear-btn" id="btnClearBlue" style="display:none;" title="Mavi Takımı Boşalt">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                  </button>
+                 <div class="team-header-actions">
+                    <div style="position:relative;" id="jerseyBlueWrapper">
+                      <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        <img src="/assets/blue_shirt.png" style="width:15px; height:15px;" />
+                        <span>Forma Seç</span>
+                      </button>
+                      <div id="jerseyDropdownBlue" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); right:0;"></div>
+                    </div>
+                    <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
+                    <div class="team-title">MAVİ <span class="team-dot"></span></div>
+                 </div>
               </div>
               <div class="player-list" id="bluePlayers"></div>
             </div>
           </div>
 
-          <div class="lobby-info-row">
-            <div>Süre Limiti: <span id="timeLimitInfo">${data?.game?.timeLimit === 0 ? '∞' : Math.floor((data?.game?.timeLimit || 180) / 60)}</span> dk</div>
-            <div>Skor Limiti: <span id="scoreLimitInfo">${data?.game?.scoreLimit === 0 ? '∞' : (data?.game?.scoreLimit || 3)}</span></div>
-            <div>Oyuncu Hızı: <span id="speedInfo">x${(data?.playerSpeedMultiplier || 1.0).toFixed(2)}</span></div>
-            <div>Saha: <span id="stadiumName">${this._esc(data?.stadium?.name || 'Klasik')}</span></div>
+          <!-- ============ MATCH SETTINGS STRIP ============ -->
+          <div class="lobby-settings">
+            <div class="setting-inline">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Süre Limiti: <b id="timeLimitInfo">${data?.game?.timeLimit === 0 ? '∞' : Math.floor((data?.game?.timeLimit || 180) / 60)} dk</b></span>
+            </div>
+            <div class="setting-inline">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+              <span>Skor Limiti: <b id="scoreLimitInfo">${data?.game?.scoreLimit === 0 ? '∞' : (data?.game?.scoreLimit || 3)}</b></span>
+            </div>
+            <div class="setting-inline">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path></svg>
+              <span>Oyun Hızı: <b>X<span id="speedInfo">${(data?.playerSpeedMultiplier || 1.0).toFixed(2)}</span></b></span>
+            </div>
+            <div class="setting-inline">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              <span>Saha: <b><span id="stadiumName">${this._esc(data?.stadium?.name || 'Klasik')}</span></b></span>
+            </div>
           </div>
 
-          <div id="adminPanel" style="display:none; width: 100%; margin-top: 20px;">
-            <button class="btn btn-primary btn-block btn-lg" id="btnStartGame" style="font-weight: 800; font-size: 16px; letter-spacing: 1px; border-radius: 8px;">OYUNU BAŞLAT</button>
-            
+          <!-- ============ ADMIN / HOST CONTROLS ============ -->
+          <div id="adminPanel" class="admin-panel" style="display:none;">
+            <button class="btn btn-primary btn-block btn-start" id="btnStartGame">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 21 12 6 21 6 3"></polygon></svg>
+              OYUNU BAŞLAT
+            </button>
+
             <!-- Admin Tools -->
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; justify-content: center; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px;">
-              <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="display:flex; align-items:center; gap:6px; height:36px; border-radius: 10px;">
+            <div class="admin-tools">
+              <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="height:34px;">
                  <span id="lockIcon"></span> <span id="lockText">Takımları Kilitle</span>
               </button>
-              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SAHA</span>
-                 <select id="lobbyStadiumSelect" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 110px; border-radius: 10px; background-color: rgba(15,82,186,0.1);">
+              <div class="setting-field">
+                 <span class="setting-label">SAHA</span>
+                 <select id="lobbyStadiumSelect" class="input setting-select">
                    <option value="small">Küçük (1v1)</option>
                    <option value="futsal">Futsal (3v3)</option>
                    <option value="classic">Klasik (3v3)</option>
@@ -122,21 +151,21 @@ export class RoomLobby {
                    <option value="custom" disabled hidden>Özel Saha</option>
                  </select>
               </div>
-              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">GOL LİMİTİ</span>
-                 <select id="lobbyScoreLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(231,76,60,0.1);">
+              <div class="setting-field">
+                 <span class="setting-label">GOL LİMİTİ</span>
+                 <select id="lobbyScoreLimit" class="input setting-select">
                    <option value="1">1 Gol</option><option value="3">3 Gol</option><option value="5">5 Gol</option><option value="10">10 Gol</option><option value="0">Sınırsız</option>
                  </select>
               </div>
-              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">SÜRE</span>
-                 <select id="lobbyTimeLimit" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 100px; border-radius: 10px; background-color: rgba(46,204,113,0.1);">
+              <div class="setting-field">
+                 <span class="setting-label">SÜRE</span>
+                 <select id="lobbyTimeLimit" class="input setting-select">
                    <option value="60">1 Dakika</option><option value="180">3 Dakika</option><option value="300">5 Dakika</option><option value="600">10 Dakika</option><option value="0">Sınırsız</option>
                  </select>
               </div>
-              <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">HIZ</span>
-                 <select id="lobbySpeedMultiplier" class="input" style="padding: 6px 32px 6px 10px; font-size: 12px; height: 34px; min-width: 90px; border-radius: 10px; background-color: rgba(241,196,15,0.1);">
+              <div class="setting-field">
+                 <span class="setting-label">HIZ</span>
+                 <select id="lobbySpeedMultiplier" class="input setting-select">
                    <option value="0.50">x0.50</option>
                    <option value="0.75">x0.75</option>
                    <option value="1.00">x1.00</option>
@@ -146,10 +175,10 @@ export class RoomLobby {
                    <option value="2.00">x2.00</option>
                  </select>
               </div>
-              <button class="btn btn-sm" id="btnToggleOvertime" style="display:flex; align-items:center; gap:6px; height:36px; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.3); color: #ffd54f; border-radius: 10px;">
+              <button class="btn btn-overtime on" id="btnToggleOvertime" style="height:38px;">
                 ⏱ <span id="overtimeText">Uzatma Var</span>
               </button>
-              <label class="btn btn-secondary btn-sm" style="cursor:pointer; padding: 4px 8px; height:36px; border-radius: 10px;">
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer; height:38px;">
                 📁 Saha Yükle
                 <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
               </label>
@@ -157,15 +186,21 @@ export class RoomLobby {
           </div>
         </div>
 
-        <div class="lobby-chat-sidebar" style="width: 350px; display: flex; flex-direction: column; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-md); padding: 20px;">
-          <h3 style="margin-top:0; margin-bottom:15px; font-size: 18px; color: var(--text-primary);">💬 Sohbet</h3>
-          <div id="lobbyChatMessages" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 5px; margin-bottom: 15px; font-size: 13px;"></div>
-          <div style="display:flex; gap: 8px;">
-            <input type="text" id="lobbyChatInput" class="input" placeholder="Mesaj..." style="flex:1; padding: 10px; border-radius: 8px; font-size: 13px; background: var(--bg-input);" autocomplete="off" />
-            <button class="btn btn-primary" id="btnSendChat" style="padding: 0; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
+        <!-- ============ CHAT SIDEBAR ============ -->
+        <div class="lobby-chat">
+          <div class="lobby-chat-header">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            Sohbet
+          </div>
+          <div class="lobby-chat-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            Komutlar: /komut
+          </div>
+          <div class="lobby-chat-messages" id="lobbyChatMessages"></div>
+          <div class="lobby-chat-inputrow">
+            <input type="text" id="lobbyChatInput" class="input" placeholder="Mesaj yaz..." autocomplete="off" />
+            <button class="btn btn-send-chat" id="btnSendChat" title="Gönder">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 20V4l19 8L3 20zm2-3l11.85-5L5 7v3.5l6 1.5-6 1.5V17z"/></svg>
             </button>
           </div>
         </div>
@@ -470,7 +505,7 @@ export class RoomLobby {
         const sel = document.getElementById('lobbySpeedMultiplier');
         if (sel) sel.value = parseFloat(data.playerSpeedMultiplier).toFixed(2);
         const info = document.getElementById('speedInfo');
-        if (info) info.textContent = 'x' + parseFloat(data.playerSpeedMultiplier).toFixed(2);
+        if (info) info.textContent = parseFloat(data.playerSpeedMultiplier).toFixed(2);
       }
       if (data.players) {
         this._updatePlayers(data.players);
@@ -497,8 +532,7 @@ export class RoomLobby {
     const btnClearBlue = document.getElementById('btnClearBlue');
     if (btnClearBlue) btnClearBlue.style.display = isAdmin ? '' : 'none';
 
-    // Join buttons - always show, but disable when locked or game running
-    const isGameRunning = data.game && (data.game.state === 'playing' || data.game.state === 'countdown' || data.game.state === 'goal');
+    // Room status chip removed from HUD (kept clean like reference design)
     const canClick = isAdmin || (!data.teamsLocked && !isGameRunning);
     const btnJoinRed = document.getElementById('btnJoinRed');
     if (btnJoinRed) {
@@ -556,13 +590,9 @@ export class RoomLobby {
       if (this.teamsLocked) {
         lockBtn.classList.remove('btn-secondary');
         lockBtn.classList.add('btn-danger');
-        lockBtn.style.background = '#e74c3c';
-        lockBtn.style.boxShadow = '0 0 15px rgba(231, 76, 60, 0.4)';
       } else {
         lockBtn.classList.add('btn-secondary');
         lockBtn.classList.remove('btn-danger');
-        lockBtn.style.background = '';
-        lockBtn.style.boxShadow = '';
       }
     }
 
@@ -578,36 +608,45 @@ export class RoomLobby {
     const myId = this.app.network.playerId;
     const isAdmin = players.find(p => p.id === myId)?.isAdmin;
 
-    const renderPlayerList = (list, teamColorVar) => list.map(p => {
-      const isSelf = p.id === myId;
-      // Priority: Team Color > Self Highlight (sapphire) > Spec/Empty
-      const avatarBg = p.team === 'red' ? 'var(--red-team)' : (p.team === 'blue' ? 'var(--blue-team)' : (p.team === 'spectator' ? 'var(--text-muted)' : (isSelf ? 'var(--sapphire)' : 'var(--bg-glass)')));
-      const nameColor = p.team === 'spectator' ? 'var(--text-muted)' : (isSelf ? 'var(--ice-blue)' : 'white');
+    const renderPlayerList = (list, emptyText, emptyKind) => {
+      if (list.length === 0) {
+        const emptyIcon = emptyKind === 'camera'
+          ? `<img src="/assets/video_camera.png" alt="" />`
+          : `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
+        return `<div class="player-empty">
+          ${emptyIcon}
+          <span>${emptyText}</span>
+        </div>`;
+      }
+      return list.map(p => {
+        const isSelf = p.id === myId;
+        const avatarBg = p.team === 'red' ? 'var(--red)' : (p.team === 'blue' ? 'var(--blue)' : 'var(--surface-3)');
 
-      return `
+        return `
         <div class="team-player ${isAdmin ? 'admin-draggable' : ''} ${isSelf ? 'is-self' : ''}" data-player-id="${p.id}" draggable="${isAdmin ? 'true' : 'false'}">
-          <div class="team-player-avatar" style="background:${avatarBg}; color: white; border: ${isSelf ? '2px solid white' : 'none'};">
+          <div class="team-player-avatar" style="background:${avatarBg}; color:#0A0A0F; border:2px solid var(--stroke);${isSelf ? ' outline:2px solid var(--white); outline-offset:-1px;' : ''}">
             ${p.avatar || p.name.charAt(0).toUpperCase()}
           </div>
-          <span class="team-player-name" style="${isSelf ? 'font-weight:bold;' : ''} color:${nameColor};">${this._esc(p.name)} ${isSelf ? '(Ben)' : ''}</span>
-          ${p.isAdmin ? '<span class="team-player-admin">👑</span>' : ''}
+          <span class="team-player-name" style="${isSelf ? 'font-weight:700;' : ''} color:${p.team === 'spectator' ? 'var(--text-2)' : 'var(--white)'};">${this._esc(p.name)}${isSelf ? ' <span style="color:var(--text-muted);">(Ben)</span>' : ''}</span>
+          ${p.isAdmin ? '<span class="team-player-admin" title="Admin">👑</span>' : ''}
           ${isAdmin && !p.isAdmin ? `
-            <div style="margin-left:auto; display:flex; gap:4px;">
-              <button class="btn-icon btn-kick" data-kick-id="${p.id}" title="Oyuncuyu odadan at" style="padding:2px 4px; font-size:12px;">🦵</button>
-              <button class="btn-icon btn-ban" data-ban-id="${p.id}" title="Oyuncuyu banla" style="padding:2px 4px; font-size:10px;">✕</button>
+            <div style="display:flex; gap:4px;">
+              <button class="btn-icon btn-kick" data-kick-id="${p.id}" title="Oyuncuyu odadan at" style="padding:2px 6px; font-size:12px;">🦵</button>
+              <button class="btn-icon btn-ban" data-ban-id="${p.id}" title="Oyuncuyu banla" style="padding:2px 6px; font-size:10px;">✕</button>
             </div>
           ` : ''}
         </div>
       `;
-    }).join('');
+      }).join('');
+    };
 
     const redEl = document.getElementById('redPlayers');
     const blueEl = document.getElementById('bluePlayers');
     const specEl = document.getElementById('spectatorPlayers');
 
-    if (redEl) redEl.innerHTML = renderPlayerList(redTeam, 'var(--red-team)');
-    if (blueEl) blueEl.innerHTML = renderPlayerList(blueTeam, 'var(--blue-team)');
-    if (specEl) specEl.innerHTML = renderPlayerList(specs, 'var(--text-muted)');
+    if (redEl) redEl.innerHTML = renderPlayerList(redTeam, 'Takımda oyuncu yok', 'players');
+    if (blueEl) blueEl.innerHTML = renderPlayerList(blueTeam, 'Takımda oyuncu yok', 'players');
+    if (specEl) specEl.innerHTML = renderPlayerList(specs, 'İzleyici yok', 'camera');
 
     // Admin kick buttons need re-binding as elements are new
     if (isAdmin) {
@@ -628,10 +667,10 @@ export class RoomLobby {
         if (!isAdmin) return;
 
         e.preventDefault();
-        col.style.borderColor = 'var(--sapphire)';
+        col.classList.add('drag-over');
       });
       col.addEventListener('dragleave', () => {
-        col.style.borderColor = '';
+        col.classList.remove('drag-over');
       });
       col.addEventListener('drop', (e) => {
         const myId = this.app.network.playerId;
@@ -639,7 +678,7 @@ export class RoomLobby {
         if (!isAdmin) return;
 
         e.preventDefault();
-        col.style.borderColor = '';
+        col.classList.remove('drag-over');
         const playerId = e.dataTransfer.getData('text/plain');
         let targetTeam = 'spectator';
         if (col.id === 'teamRed') targetTeam = 'red';
@@ -713,7 +752,7 @@ export class RoomLobby {
       div.className += ' chat-message-system';
       div.textContent = data.message;
     } else {
-      const teamColor = data.team === 'red' ? 'var(--red-team)' : data.team === 'blue' ? 'var(--blue-team)' : 'var(--text-secondary)';
+      const teamColor = data.team === 'red' ? 'var(--red)' : data.team === 'blue' ? 'var(--blue)' : 'var(--text-2)';
       div.innerHTML = `<span class="chat-message-author" style="color:${teamColor}">${this._esc(data.playerName)}</span>: ${this._esc(data.message)}`;
     }
 
@@ -730,15 +769,8 @@ export class RoomLobby {
     const btnEl = document.getElementById('btnToggleOvertime');
     if (txtEl) txtEl.textContent = this.overtimeEnabled ? 'Uzatma Var' : 'Uzatma Yok';
     if (btnEl) {
-      if (this.overtimeEnabled) {
-        btnEl.style.background = 'rgba(255, 193, 7, 0.15)';
-        btnEl.style.borderColor = 'rgba(255, 193, 7, 0.3)';
-        btnEl.style.color = '#ffd54f';
-      } else {
-        btnEl.style.background = 'rgba(255, 255, 255, 0.05)';
-        btnEl.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-        btnEl.style.color = 'rgba(255, 255, 255, 0.4)';
-      }
+      btnEl.classList.toggle('on', !!this.overtimeEnabled);
+      btnEl.classList.toggle('off', !this.overtimeEnabled);
     }
   }    _setupJerseySelector() {
     // Track selected jersey per team - persist across re-renders
@@ -790,8 +822,8 @@ export class RoomLobby {
         dropdown.innerHTML = presets.map((p, i) => {
           const flagHtml = `<img src="${p.flag}" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
           const isSelected = this._selectedJersey[team] === i;
-          const checkHtml = isSelected ? `<span style="margin-left:auto; color:#4ade80; font-weight:bold; font-size:14px;">✓</span>` : '';
-          const bgStyle = isSelected ? 'background:rgba(15,82,186,0.25);' : '';
+          const checkHtml = isSelected ? `<span style="margin-left:auto; color:var(--green); font-weight:bold; font-size:14px;">✓</span>` : '';
+          const bgStyle = isSelected ? 'background:rgba(255,255,255,0.10);' : '';
           const cursorStyle = isAdmin ? 'cursor:pointer;' : 'cursor:default; opacity:0.7;';
           return `
             <div class="jersey-preset-item" data-idx="${i}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; ${cursorStyle} transition:background 0.15s; font-size:13px; color:var(--text-primary);${bgStyle}">
@@ -805,7 +837,7 @@ export class RoomLobby {
         // Hover + click (admin only)
         if (isAdmin) {
           dropdown.querySelectorAll('.jersey-preset-item').forEach(item => {
-            item.addEventListener('mouseenter', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = 'rgba(15,82,186,0.2)'; });
+            item.addEventListener('mouseenter', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = 'rgba(255,255,255,0.08)'; });
             item.addEventListener('mouseleave', () => { if (this._selectedJersey[team] !== parseInt(item.dataset.idx)) item.style.background = ''; });
             item.addEventListener('click', () => {
               const idx = parseInt(item.dataset.idx);

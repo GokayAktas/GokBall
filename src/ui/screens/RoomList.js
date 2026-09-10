@@ -98,7 +98,7 @@ export class RoomList {
     container.innerHTML = rooms.map(room => {
       const isPlaying = room.gameState === 'playing';
       const playerRatio = room.playerCount / room.maxPlayers;
-      const playerColor = playerRatio >= 0.8 ? '#e74c3c' : playerRatio >= 0.5 ? '#f39c12' : '#2ecc71';
+      const playerColor = playerRatio >= 0.8 ? 'var(--red)' : playerRatio >= 0.5 ? 'var(--warning)' : 'var(--green)';
       
       return `
       <div class="room-card" data-room-id="${room.id}">

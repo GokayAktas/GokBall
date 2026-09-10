@@ -5,6 +5,7 @@ export default defineConfig({
   publicDir: '../public',
   server: {
     port: 3000,
+    host: true,
     proxy: {
       '/socket.io': {
         target: 'http://127.0.0.1:3001',
@@ -12,6 +13,9 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  define: {
+    'import.meta.env.VITE_SERVER_URL': JSON.stringify('http://127.0.0.1:3001'),
   },
   build: {
     outDir: '../dist',

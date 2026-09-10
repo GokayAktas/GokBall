@@ -119,8 +119,8 @@ export class Settings {
         const action = btn.dataset.action;
         const oldText = btn.textContent;
         btn.textContent = 'Bir tuşa bas...';
-        btn.style.background = 'rgba(231, 76, 60, 0.2)';
-        btn.style.borderColor = '#c70000';
+        btn.style.background = 'rgba(255, 82, 82, 0.2)';
+        btn.style.borderColor = 'var(--red)';
 
         const handler = (e) => {
           e.preventDefault();

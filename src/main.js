@@ -817,7 +817,7 @@ class GokBallApp {
         this._hostGameState = 'ended';
 
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
-        const winColor = winner === 'red' ? '#c70000' : '#00008c';
+        const winColor = winner === 'red' ? 'var(--red)' : 'var(--blue)';
 
         // Calculate points: goals=3, assists=1, saves=0.25
         const ranked = Object.entries(this._hostMatchStats)
@@ -1237,7 +1237,7 @@ class GokBallApp {
 
         this.network.on('gameOver', (data) => {
             const winnerStr = data.winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
-            const winnerColor = data.winner === 'red' ? '#c70000' : '#00008c';
+            const winnerColor = data.winner === 'red' ? 'var(--red)' : 'var(--blue)';
 
             // Calculate points: goals=3, assists=1, saves=0.25
             const ranked = [];
@@ -1345,11 +1345,11 @@ class GokBallApp {
             overlay.id = 'connectionLostOverlay';
             overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:var(--bg-card);padding:40px;border-radius:16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5);border:1px solid var(--border-color);min-width:320px;">
+                <div style="background:var(--panel);padding:40px;border-radius:var(--radius-sm);text-align:center;box-shadow:var(--shadow-xl);border:2px solid var(--stroke);min-width:320px;">
                     <div style="font-size:48px;margin-bottom:16px;">\u26A0\uFE0F</div>
-                    <h2 style="color:var(--text-primary);margin:0 0 8px;font-size:22px;">Ba\u011flant\u0131 Koptu</h2>
+                    <h2 style="color:var(--text-primary);margin:0 0 8px;font-size:22px;text-transform:uppercase;letter-spacing:1px;">Ba\u011flant\u0131 Koptu</h2>
                     <p style="color:var(--text-secondary);margin:0 0 24px;font-size:14px;">${reason}</p>
-                    <button id="btnConnOk" class="btn btn-primary" style="padding:10px 40px;font-size:16px;font-weight:700;border-radius:8px;">Tamam</button>
+                    <button id="btnConnOk" class="btn btn-primary" style="padding:10px 40px;font-size:16px;font-weight:700;">Tamam</button>
                 </div>
             `;
             document.body.appendChild(overlay);

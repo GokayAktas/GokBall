@@ -30,8 +30,9 @@ export class NetworkManager {
     connect(serverUrl) {
         return new Promise((resolve, reject) => {
             // Default: connect to current host (production) or use provided URL
-            const url = serverUrl || import.meta.env.VITE_SERVER_URL || '';
-            console.log('[Network] Connecting to:', url || 'Current Host');
+            // Falls back to localhost:3001 for local development
+            const url = serverUrl || import.meta.env.VITE_SERVER_URL || 'http://127.0.0.1:3001';
+            console.log('[Network] Connecting to:', url);
 
             // Connection timeout
             const connectTimeout = setTimeout(() => {

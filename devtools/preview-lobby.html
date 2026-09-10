@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GokBall Lobby Preview (fixture)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../src/styles/index.css" />
+  <style>
+    /* Fixture-only overrides so the whole page is visible in a screenshot */
+    html, body { overflow: auto !important; }
+    .screen { height: auto; min-height: 100vh; overflow: visible; }
+    .player-list { overflow: visible; }
+  </style>
+</head>
+<body>
+  <!-- NOTE: static fixture only. Real screen is rendered by src/ui/screens/RoomLobby.js.
+       Kept in sync by hand for visual QA of the design system. -->
+  <div class="screen" style="justify-content:center; padding:20px;">
+    <div class="lobby-shell" style="min-height: 600px;">
+      <div class="lobby-main-col">
+
+        <!-- ============ ROOM HUD HEADER ============ -->
+        <div class="room-hud">
+          <div class="room-hud-titles">
+            <div class="room-hud-title" id="roomTitle">Test Arenası</div>
+            <div class="room-hud-sub">
+              <span>Klasik</span>
+              <span class="room-hud-sep">•</span>
+              <span><span id="playerCount">7</span> Oyuncu</span>
+            </div>
+          </div>
+          <div class="room-hud-actions">
+            <button class="btn btn-danger btn-sm btn-leave" id="btnLeave" title="Odadan Ayrıl">
+               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+               </svg>
+               AYRIL
+            </button>
+          </div>
+        </div>
+
+        <!-- ============ TEAM LOBBY ============ -->
+        <div class="lobby-teams">
+          <!-- Red Team -->
+          <div class="team-card red team-column" id="teamRed">
+            <div class="team-header">
+               <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
+               <div class="team-header-actions">
+                  <button class="team-join-btn" id="btnJoinRed">Katıl</button>
+                  <div style="position:relative;" id="jerseyRedWrapper">
+                    <button class="team-kit-btn" id="btnJerseyRed" title="Kırmızı Forma Seç">
+                      <img src="../public/assets/red_shirt.png" style="width:15px; height:15px;" />
+                      <span>Forma Seç</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                  </div>
+               </div>
+               <button class="team-clear-btn" id="btnClearRed" title="Kırmızı Takımı Boşalt">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+               </button>
+            </div>
+            <div class="player-list" id="redPlayers">
+              <div class="team-player is-self">
+                <div class="team-player-avatar" style="background:var(--red); color:#0A0A0F; border:2px solid var(--stroke); outline:2px solid var(--white); outline-offset:-1px;">7</div>
+                <span class="team-player-name" style="font-weight:700; color:var(--white);">Gokhan <span style="color:var(--text-muted);">(Ben)</span></span>
+                <span class="team-player-admin" title="Admin">👑</span>
+              </div>
+              <div class="team-player">
+                <div class="team-player-avatar" style="background:var(--red); color:#0A0A0F; border:2px solid var(--stroke);">9</div>
+                <span class="team-player-name" style="color:var(--white);">EmreKale</span>
+              </div>
+              <div class="team-player">
+                <div class="team-player-avatar" style="background:var(--red); color:#0A0A0F; border:2px solid var(--stroke);">10</div>
+                <span class="team-player-name" style="color:var(--white);">Arda_10</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Spectators -->
+          <div class="team-card spectator team-column" id="teamSpectator">
+            <div class="team-header">
+               <div class="team-title"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> İzleyiciler</div>
+               <div class="team-header-actions">
+                 <button class="team-dice-btn" id="btnJoinAuto" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
+                 <button class="team-join-btn team-join-btn-accent" id="btnJoinSpectator">
+                   <img src="../public/assets/video_camera.png" alt="" />
+                   İzle
+                 </button>
+               </div>
+            </div>
+            <div class="player-list" id="spectatorPlayers">
+              <div class="player-empty">
+                <img src="../public/assets/video_camera.png" alt="" />
+                <span>İzleyici yok</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Blue Team -->
+          <div class="team-card blue team-column" id="teamBlue">
+            <div class="team-header">
+               <button class="team-clear-btn" id="btnClearBlue" title="Mavi Takımı Boşalt">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+               </button>
+               <div class="team-header-actions">
+                  <div style="position:relative;" id="jerseyBlueWrapper">
+                    <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      <img src="../public/assets/blue_shirt.png" style="width:15px; height:15px;" />
+                      <span>Forma Seç</span>
+                    </button>
+                  </div>
+                  <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
+                  <div class="team-title">MAVİ <span class="team-dot"></span></div>
+               </div>
+            </div>
+            <div class="player-list" id="bluePlayers">
+              <div class="player-empty">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <span>Takımda oyuncu yok</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ MATCH SETTINGS STRIP ============ -->
+        <div class="lobby-settings">
+          <div class="setting-inline">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Süre Limiti: <b id="timeLimitInfo">3 dk</b></span>
+          </div>
+          <div class="setting-inline">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+            <span>Skor Limiti: <b id="scoreLimitInfo">3</b></span>
+          </div>
+          <div class="setting-inline">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path></svg>
+            <span>Oyun Hızı: <b>X<span id="speedInfo">1.00</span></b></span>
+          </div>
+          <div class="setting-inline">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>Saha: <b><span id="stadiumName">Klasik</span></b></span>
+          </div>
+        </div>
+
+        <!-- ============ ADMIN / HOST CONTROLS ============ -->
+        <div id="adminPanel" class="admin-panel">
+          <button class="btn btn-primary btn-block btn-start" id="btnStartGame">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 21 12 6 21 6 3"></polygon></svg>
+            OYUNU BAŞLAT
+          </button>
+
+          <!-- Admin Tools -->
+          <div class="admin-tools">
+            <button class="btn btn-secondary btn-sm" id="btnToggleLock" style="height:38px;">
+               <span id="lockIcon"></span> <span id="lockText">Takımları Kilitle</span>
+            </button>
+            <div class="setting-field">
+               <span class="setting-label">SAHA</span>
+               <select id="lobbyStadiumSelect" class="input setting-select">
+                 <option value="small">Küçük (1v1)</option>
+                 <option value="futsal">Futsal (3v3)</option>
+                 <option value="classic">Klasik (3v3)</option>
+                 <option value="big">Büyük (5v5)</option>
+                 <option value="huge">Devasa (7v7)</option>
+                 <option value="custom" disabled hidden>Özel Saha</option>
+               </select>
+            </div>
+            <div class="setting-field">
+               <span class="setting-label">GOL LİMİTİ</span>
+               <select id="lobbyScoreLimit" class="input setting-select">
+                 <option value="1">1 Gol</option><option value="3">3 Gol</option><option value="5">5 Gol</option><option value="10">10 Gol</option><option value="0">Sınırsız</option>
+               </select>
+            </div>
+            <div class="setting-field">
+               <span class="setting-label">SÜRE</span>
+               <select id="lobbyTimeLimit" class="input setting-select">
+                 <option value="60">1 Dakika</option><option value="180">3 Dakika</option><option value="300">5 Dakika</option><option value="600">10 Dakika</option><option value="0">Sınırsız</option>
+               </select>
+            </div>
+            <div class="setting-field">
+               <span class="setting-label">HIZ</span>
+               <select id="lobbySpeedMultiplier" class="input setting-select">
+                 <option value="0.50">x0.50</option>
+                 <option value="0.75">x0.75</option>
+                 <option value="1.00">x1.00</option>
+                 <option value="1.25">x1.25</option>
+                 <option value="1.50">x1.50</option>
+                 <option value="1.75">x1.75</option>
+                 <option value="2.00">x2.00</option>
+               </select>
+            </div>
+            <button class="btn btn-overtime on" id="btnToggleOvertime" style="height:38px;">
+              ⏱ <span id="overtimeText">Uzatma Var</span>
+            </button>
+            <label class="btn btn-secondary btn-sm" style="cursor:pointer; height:38px;">
+              📁 Saha Yükle
+              <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ CHAT SIDEBAR ============ -->
+      <div class="lobby-chat">
+        <div class="lobby-chat-header">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          Sohbet
+        </div>
+        <div class="lobby-chat-hint">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          Komutlar: /komut
+        </div>
+        <div class="lobby-chat-messages" id="lobbyChatMessages">
+          <div class="chat-message chat-message-system">EmreKale odaya katıldı</div>
+          <div class="chat-message"><span class="chat-message-author" style="color:var(--red)">Gokhan</span>: hazırsınız mı?</div>
+          <div class="chat-message"><span class="chat-message-author" style="color:var(--blue)">KeremFuat</span>: hazırm 👊</div>
+          <div class="chat-message chat-message-system">Saha değiştirildi: Klasik</div>
+          <div class="chat-message"><span class="chat-message-author" style="color:var(--blue)">BurakYilmaz</span>: klasik saha efsane</div>
+        </div>
+        <div class="lobby-chat-inputrow">
+          <input type="text" id="lobbyChatInput" class="input" placeholder="Mesaj yaz..." autocomplete="off" />
+          <button class="btn btn-send-chat" id="btnSendChat" title="Gönder">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 20V4l19 8L3 20zm2-3l11.85-5L5 7v3.5l6 1.5-6 1.5V17z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
