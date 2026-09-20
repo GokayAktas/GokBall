@@ -777,7 +777,9 @@ select.input option {
 /* ---- Team columns ---- */
 .lobby-teams {
   display: grid;
-  grid-template-columns: 1fr 0.85fr 1fr;
+  /* minmax(0, ...) lets tracks shrink below content min-width so nowrap
+     header buttons can't push the grid (blue card) past the start button */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -846,7 +848,8 @@ select.input option {
   display: flex;
   justify-content: space-between;
   align-items: stretch;
-  gap: 8px;
+  flex-wrap: wrap; /* safety valve on narrow windows instead of sideways overflow */
+  gap: 6px;
   padding: 0;
   margin: 0 0 10px;
   background: transparent;
@@ -878,9 +881,9 @@ select.input option {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 18px;
+  padding: 0 14px;
   background: var(--team-accent);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--team-color);
@@ -914,8 +917,8 @@ select.input option {
 .team-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: 5px;
+  padding: 0 8px;
 }
 
 /* Blue: title chip sits inside the action group, flush right */
@@ -928,9 +931,9 @@ select.input option {
   border: none;
   color: #FFFFFF;
   border-radius: 999px;
-  padding: 5px 16px;
+  padding: 5px 12px;
   font-family: var(--font-family);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: transform var(--transition-fast), background var(--transition-fast);
@@ -955,14 +958,14 @@ select.input option {
 .team-kit-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--bg);
   border: none;
   color: #FFFFFF;
   border-radius: 999px;
-  padding: 5px 14px;
+  padding: 5px 10px;
   font-family: var(--font-family);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: transform var(--transition-fast), background var(--transition-fast);
@@ -1019,7 +1022,7 @@ select.input option {
   border: none;
   color: var(--text-2);
   cursor: pointer;
-  padding: 0 14px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2614,7 +2617,7 @@ select.input option {
   }
 
   .lobby-teams {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .team-card {
