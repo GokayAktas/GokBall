@@ -677,7 +677,8 @@ select.input option {
    ============================================================ */
 .lobby-shell {
   display: flex;
-  gap: 20px;
+  column-gap: 36px;
+  row-gap: 20px;
   width: 100%;
   max-width: 1350px;
   margin: 0 auto;
@@ -848,17 +849,29 @@ select.input option {
   gap: 8px;
   padding: 0;
   margin: 0 0 10px;
-  background: var(--panel-2);
+  background: transparent;
   border-bottom: none;
   box-shadow: none;
+  position: relative;
+  z-index: 2; /* above .player-list (z:1) so open dropdowns paint over it */
+  flex-shrink: 0;
+  min-height: 46px;
+}
+
+/* Chamfered header band painted on a pseudo-layer ONLY (same pattern as
+   .team-card::before) so absolutely positioned dropdowns inside the header
+   (e.g. jersey selector) are never clipped. */
+.team-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--panel-2);
   clip-path: polygon(
     var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer),
     100% 100%, 0 100%, 0 var(--chamfer)
   );
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  min-height: 46px;
+  pointer-events: none;
 }
 
 .team-title {
