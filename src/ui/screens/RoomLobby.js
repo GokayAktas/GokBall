@@ -53,7 +53,7 @@ export class RoomLobby {
               <div class="team-header">
                  <div class="team-header-actions">
                     <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
-                    <div style="position:relative;" id="jerseyRedWrapper">
+                    <div class="jersey-anchor" style="position:relative;" id="jerseyRedWrapper">
                       <button class="team-kit-btn" id="btnJerseyRed" title="Kırmızı Forma Seç">
                         <img src="/assets/red_shirt.png" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>
@@ -92,7 +92,7 @@ export class RoomLobby {
                  </button>
                  <div class="team-header-actions">
                     <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
-                    <div style="position:relative;" id="jerseyBlueWrapper">
+                    <div class="jersey-anchor" style="position:relative;" id="jerseyBlueWrapper">
                       <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
                         <img src="/assets/blue_shirt.png" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>

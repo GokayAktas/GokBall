@@ -943,6 +943,30 @@ select.input option {
   padding-left: 0;
 }
 
+/* Join + Kit cluster floats centered in the free band space between the
+   title chip and the card's outer edge: flex:1 stretches the action group,
+   auto margins split the leftover space evenly around the cluster. */
+.team-card.red .team-header-actions,
+.team-card.blue .team-header-actions {
+  flex: 1;
+}
+
+.team-card.red .jersey-anchor {
+  margin-left: auto;
+}
+
+.team-card.red .team-header-actions > .team-join-btn {
+  margin-right: auto;
+}
+
+.team-card.blue .jersey-anchor {
+  margin-right: auto;
+}
+
+.team-card.blue .team-header-actions > .team-join-btn {
+  margin-left: auto;
+}
+
 .team-join-btn {
   background: var(--team-accent);
   border: none;
