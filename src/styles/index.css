@@ -851,7 +851,7 @@ select.input option {
   flex-wrap: wrap; /* safety valve on narrow windows instead of sideways overflow */
   gap: 6px;
   padding: 0;
-  margin: 0 0 10px;
+  margin: 0; /* band sits flush on the card body — no team-color strip in between */
   background: transparent;
   border-bottom: none;
   box-shadow: none;
@@ -924,6 +924,16 @@ select.input option {
 /* Blue: title chip sits inside the action group, flush right */
 .team-card.blue .team-header-actions {
   padding-right: 0;
+}
+
+/* Red (mirrored layout): action group is flush left, title chip first,
+   exactly mirroring the blue card. Admin clear-arrow sits far right. */
+.team-card.red .team-header {
+  justify-content: flex-start;
+}
+
+.team-card.red .team-header-actions {
+  padding-left: 0;
 }
 
 .team-join-btn {

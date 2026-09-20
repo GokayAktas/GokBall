@@ -51,17 +51,16 @@ export class RoomLobby {
             <!-- Red Team -->
             <div class="team-card red team-column" id="teamRed">
               <div class="team-header">
-                 <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
                  <div class="team-header-actions">
-                    <button class="team-join-btn" id="btnJoinRed">Katıl</button>
+                    <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
                     <div style="position:relative;" id="jerseyRedWrapper">
                       <button class="team-kit-btn" id="btnJerseyRed" title="Kırmızı Forma Seç">
                         <img src="/assets/red_shirt.png" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                       </button>
                       <div id="jerseyDropdownRed" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0;"></div>
                     </div>
+                    <button class="team-join-btn" id="btnJoinRed">Katıl</button>
                  </div>
                  <button class="team-clear-btn" id="btnClearRed" style="display:none;" title="Kırmızı Takımı Boşalt">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -94,7 +93,6 @@ export class RoomLobby {
                  <div class="team-header-actions">
                     <div style="position:relative;" id="jerseyBlueWrapper">
                       <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polyline points="9 18 15 12 9 6"></polyline></svg>
                         <img src="/assets/blue_shirt.png" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>
                       </button>
