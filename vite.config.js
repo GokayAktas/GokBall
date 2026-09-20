@@ -14,9 +14,6 @@ export default defineConfig({
       }
     }
   },
-  define: {
-    'import.meta.env.VITE_SERVER_URL': JSON.stringify('http://127.0.0.1:3001'),
-  },
   build: {
     outDir: '../dist',
     emptyOutDir: true

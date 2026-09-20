@@ -134,17 +134,19 @@ class GokBallApp {
         this.ui.registerScreen('roomLobby', new RoomLobby(this));
         this.ui.registerScreen('settings', new Settings(this));
 
-        // Connect to game server (host's machine or remote)
+        // Connect to game server. Show the menu even if the connection fails,
+        // so users can still see the UI and retry instead of a blank background.
         try {
             await this.network.connect();
             this.physics.myPlayerId = this.network.playerId;
             console.log('[GokBall] Connected to server:', this.network.playerId);
         } catch (err) {
             console.error('[GokBall] Connection failed:', err?.message || err);
+            this.ui.showScreen('mainMenu');
             alert('Sunucuya bağlanılamadı!\n\n' +
-                  '1. Render sunucunuzun çalıştığından emin olun\n' +
-                  '2. VITE_SERVER_URL ayarını kontrol edin\n' +
-                  '3. Sayfayı yenileyin');
+                  'Oda oluşturma/odaya katılma çalışmayacak.\n\n' +
+                  '1. Game sunucusunun (npm run server) çalıştığından emin olun\n' +
+                  '2. Sayfayı yenileyin');
             return;
         }
 

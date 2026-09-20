@@ -29,9 +29,12 @@ export class NetworkManager {
      */
     connect(serverUrl) {
         return new Promise((resolve, reject) => {
-            // Default: connect to current host (production) or use provided URL
-            // Falls back to localhost:3001 for local development
-            const url = serverUrl || import.meta.env.VITE_SERVER_URL || 'http://127.0.0.1:3001';
+            // Default: connect to the same host the site is served from.
+            // In production the Express server (server/index.js) serves the site
+            // AND socket.io on the same port, so same-origin works everywhere
+            // (localhost, LAN, deployed URL) without extra config.
+            // Set VITE_SERVER_URL env var only for split dev setups (client on :3000, server on :3001).
+            const url = serverUrl || import.meta.env.VITE_SERVER_URL || window.location.origin;
             console.log('[Network] Connecting to:', url);
 
             // Connection timeout
