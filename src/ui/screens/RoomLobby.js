@@ -91,6 +91,7 @@ export class RoomLobby {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                  </button>
                  <div class="team-header-actions">
+                    <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
                     <div style="position:relative;" id="jerseyBlueWrapper">
                       <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
                         <img src="/assets/blue_shirt.png" style="width:15px; height:15px;" />
@@ -98,7 +99,6 @@ export class RoomLobby {
                       </button>
                       <div id="jerseyDropdownBlue" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); right:0;"></div>
                     </div>
-                    <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
                     <div class="team-title">MAVİ <span class="team-dot"></span></div>
                  </div>
               </div>

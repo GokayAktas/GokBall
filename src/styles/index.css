@@ -863,13 +863,20 @@ select.input option {
 
 /* Chamfered header band painted on a pseudo-layer ONLY (same pattern as
    .team-card::before) so absolutely positioned dropdowns inside the header
-   (e.g. jersey selector) are never clipped. */
+   (e.g. jersey selector) are never clipped. Painted in a team-tinted dark
+   shade so the band reads as a darker horizontal stripe behind the colored
+   title chip, Join, Kit and clear-arrow buttons. */
 .team-header::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--panel-2);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--team-accent) 26%, var(--panel-2)) 0%,
+    color-mix(in srgb, var(--team-accent) 13%, var(--panel-2)) 55%,
+    var(--panel-2) 100%
+  );
   clip-path: polygon(
     var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer),
     100% 100%, 0 100%, 0 var(--chamfer)
@@ -937,26 +944,28 @@ select.input option {
 }
 
 .team-join-btn {
-  background: var(--bg);
+  background: var(--team-accent);
   border: none;
-  color: #FFFFFF;
+  color: var(--on-accent, #FFFFFF);
   border-radius: 999px;
   padding: 5px 12px;
   font-family: var(--font-family);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform var(--transition-fast), background var(--transition-fast);
+  transition: transform var(--transition-fast), background var(--transition-fast), filter var(--transition-fast);
   white-space: nowrap;
 }
 
 .team-join-btn:hover:not(:disabled) {
-  background: var(--panel);
+  background: var(--team-accent);
+  filter: brightness(1.15);
   transform: translateY(-1px);
 }
 
 .team-join-btn:active:not(:disabled) {
   transform: translateY(1px);
+  filter: brightness(0.92);
 }
 
 .team-join-btn:disabled {
@@ -964,31 +973,34 @@ select.input option {
   cursor: not-allowed;
 }
 
-/* Kit (Forma Seç) button — lives in the colored team header */
+/* Kit (Forma Seç) button — lives in the colored team header,
+   shares the team-accent background with the Join button */
 .team-kit-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--bg);
+  background: var(--team-accent);
   border: none;
-  color: #FFFFFF;
+  color: var(--on-accent, #FFFFFF);
   border-radius: 999px;
   padding: 5px 10px;
   font-family: var(--font-family);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform var(--transition-fast), background var(--transition-fast);
+  transition: transform var(--transition-fast), background var(--transition-fast), filter var(--transition-fast);
   white-space: nowrap;
 }
 
 .team-kit-btn:hover {
-  background: var(--panel);
+  background: var(--team-accent);
+  filter: brightness(1.15);
   transform: translateY(-1px);
 }
 
 .team-kit-btn:active {
   transform: translateY(1px);
+  filter: brightness(0.92);
 }
 
 /* Spectator İzle: video-camera icon + neutral pill (reference colors) */
@@ -1041,6 +1053,26 @@ select.input option {
 
 .team-clear-btn:hover {
   color: var(--team-color);
+}
+
+/* Team-tinted dark stripe runs across the full header width — behind the
+   title chip, Join, Kit and clear-arrow buttons alike. */
+.team-card.red .team-header::before {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--red) 26%, var(--panel-2)) 0%,
+    color-mix(in srgb, var(--red) 14%, var(--panel-2)) 50%,
+    var(--panel-2) 100%
+  );
+}
+
+.team-card.blue .team-header::before {
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--blue) 26%, var(--panel-2)) 0%,
+    color-mix(in srgb, var(--blue) 14%, var(--panel-2)) 50%,
+    var(--panel-2) 100%
+  );
 }
 
 .team-clear-btn:hover {
