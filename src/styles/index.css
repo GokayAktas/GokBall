@@ -279,6 +279,48 @@ body::before {
 }
 
 /* ============================================================
+   Main menu footer
+   ============================================================ */
+.menu-footer {
+  margin-top: var(--space-xl);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.menu-footer-tagline {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  max-width: 520px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.menu-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-md);
+}
+
+.menu-footer-links a {
+  font-family: var(--font-family);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 4px 2px;
+  transition: color var(--transition-fast);
+}
+
+.menu-footer-links a:hover,
+.menu-footer-links a:focus-visible {
+  color: var(--green);
+}
+
+/* ============================================================
    Buttons
    ============================================================ */
 .btn {

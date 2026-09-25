@@ -13,7 +13,7 @@ export class MainMenu {
       <div class="particles-bg" id="particles"></div>
       <div class="menu-container">
         <div class="logo-container">
-          <img src="/logo.png" alt="GokBall" class="logo-banner" />
+          <img src="/logo.png" alt="GokBall — ücretsiz çevrimiçi çok oyunculu futbol oyunu logosu" class="logo-banner" />
         </div>
 
         <div class="card" style="width: 100%;">
@@ -37,6 +37,20 @@ export class MainMenu {
             Ayarlar
           </button>
         </div>
+
+        <footer class="menu-footer">
+          <p class="menu-footer-tagline">
+            GokBall, tarayıcıda ücretsiz oynanan gerçek zamanlı çok oyunculu futbol oyunudur.
+            Oda oluştur, arkadaşlarını davet et ve gol atmaya başla — kurulum gerekmez.
+          </p>
+          <nav class="menu-footer-links" aria-label="Site içi bağlantılar">
+            <a href="/" data-screen-link="home" title="Ana menüye dön">Ana Sayfa</a>
+            <a href="/?screen=roomList" data-screen-link="roomList" title="Açık odaları görüntüle">Oda Listesi</a>
+            <a href="/?screen=createRoom" data-screen-link="createRoom" title="Yeni bir oda oluştur">Oda Oluştur</a>
+            <a href="/?screen=settings" data-screen-link="settings" title="Kontrolleri ve görsel ayarları düzenle">Ayarlar</a>
+            <a href="https://github.com/GokayAktas/GokBall" target="_blank" rel="noopener" title="GitHub deposunu aç">GitHub</a>
+          </nav>
+        </footer>
       </div>
     `;
     return div;
@@ -50,6 +64,32 @@ export class MainMenu {
 
     // Create floating particles
     this._createParticles();
+
+    // Footer internal links navigate through the SPA router
+    document.querySelectorAll('.menu-footer-links a[data-screen-link]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = link.getAttribute('data-screen-link');
+        if (target === 'home') {
+          this.app.ui.showScreen('mainMenu');
+        } else if (target === 'roomList' || target === 'createRoom') {
+          if (this._saveName()) this.app.ui.showScreen(target);
+        } else if (target === 'settings') {
+          this.app.ui.showScreen('settings');
+        }
+      });
+    });
+
+    // Deep links: /?screen=roomList opens the room list directly
+    const params = new URLSearchParams(window.location.search);
+    const screenParam = params.get('screen');
+    if (screenParam === 'roomList' || screenParam === 'createRoom' || screenParam === 'settings') {
+      if (screenParam === 'roomList' || screenParam === 'createRoom') {
+        if (!this._saveName()) return;
+      }
+      this.app.ui.showScreen(screenParam);
+      return;
+    }
 
     // Button handlers
     document.getElementById('btnCreateRoom')?.addEventListener('click', () => {

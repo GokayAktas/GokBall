@@ -55,7 +55,7 @@ export class RoomLobby {
                     <div class="team-title"><span class="team-dot"></span> KIRMIZI</div>
                     <div class="jersey-anchor" style="position:relative;" id="jerseyRedWrapper">
                       <button class="team-kit-btn" id="btnJerseyRed" title="Kırmızı Forma Seç">
-                        <img src="/assets/red_shirt.png" style="width:15px; height:15px;" />
+                        <img src="/assets/red_shirt.png" alt="Kırmızı takım forması" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>
                       </button>
                       <div id="jerseyDropdownRed" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0;"></div>
@@ -76,7 +76,7 @@ export class RoomLobby {
                  <div class="team-header-actions">
                    <button class="team-dice-btn" id="btnJoinAuto" style="display:none;" title="Takımları Rastgele Karıştır (Sadece Admin)">🎲</button>
                    <button class="team-join-btn team-join-btn-accent" id="btnJoinSpectator">
-                     <img src="/assets/video_camera.png" alt="" />
+                     <img src="/assets/video_camera.png" alt="İzleyici kamerası simgesi" />
                      İzle
                    </button>
                  </div>
@@ -94,7 +94,7 @@ export class RoomLobby {
                     <button class="team-join-btn" id="btnJoinBlue">Katıl</button>
                     <div class="jersey-anchor" style="position:relative;" id="jerseyBlueWrapper">
                       <button class="team-kit-btn" id="btnJerseyBlue" title="Mavi Forma Seç">
-                        <img src="/assets/blue_shirt.png" style="width:15px; height:15px;" />
+                        <img src="/assets/blue_shirt.png" alt="Mavi takım forması" style="width:15px; height:15px;" />
                         <span>Forma Seç</span>
                       </button>
                       <div id="jerseyDropdownBlue" class="jersey-dropdown" style="display:none; position:absolute; top:calc(100% + 6px); right:0;"></div>
@@ -609,7 +609,7 @@ export class RoomLobby {
     const renderPlayerList = (list, emptyText, emptyKind) => {
       if (list.length === 0) {
         const emptyIcon = emptyKind === 'camera'
-          ? `<img src="/assets/video_camera.png" alt="" />`
+          ? `<img src="/assets/video_camera.png" alt="İzleyici kamerası simgesi" />`
           : `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
         return `<div class="player-empty">
           ${emptyIcon}
@@ -818,7 +818,7 @@ export class RoomLobby {
         const isAdmin = this.roomData?.players?.find(p => p.id === myId)?.isAdmin;
 
         dropdown.innerHTML = presets.map((p, i) => {
-          const flagHtml = `<img src="${p.flag}" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
+          const flagHtml = `<img src="${p.flag}" alt="${p.name} bayrağı" style="width:16px; height:16px; border-radius:2px; object-fit:cover; flex-shrink:0;" />`;
           const isSelected = this._selectedJersey[team] === i;
           const checkHtml = isSelected ? `<span style="margin-left:auto; color:var(--green); font-weight:bold; font-size:14px;">✓</span>` : '';
           const bgStyle = isSelected ? 'background:rgba(255,255,255,0.10);' : '';

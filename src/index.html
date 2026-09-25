@@ -3,9 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="GokBall - Modern multiplayer futbol oyunu. Odalar oluştur, arkadaşlarınla oyna!" />
+  <title>GokBall — Ücretsiz Çevrimiçi Çok Oyunculu Futbol Oyunu</title>
+  <meta name="description" content="GokBall, tarayıcıda ücretsiz oynanan gerçek zamanlı çok oyunculu futbol oyunudur. Bir oda oluştur, arkadaşlarını davet et, kırmızı veya mavi takıma katıl ve gol atmaya başla — kurulum gerekmez." />
   <meta name="google-site-verification" content="ZVcFI9pUH6KqVVEJNlvK5WY16QAIgrH_Ko53h6rabSQ" />
-  <title>GokBall</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GokBall" />
+  <meta property="og:title" content="GokBall — Ücretsiz Çevrimiçi Çok Oyunculu Futbol Oyunu" />
+  <meta property="og:description" content="Tarayıcıda ücretsiz oynanan gerçek zamanlı çok oyunculu futbol oyunu. Oda oluştur, arkadaşlarınla takım kur, gol at!" />
+  <meta property="og:url" content="https://gokball.vercel.app/" />
+  <meta property="og:image" content="https://gokball.vercel.app/logo.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="theme-color" content="#121212" />
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="canonical" href="https://gokball.vercel.app/" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -13,6 +23,19 @@
 </head>
 <body>
   <div id="app">
+    <noscript>
+      <div style="max-width: 640px; margin: 80px auto; padding: 24px; font-family: sans-serif; color: #FFFFFF; background: #1E1E24; border: 2px solid #08090C;">
+        <h1>GokBall — Ücretsiz Çok Oyunculu Futbol Oyunu</h1>
+        <p>
+          GokBall, tarayıcıda çalışan gerçek zamanlı çok oyunculu bir futbol oyunudur. Bir oda oluşturur,
+          arkadaşlarınla aynı odaya katılır, kırmızı ve mavi takımlara ayrılırsın; oklar/WASD ile oyuncunu
+          yönlendirir, X veya boşluk tuşuyla topa vurur ve gol atmaya çalışırsın. Sohbet, maç istatistikleri,
+          forma seçimi ve özelleştirilebilir tuş atamaları da dahildir.
+        </p>
+        <p>Oynamak için tarayıcınızda <strong>JavaScript'i etkinleştirin</strong> ve
+          <a href="https://gokball.vercel.app/" style="color: #00E676;">ana sayfaya gidin</a>.</p>
+      </div>
+    </noscript>
     <!-- UI Screens rendered here -->
   </div>
   <canvas id="gameCanvas"></canvas>

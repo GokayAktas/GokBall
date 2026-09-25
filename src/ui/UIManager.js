@@ -1,6 +1,15 @@
 /**
  * UI Manager - Handles screen transitions
  */
+// Per-screen page titles (SEO + usability in a single-page app)
+const SCREEN_TITLES = {
+    mainMenu: 'GokBall — Ücretsiz Çevrimiçi Çok Oyunculu Futbol Oyunu',
+    roomList: 'Oda Listesi — GokBall',
+    createRoom: 'Oda Oluştur — GokBall',
+    roomLobby: 'Oda Lobisi — GokBall',
+    settings: 'Ayarlar — GokBall'
+};
+
 export class UIManager {
     constructor() {
         this.app = document.getElementById('app');
@@ -13,6 +22,9 @@ export class UIManager {
     }
 
     showScreen(name, data) {
+        // Update the document title for this screen (falls back to a default)
+        document.title = SCREEN_TITLES[name] || 'GokBall';
+
         // Hide current screen
         if (this.currentScreen && this.screens[this.currentScreen]?.onHide) {
             this.screens[this.currentScreen].onHide();
