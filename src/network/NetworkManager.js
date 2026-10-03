@@ -4,24 +4,37 @@
  */
 import { io } from 'socket.io-client';
 
+// A ping that is never answered within this window counts as lost.
+const PING_TIMEOUT = 3000;
+// Rolling window (in samples) used for the packet loss percentage.
+const PING_WINDOW = 20;
+// Host ping reports older than this are treated as "unknown" instead of shown.
+const HOST_PING_TTL = 5000;
+
 export class NetworkManager {
     constructor() {
         this.socket = null;
         this.connected = false;
         this.playerId = null;
         this.callbacks = {};
-        this.ping = 0;
-        this.hostPing = 0; // Host's ping to server (received via hostPing event)
-        this._lastPingTime = 0;
+
+        // RTT to the server. `null` means "not measured yet" - never fake a value.
+        this.ping = null;
         this.pingHistory = [];
-        this.minPing = Infinity;
-        this.maxPing = 0;
-        this.jitter = 0;
+        this.minPing = null;
+        this.maxPing = null;
+        this.jitter = null;
         this.packetLoss = 0;
-        this._sentPackets = 0;
-        this._lostPackets = 0;
-        this._lastSentPingId = 0;
+
+        // Host ping is scoped to a room: { ping, ts, hostId, roomId } or null.
+        this.hostPing = null;
+        this._roomId = null;
+
+        this._pingSeq = 0;
         this._pendingPings = new Map(); // pingId -> sendTime
+        this._pingWindow = []; // last PING_WINDOW results: 'ack' | 'lost'
+        this._pingInterval = null;
+        this._pingTimeoutInterval = null;
     }
 
     /**
@@ -53,10 +66,7 @@ export class NetworkManager {
 
             const cleanupAll = () => {
                 clearTimeout(connectTimeout);
-                if (this._pingInterval) {
-                    clearInterval(this._pingInterval);
-                    this._pingInterval = null;
-                }
+                this._stopPingTimers();
             };
 
             this.socket.on('connect', () => {
@@ -69,6 +79,10 @@ export class NetworkManager {
 
             this.socket.on('disconnect', (reason) => {
                 this.connected = false;
+                // A dead connection has no latency: drop the numbers instead of
+                // leaving a stale value on screen.
+                this.resetMeasurements();
+                this.setRoomScope(null);
                 console.log('[Network] Disconnected:', reason);
                 this._trigger('disconnect', reason);
             });
@@ -102,44 +116,60 @@ export class NetworkManager {
             // Legacy
             this.socket.on('stadiumChanged', (data) => this._trigger('stadiumChanged', data));
 
-            // Custom Ping tracking with jitter/avg/min stats
-            this.socket.on('pong', () => {
-                if (this._lastPingTime) {
-                    const rtt = Date.now() - this._lastPingTime;
-                    this.ping = rtt;
-                    
-                    // Track history for jitter/min/avg (rolling 20 samples)
-                    this.pingHistory.push(rtt);
-                    if (this.pingHistory.length > 20) this.pingHistory.shift();
-                    this.minPing = Math.min(...this.pingHistory);
-                    this.maxPing = Math.max(...this.pingHistory);
-                    
-                    // Calculate jitter (avg deviation from mean)
-                    const avg = this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length;
-                    let jitterSum = 0;
-                    for (const p of this.pingHistory) jitterSum += Math.abs(p - avg);
-                    this.jitter = Math.round(jitterSum / this.pingHistory.length);
-                    
-                    this._trigger('pingUpdate', {
-                        ping: this.ping,
-                        jitter: this.jitter,
-                        minPing: this.minPing,
-                        maxPing: this.maxPing,
-                        avgPing: Math.round(avg)
-                    });
-                }
+            // Custom Ping tracking with jitter/avg/min stats.
+            // Every ping carries a sequence number so a late/lost pong never
+            // corrupts the measurement of another request.
+            this.socket.on('pong', (data) => {
+                const id = data && typeof data.n === 'number' ? data.n : null;
+                if (id === null || !this._pendingPings.has(id)) return;
+                const sentAt = this._pendingPings.get(id);
+                this._pendingPings.delete(id);
+
+                const rtt = Date.now() - sentAt;
+                this.ping = rtt;
+
+                // Track history for jitter/min/avg (rolling 20 samples)
+                this.pingHistory.push(rtt);
+                if (this.pingHistory.length > PING_WINDOW) this.pingHistory.shift();
+                this.minPing = Math.min(...this.pingHistory);
+                this.maxPing = Math.max(...this.pingHistory);
+
+                // Calculate jitter (avg deviation from mean)
+                const avg = this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length;
+                let jitterSum = 0;
+                for (const p of this.pingHistory) jitterSum += Math.abs(p - avg);
+                this.jitter = Math.round(jitterSum / this.pingHistory.length);
+
+                this._pushPingResult('ack');
+                this._emitPingUpdate();
             });
 
-            this._pingInterval = setInterval(() => {
-                if (this.socket.connected) {
-                    this._lastPingTime = Date.now();
-                    this.socket.emit('ping');
-                }
-            }, 500); // 500ms ping interval for more responsive stats
+            this._pingInterval = setInterval(() => this._sendPing(), 500); // 500ms ping interval
+            this._pingTimeoutInterval = setInterval(() => this._expirePings(), 1000);
 
             // Host ping broadcast (host -> server -> all clients)
             this.socket.on('hostPing', (data) => {
-                this.hostPing = data.ping || 0;
+                if (!data) return;
+                // Ignore reports belonging to a room we are not in anymore
+                if (this._roomId && data.roomId && data.roomId !== this._roomId) return;
+
+                if (data.ping === null || data.ping === undefined) {
+                    // Host left / value was invalidated -> show nothing instead of a stale number
+                    if (!this.hostPing) return;
+                    this.hostPing = null;
+                    this._emitPingUpdate();
+                    return;
+                }
+
+                const ping = Number(data.ping);
+                if (!Number.isFinite(ping) || ping < 0 || ping > 5000) return;
+                this.hostPing = {
+                    ping: Math.round(ping),
+                    ts: Date.now(), // client clock: TTL must not mix clocks
+                    hostId: data.hostId || null,
+                    roomId: data.roomId || null
+                };
+                this._emitPingUpdate();
             });
 
             this.socket.on('playerKicked', (data) => this._trigger('playerKicked', data));
@@ -152,6 +182,106 @@ export class NetworkManager {
             this.socket.on('remoteInput', (data) => this._trigger('remoteInput', data));
             this.socket.on('gamePaused', (data) => this._trigger('gamePaused', data));
         });
+    }
+
+    // === Ping / Latency ===
+
+    _sendPing() {
+        if (!this.socket || !this.socket.connected) return;
+        const n = ++this._pingSeq;
+        this._pendingPings.set(n, Date.now());
+        this.socket.emit('ping', { n });
+    }
+
+    /** Mark unanswered pings as lost so packet loss is actually measured */
+    _expirePings() {
+        if (this._pendingPings.size === 0) return;
+        const now = Date.now();
+        let changed = false;
+        for (const [id, sentAt] of this._pendingPings) {
+            if (now - sentAt > PING_TIMEOUT) {
+                this._pendingPings.delete(id);
+                this._pushPingResult('lost');
+                changed = true;
+            }
+        }
+        if (changed) this._emitPingUpdate();
+    }
+
+    _pushPingResult(result) {
+        this._pingWindow.push(result);
+        if (this._pingWindow.length > PING_WINDOW) this._pingWindow.shift();
+        const lost = this._pingWindow.filter(r => r === 'lost').length;
+        this.packetLoss = Math.round((lost / this._pingWindow.length) * 100);
+    }
+
+    _emitPingUpdate() {
+        const avg = this.pingHistory.length
+            ? this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length
+            : null;
+        this._trigger('pingUpdate', {
+            ping: this.ping, // null until a real pong arrives
+            jitter: this.jitter,
+            minPing: this.minPing,
+            maxPing: this.maxPing,
+            avgPing: avg != null ? Math.round(avg) : null,
+            packetLoss: this.packetLoss,
+            hostPing: this.getHostPing()
+        });
+    }
+
+    /**
+     * Host's ping in ms, or null when unknown/stale.
+     * Never returns a value from another room or an expired report.
+     */
+    getHostPing() {
+        if (!this.hostPing) return null;
+        if (this._roomId && this.hostPing.roomId && this.hostPing.roomId !== this._roomId) return null;
+        if (Date.now() - this.hostPing.ts > HOST_PING_TTL) return null;
+        return this.hostPing.ping;
+    }
+
+    /** Scope host ping tracking to a room (null = not in a room) */
+    setRoomScope(roomId) {
+        const next = roomId || null;
+        const changed = this.hostPing && this.hostPing.roomId !== next;
+        this._roomId = next;
+        if (changed) {
+            this.hostPing = null;
+            this._emitPingUpdate();
+        }
+    }
+
+    /** Forget the host ping (room change, host left, disconnect) */
+    resetHostPing() {
+        if (!this.hostPing) return;
+        this.hostPing = null;
+        this._emitPingUpdate();
+    }
+
+    /** Forget every RTT measurement (disconnect / reconnect / room change) */
+    resetMeasurements() {
+        this.ping = null;
+        this.pingHistory = [];
+        this.minPing = null;
+        this.maxPing = null;
+        this.jitter = null;
+        this.packetLoss = 0;
+        this._pendingPings.clear();
+        this._pingWindow = [];
+        this.hostPing = null;
+        this._emitPingUpdate();
+    }
+
+    _stopPingTimers() {
+        if (this._pingInterval) {
+            clearInterval(this._pingInterval);
+            this._pingInterval = null;
+        }
+        if (this._pingTimeoutInterval) {
+            clearInterval(this._pingTimeoutInterval);
+            this._pingTimeoutInterval = null;
+        }
     }
 
     // === Room Management ===
@@ -279,10 +409,7 @@ export class NetworkManager {
 
     /** Clean up connection resources */
     _cleanupConnection() {
-        if (this._pingInterval) {
-            clearInterval(this._pingInterval);
-            this._pingInterval = null;
-        }
+        this._stopPingTimers();
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;

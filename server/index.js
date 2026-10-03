@@ -76,18 +76,34 @@ io.on('connection', (socket) => {
     });
 
     // --- Ping/Pong ---
-    socket.on('ping', () => {
-        socket.emit('pong');
+    // Client sends { n: <sequence> } so it can match the reply to a specific
+    // request instead of guessing from a single shared timestamp.
+    socket.on('ping', (data) => {
+        const n = data && typeof data.n === 'number' ? data.n : null;
+        socket.emit('pong', { n });
     });
 
     // --- Host Ping Broadcast (for Local rooms)
     socket.on('hostPing', (payload) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
-        // Only accept host pings from the room creator/admin
-        if (socket.id !== room.creatorId && socket.id !== room.adminId) return;
-        // Broadcast host ping to everyone in room (including sender for sync)
-        io.to(room.id).emit('hostPing', { ping: payload.ping });
+        // Only the current host may report a host ping. `room.adminId` does not
+        // exist on Room (only hostId/creatorId), so the hostId check is the
+        // authoritative one.
+        if (!room.hostId || socket.id !== room.hostId) return;
+
+        const ping = Number(payload?.ping);
+        if (!Number.isFinite(ping) || ping < 0 || ping > 5000) return;
+
+        room.setHostPing(Math.round(ping));
+        // Broadcast to everyone in the room (including the host, which simply
+        // ignores its own value) so the UI never double-counts it.
+        io.to(room.id).emit('hostPing', {
+            roomId: room.id,
+            hostId: room.hostId,
+            ping: Math.round(ping),
+            ts: Date.now()
+        });
     });
 
     // --- Create Room ---
@@ -522,6 +538,9 @@ function leaveCurrentRoom(socket) {
             socket.leave(roomId);
             playerRooms.delete(socket.id);
 
+            // The leaving host's ping is no longer meaningful for this room
+            room.clearHostPing('hostLeft');
+
             // Transfer host to next player
             if (room.players.size > 0) {
                 const newHost = room.players.values().next().value;
@@ -551,6 +570,7 @@ function leaveCurrentRoom(socket) {
 
         // Delete empty rooms
         if (remaining === 0) {
+            room.clearHostPing('roomClosed');
             room.game.stop();
             rooms.delete(roomId);
             console.log(`[Server] Room deleted: ${roomId}`);

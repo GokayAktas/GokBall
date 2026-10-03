@@ -2416,6 +2416,14 @@ select.input option {
 .stat-ping .stat-icon { color: var(--green); }
 .stat-ping .stat-value { color: var(--green); }
 
+.stat-host-ping .stat-icon,
+.stat-host-ping .stat-value { color: #FFC400; }
+
+/* Ping quality: only applied when a real measurement exists */
+.stat-value.is-good { color: var(--green); }
+.stat-value.is-fair { color: #FFC400; }
+.stat-value.is-bad { color: var(--red); }
+
 .stat-fps .stat-icon { color: var(--blue); }
 .stat-fps .stat-value { color: var(--blue); }
 

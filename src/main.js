@@ -22,6 +22,11 @@ import { SettingsModal } from './ui/components/SettingsModal.js';
 import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 
+// Used for snapshot interpolation while no latency measurement exists yet.
+const DEFAULT_INTERPOLATION_DELAY = 40;
+// How often the host reports its own ping to the room.
+const HOST_PING_BROADCAST_MS = 2000;
+
 class GokBallApp {
     constructor() {
         this.network = new NetworkManager();
@@ -73,6 +78,7 @@ class GokBallApp {
         this._hostTimeLimit = 180;
         this._hostKickOffTeam = 'red';
         this._hostAuthoritySendCounter = 0;
+        this._hostPingInterval = null;
         this._hostLastGoalTeam = null; // Track last scored team for authority state
 
         // Pause state
@@ -182,6 +188,7 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
+            <div class="stat-item stat-host-ping hidden" id="hostPingItem"><span class="stat-icon">👑</span><span class="stat-value" id="hostPingValue">--</span><span class="stat-unit">ms</span></div>
             <div class="stat-item stat-fps"><span class="stat-icon">🎮</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
@@ -190,14 +197,30 @@ class GokBallApp {
         this.network.on('pingUpdate', (data) => {
             const pingEl = document.getElementById('pingValue');
             if (pingEl) {
-                // Combined ping: player's own + host's connection to server
-                const combinedPing = data.ping + (this.network.hostPing || 0);
-                pingEl.textContent = combinedPing;
+                // Show a number ONLY when a real round trip was measured
+                pingEl.textContent = data.ping != null ? data.ping : '--';
+                this._applyPingColor(pingEl, data.ping);
             }
-            // Dynamic interpolation delay: estimatedLatency + 20ms buffer, clamped 30-50ms
+
+            // Host ping is shown separately and never added to the own ping
+            // (adding it made the host see 2x its real ping).
+            const hostPingItem = document.getElementById('hostPingItem');
+            const hostPingEl = document.getElementById('hostPingValue');
+            const showHostPing = data.hostPing != null && this._isHostAuthority && !this._isHost();
+            if (hostPingItem) hostPingItem.classList.toggle('hidden', !showHostPing);
+            if (hostPingEl) {
+                hostPingEl.textContent = showHostPing ? data.hostPing : '--';
+                if (showHostPing) this._applyPingColor(hostPingEl, data.hostPing);
+            }
+
+            // Dynamic interpolation delay: half of the round trip + buffer,
+            // clamped 30-50ms. Without a measurement we keep a neutral default
+            // instead of pretending to know the latency.
             if (this._snapshotBuffer) {
-                const estimatedLatency = (data.ping + (this.network.hostPing || 0)) / 2;
-                this._snapshotBuffer.interpolationDelay = Math.max(30, Math.min(50, estimatedLatency + 20));
+                const latency = this._effectiveLatency(data.ping, data.hostPing);
+                this._snapshotBuffer.interpolationDelay = latency == null
+                    ? DEFAULT_INTERPOLATION_DELAY
+                    : Math.max(30, Math.min(50, latency / 2 + 20));
             }
         });
 
@@ -237,6 +260,9 @@ class GokBallApp {
     leaveRoom() {
         this.network.leaveRoom();
         this.stopGame();
+        this._stopHostPingBroadcast();
+        this.network.setRoomScope(null);
+        this.network.resetHostPing();
         this.currentRoomData = null;
         this.ui.showScreen('mainMenu');
     }
@@ -592,6 +618,50 @@ class GokBallApp {
     /** Check if this client is the room creator/host */
     _isHost() {
         return this.currentRoomData?.creatorId === this.network.socket?.id;
+    }
+
+    /**
+     * Round trip that actually matters for this client.
+     * Host-authority clients also depend on the host's connection, so their
+     * effective latency is own RTT + host RTT. Returns null when unknown.
+     */
+    _effectiveLatency(ownPing, hostPing) {
+        if (ownPing == null) return null;
+        let latency = ownPing;
+        if (this._isHostAuthority && !this._isHost() && hostPing != null) latency += hostPing;
+        return latency;
+    }
+
+    /** Color a ping value by quality; unmeasured values stay neutral */
+    _applyPingColor(el, ping) {
+        el.classList.remove('is-good', 'is-fair', 'is-bad');
+        if (ping == null) return;
+        if (ping < 80) el.classList.add('is-good');
+        else if (ping < 150) el.classList.add('is-fair');
+        else el.classList.add('is-bad');
+    }
+
+    /**
+     * Report our own ping to the room. Runs on its own timer (not tied to the
+     * physics loop) so the value is also available in the lobby and while the
+     * game is stopped. Sends null when we have no measurement, which makes
+     * clients show "--" instead of a made-up number.
+     */
+    _startHostPingBroadcast() {
+        this._stopHostPingBroadcast();
+        const send = () => {
+            if (!this._isHost() || !this.network.socket?.connected) return;
+            this.network.socket.emit('hostPing', { ping: this.network.ping });
+        };
+        send();
+        this._hostPingInterval = setInterval(send, HOST_PING_BROADCAST_MS);
+    }
+
+    _stopHostPingBroadcast() {
+        if (this._hostPingInterval) {
+            clearInterval(this._hostPingInterval);
+            this._hostPingInterval = null;
+        }
     }
 
     /**
@@ -1104,11 +1174,6 @@ class GokBallApp {
             kickOffTeam: this._hostKickOffTeam,
             lastProcessedSeq
         });
-
-        // Broadcast host ping to room every 2 seconds (120 frames at 60fps)
-        if (this._hostAuthoritySendCounter % 120 === 0) {
-            this.network.socket?.emit('hostPing', { ping: this.network.ping || 0 });
-        }
     }
 
     /** Setup callback handlers for network events */
@@ -1116,14 +1181,20 @@ class GokBallApp {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
+            this.network.setRoomScope(data.roomId);
+            this.network.resetHostPing();
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
+            this._startHostPingBroadcast();
             this.ui.showScreen('roomLobby', data);
         });
 
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
+            // Scope latency tracking to this room: any host ping reported for a
+            // previous room must not be displayed here.
+            this.network.setRoomScope(data.roomId);
             this.stadiumData = data.stadium;
             this._currentMapId = data.mapId || null;
             this._currentMapHash = data.mapHash || null;
@@ -1175,6 +1246,12 @@ class GokBallApp {
                 if (data.players) this.currentRoomData.players = data.players;
                 this.currentRoomData.adminId = data.playerId;
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+            // Host transfer: keep creatorId in sync so _isHost() stays correct
+            if (this.currentRoomData && data.playerId && data.playerId === this.network.playerId) {
+                this.currentRoomData.creatorId = data.playerId;
+                this.network.resetHostPing();
+                this._startHostPingBroadcast();
             }
         });
 

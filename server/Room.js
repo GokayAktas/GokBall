@@ -112,6 +112,7 @@ export class Room {
         this.bannedIPs = new Set();
         this.hostId = null;
         this.creatorId = null; // The original room creator
+        this.hostPing = null; // { ping, ts, hostId } - last valid host ping report
         this.teamsLocked = false;
         this._closing = false; // Flag to prevent recursive cleanup
         this.playerSpeedMultiplier = options.playerSpeedMultiplier || 1.0;
@@ -220,6 +221,8 @@ export class Room {
 
         // Transfer admin if host left
         if (this.hostId === socketId && this.players.size > 0) {
+            // Old host's ping must not be shown as if it still belongs to this room
+            this.clearHostPing('hostLeft');
             const newHost = this.players.values().next().value;
             newHost.isAdmin = true;
             this.hostId = newHost.id;
@@ -847,6 +850,32 @@ export class Room {
         }
     }
 
+    /**
+     * Store the host's reported ping (callers must validate the value first)
+     */
+    setHostPing(ping) {
+        this.hostPing = { ping, ts: Date.now(), hostId: this.hostId };
+    }
+
+    /**
+     * Drop the stored host ping and tell clients it is no longer valid,
+     * so nobody keeps displaying a stale number
+     */
+    clearHostPing(reason = 'cleared') {
+        if (!this.hostPing) return;
+        this.hostPing = null;
+        this.broadcast('hostPing', { roomId: this.id, hostId: null, ping: null, reason });
+    }
+
+    /**
+     * Host ping info, or null when unknown/stale (older than maxAge)
+     */
+    getHostPingInfo(maxAge = 5000) {
+        if (!this.hostPing) return null;
+        if (Date.now() - this.hostPing.ts > maxAge) return null;
+        return { ...this.hostPing };
+    }
+
     getTeamPlayers(team) {
         return [...this.players.values()].filter(p => p.team === team);
     }
@@ -869,6 +898,7 @@ export class Room {
             teamColors: this.teamColors,
             roomType: this.roomType,
             playerSpeedMultiplier: this.playerSpeedMultiplier,
+            host: this.getHostPingInfo(),
             game: this.game.getInfo(),
             chatHistory: this.chatHistory.slice()
         };
