@@ -195,7 +195,6 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
-            <div class="stat-item stat-ping-graph"><canvas id="pingGraph" width="132" height="26"></canvas></div>
             <div class="stat-item stat-fps"><span class="stat-icon">🎮</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
@@ -208,7 +207,6 @@ class GokBallApp {
                 pingEl.textContent = data.ping != null ? data.ping : '--';
                 this._applyPingColor(pingEl, data.ping);
             }
-            this._drawPingGraph(data.pingGraph);
 
             // Dynamic interpolation delay: half of the round trip + buffer,
             // clamped 30-50ms. Without a measurement we keep a neutral default
@@ -222,7 +220,7 @@ class GokBallApp {
         });
 
         // Latency snapshot published by the server every 2 seconds.
-        // Values are measured by the server, like HaxBall does it.
+        // Values are measured by the server, not self-reported.
         this.network.on('playerPings', (data) => this._applyPlayerPings(data));
 
         this.network.on('disconnect', () => {
@@ -655,43 +653,7 @@ class GokBallApp {
         el.classList.add(`is-${level}`);
     }
 
-    /**
-     * HaxBall-style ping graph: one bar per sample, red bars mark lost packets.
-     */
-    _drawPingGraph(samples) {
-        const canvas = document.getElementById('pingGraph');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const dpr = window.devicePixelRatio || 1;
-        const w = canvas.clientWidth || 132;
-        const h = canvas.clientHeight || 26;
-        if (canvas.width !== Math.round(w * dpr)) {
-            canvas.width = Math.round(w * dpr);
-            canvas.height = Math.round(h * dpr);
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, w, h);
-
-        const data = samples || this.network.pingGraph || [];
-        if (data.length === 0) return;
-
-        const maxMs = 250; // graph scale
-        const barW = w / data.length;
-        for (let i = 0; i < data.length; i++) {
-            const sample = data[i];
-            const x = i * barW;
-            if (sample == null) {
-                // Lost packet -> full height red bar (HaxBall's "red bars")
-                ctx.fillStyle = '#FF5252';
-                ctx.fillRect(x, 0, Math.max(1, barW - 0.5), h);
-                continue;
-            }
-            const ratio = Math.min(1, sample / maxMs);
-            const barH = Math.max(2, ratio * h);
-            ctx.fillStyle = sample < 100 ? '#00E676' : (sample < 200 ? '#FFC400' : '#FF5252');
-            ctx.fillRect(x, h - barH, Math.max(1, barW - 0.5), barH);
-        }
-    }
+    
 
     /**
      * Merge the latency snapshot the server publishes every 2 seconds into the
@@ -725,7 +687,7 @@ class GokBallApp {
     }
 
     /**
-     * HaxBall's /handicap: our own input is applied late so the lag we
+     * /handicap: our own input is applied late so the lag we
      * voluntarily add is actually felt. The delay is decided by the server.
      */
     _getHandicappedInput(inputState) {
@@ -1270,6 +1232,8 @@ class GokBallApp {
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
+            // New room: force the next ping snapshot to repaint the player list
+            this._pingSignature = null;
             this.stadiumData = data.stadium;
             this._currentMapId = data.mapId || null;
             this._currentMapHash = data.mapHash || null;
@@ -1474,6 +1438,20 @@ class GokBallApp {
             }
         });
         
+        // Room closed (the host left, so the room is gone)
+        this.network.on('roomClosed', (data) => {
+            this._isHostAuthority = false;
+            this._hostRtt = null;
+            this._inputDelay = 0;
+            this._resetHandicapInput();
+            this.stopGame();
+            this.currentRoomData = null;
+
+            const reason = data?.reason || 'Oda sahibi ayrıldı';
+            alert(`${reason}.\n\nOda kapatıldı, ana menüye dönüyorsun.`);
+            this.ui.showScreen('mainMenu');
+        });
+
         // Game stopped (admin clicked stop)
         this.network.on('gameStopped', (data) => {
             this._isHostAuthority = false;

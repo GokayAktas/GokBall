@@ -205,31 +205,21 @@ export class Room {
      */
     removePlayer(socketId) {
         const player = this.players.get(socketId);
-        if (!player) return;
+        if (!player) return this.players.size;
 
-        // Remove player disc from game if playing
-        if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-            const discIdx = this.game.playerDiscs.get(socketId);
-            if (discIdx !== undefined) {
-                this.game.physics.removeDisc(discIdx);
-                this.game.playerDiscs.delete(socketId);
-                this.game.rebuildPlayerDiscMap();
-            }
+        // Always drop the player's disc from the pitch, whatever the game
+        // state is. Leaving players must not keep running around as a ghost.
+        const discIdx = this.game.playerDiscs.get(socketId);
+        if (discIdx !== undefined) {
+            this.game.physics.removeDisc(discIdx);
+            this.game.playerDiscs.delete(socketId);
+            this.game.rebuildPlayerDiscMap();
         }
+
+        // Drop any queued input so a stale keypress cannot keep the disc moving
+        this.game._lastInputSeq?.delete?.(socketId);
 
         this.players.delete(socketId);
-
-        // Transfer admin if host left
-        if (this.hostId === socketId && this.players.size > 0) {
-            const newHost = this.players.values().next().value;
-            newHost.isAdmin = true;
-            this.hostId = newHost.id;
-            this.broadcast('adminUpdate', {
-                playerId: newHost.id,
-                isAdmin: true,
-                players: this.getPlayerList()
-            });
-        }
 
         // Broadcast leave message to chat for in-game display
         this.broadcast('chatMessage', {
@@ -256,6 +246,31 @@ export class Room {
         }
 
         return this.players.size;
+    }
+
+    /**
+     * Close the room for good: stop the match and tell everyone left in it
+     * that the room is gone. Used when the host leaves - the room does not
+     * survive its host.
+     */
+    close(reason = 'Oda sahibi ayrıldı') {
+        if (this._closing) return;
+        this._closing = true;
+
+        this.game.stop();
+        this.broadcast('roomClosed', { reason });
+        this.broadcast('chatMessage', {
+            playerName: '🏟 SİSTEM',
+            message: `🔒 Oda kapatıldı: ${reason}`,
+            team: 'spectator',
+            system: true
+        });
+
+        // Detach every socket so the room namespace is released
+        for (const player of this.players.values()) {
+            try { player.socket.leave(this.id); } catch { /* socket already gone */ }
+        }
+        this.players.clear();
     }
 
     /**
@@ -822,7 +837,7 @@ export class Room {
                 }
                 break;
             case '/handicap': {
-                // HaxBall's ping handicap: add lag to yourself while removing
+                // Ping handicap: add lag to yourself while removing
                 // the lag advantage your connection gives you.
                 const raw = Number(parts[1]);
                 if (!parts[1] || !Number.isFinite(raw) || raw < 0) {
@@ -886,7 +901,7 @@ export class Room {
 
     /**
      * Latency snapshot for the player list. Sent every 2 seconds, matching
-     * HaxBall's update cadence for clients that are not the authority.
+     * Update cadence for clients that are not the authority.
      */
     getPingList() {
         return [...this.players.values()].map(p => ({
@@ -899,7 +914,7 @@ export class Room {
     }
 
     /**
-     * HaxBall's /handicap fairness model.
+     * /handicap fairness model.
      *
      * A handicapper's own input is delayed by their handicap, and every other
      * player's input is delayed by the same amount. Nobody gains an advantage:

@@ -1,6 +1,6 @@
 /**
  * Input Manager - Captures keyboard input for player movement
- * Default keys match Haxball: Arrow keys + X (kick)
+ * Default keys: Arrow keys + X (kick)
  */
 export class InputManager {
     constructor() {

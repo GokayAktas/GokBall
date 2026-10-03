@@ -5,3 +5,10 @@ dist
 .DS_Store
 .vscode
 .idea
+
+# Local-only scratch output (not part of the published source)
+archived_builds/
+devtools/
+maps/
+.freebuff/
+*.local

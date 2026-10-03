@@ -1,6 +1,6 @@
 /**
  * GokBall 2D Physics Engine
- * Haxball-compatible disc-based physics with collision masks
+ * Disc-based physics with collision masks
  */
 
 export const CollisionFlags = {
@@ -226,7 +226,7 @@ export class Physics {
             if (disc.input.left) ax -= 1;
             if (disc.input.right) ax += 1;
 
-            // 2. Normalize diagonal movement (Haxball standard)
+            // 2. Normalize diagonal movement
             const accelMag = Math.sqrt(ax * ax + ay * ay);
             if (accelMag > 0) {
                 const currentAccel = disc.kicking ? (disc.kickingAcceleration || 0.07) : (disc.acceleration || 0.1);

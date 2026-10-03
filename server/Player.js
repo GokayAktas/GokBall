@@ -17,7 +17,7 @@ export class Player {
         this.afk = false; // AFK flag
         this.afkMatchesLeft = 0; // Matches remaining as AFK
 
-        // Latency, measured by the server (HaxBall's "authority measures" rule)
+        // Latency, measured by the server (never self-reported)
         this.pingSamples = []; // raw round trips, newest last
         this.ping = null; // quantized effective ping, null until measured
         this.pingLoss = 0; // probes lost in the last round

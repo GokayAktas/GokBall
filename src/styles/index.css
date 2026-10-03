@@ -290,34 +290,105 @@ body::before {
   gap: var(--space-md);
 }
 
-.menu-footer-tagline {
+.menu-footer-credit {
   font-size: var(--font-sm);
   color: var(--text-muted);
-  max-width: 520px;
-  line-height: 1.5;
   margin: 0;
 }
 
-.menu-footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-md);
-}
-
-.menu-footer-links a {
-  font-family: var(--font-family);
-  font-size: var(--font-sm);
-  font-weight: 600;
+.btn-ghost {
+  background: transparent;
+  border: 2px solid var(--stroke);
   color: var(--text-2);
-  text-decoration: none;
-  padding: 4px 2px;
-  transition: color var(--transition-fast);
+  font-weight: 600;
 }
 
-.menu-footer-links a:hover,
-.menu-footer-links a:focus-visible {
+.btn-ghost:hover,
+.btn-ghost:focus-visible {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  border-color: var(--green);
+}
+
+/* ============================================================
+   Hakkında (About) dialog
+   ============================================================ */
+.about-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(8, 9, 12, 0.78);
+  backdrop-filter: blur(3px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  animation: aboutFade var(--transition-fast) ease-out;
+}
+
+@keyframes aboutFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.about-box {
+  background: var(--panel);
+  border: 2px solid var(--stroke);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-lg);
+  max-width: 460px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: aboutPop var(--transition-fast) ease-out;
+}
+
+@keyframes aboutPop {
+  from { transform: translateY(12px) scale(0.97); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.about-title {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding-bottom: var(--space-sm);
+  border-bottom: 2px solid var(--stroke);
+}
+
+.about-text {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-sm);
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.about-list {
+  margin: 0 0 var(--space-md);
+  padding-left: 20px;
+  font-size: var(--font-sm);
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.about-list li::marker {
   color: var(--green);
+}
+
+.about-author {
+  margin: 0 0 var(--space-lg);
+  font-size: var(--font-sm);
+  color: var(--text-2);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-3);
+  border-left: 3px solid var(--green);
+  border-radius: var(--radius-sm);
 }
 
 /* ============================================================
@@ -2416,16 +2487,13 @@ select.input option {
 .stat-ping .stat-icon { color: var(--green); }
 .stat-ping .stat-value { color: var(--green); }
 
-.stat-ping-graph { padding: 2px 6px; }
-.stat-ping-graph canvas { display: block; width: 132px; height: 26px; }
-
 /* Ping quality: only applied when a real measurement exists */
 .stat-value.is-good { color: var(--green); }
 .stat-value.is-fair { color: #FFC400; }
 .stat-value.is-bad { color: var(--red); }
 
 /* -------------------------------------------
-   Player list ping badges (HaxBall style)
+   Player list ping badges
    ------------------------------------------- */
 .ping-badge {
     font-variant-numeric: tabular-nums;

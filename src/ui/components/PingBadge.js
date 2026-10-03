@@ -1,9 +1,9 @@
 /**
- * Ping badge for the player lists - HaxBall shows every player's ping next to
+ * Ping badge for the player lists - every player's ping is shown next to
  * their nickname in the room player list ("Update: Ping vision!", 2012).
  *
  * The value the server sends is already quantized to 16 ms steps and inflated
- * by jitter, exactly like HaxBall's displayed ping.
+ * by jitter, so the displayed value is the effective ping, not the raw one.
  */
 
 const PING_GOOD_MAX = 100; // < 100 ms -> good

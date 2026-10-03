@@ -1,6 +1,6 @@
 /**
  * Stadium loader and HBS file parser
- * Supports Haxball-compatible .hbs JSON5 format
+ * Supports the .hbs JSON5 stadium format
  */
 import JSON5 from 'json5';
 import { parseCollisionFlag, CollisionFlags } from './Physics.js';

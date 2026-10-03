@@ -4,6 +4,7 @@ import { Server as SocketServer } from 'socket.io';
 import { Room } from './Room.js';
 import { MapManager } from './MapManager.js';
 import { normalizeHex, normalizeAngle } from './utils/colors.js';
+import { attachSignaling, getIceServers } from './signaling.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -54,12 +55,28 @@ const rooms = new Map(); // roomId -> Room
 const playerRooms = new Map(); // socketId -> roomId
 
 // ============================================
+// Rooms per IP limit
+// ============================================
+// A single IP may host at most this many rooms, which keeps one connection from
+// flooding the room list. Raise it with MAX_ROOMS_PER_IP if you run a proxy.
+const MAX_ROOMS_PER_IP = Number(process.env.MAX_ROOMS_PER_IP) || 2;
+
+/** How many rooms the given IP currently hosts. */
+function countRoomsByIp(ip) {
+    let count = 0;
+    for (const room of rooms.values()) {
+        if (room.creatorIp === ip) count++;
+    }
+    return count;
+}
+
+// ============================================
 // Socket.io Event Handling
 // ============================================
 io.on('connection', (socket) => {
     console.log(`[Server] Player connected: ${socket.id}`);
 
-    // Server-side latency measurement state (HaxBall measures, players don't)
+    // Server-side latency measurement state (the server measures, players don't)
     socket.data.net = { seq: 0, pending: new Map(), lost: 0 };
 
     // Log remote address in a standardized way (works with trust proxy)
@@ -86,7 +103,7 @@ io.on('connection', (socket) => {
         socket.emit('pong', { n });
     });
 
-    // --- Latency probes (server measures, like HaxBall's authority does) ---
+    // --- Latency probes (the server measures the round trip itself) ---
     // The server sends a probe, the client answers immediately, and the round
     // trip is measured here so a client can never report a fake value.
     socket.on('netProbeAck', (data) => {
@@ -106,6 +123,16 @@ io.on('connection', (socket) => {
     // --- Create Room ---
     socket.on('createRoom', (options = {}) => {
         const roomName = (options.name || 'GokBall Room').trim();
+        const creatorIp = socket.handshake.address;
+
+        // Per-IP room limit
+        const hostedByIp = countRoomsByIp(creatorIp);
+        if (hostedByIp >= MAX_ROOMS_PER_IP) {
+            socket.emit('roomError', {
+                error: `Bir IP adresinden en fazla ${MAX_ROOMS_PER_IP} oda açılabilir.`
+            });
+            return;
+        }
 
         // Duplicate name check
         for (const r of rooms.values()) {
@@ -126,6 +153,7 @@ io.on('connection', (socket) => {
             roomType: 'host'
         });
 
+        room.creatorIp = creatorIp;
         rooms.set(room.id, room);
 
         const result = room.addPlayer(socket, options.playerName || 'Player');
@@ -198,7 +226,7 @@ io.on('connection', (socket) => {
     });
 
     // --- Admin: Set Team Colors at runtime ---
-    // HaxBall-compatible: { team, angle, avatarColor, colors[] }
+    // Team color config: { team, angle, avatarColor, colors[] }
     socket.on('setTeamColors', (payload) => {
         try {
             const room = getPlayerRoom(socket.id);
@@ -214,7 +242,7 @@ io.on('connection', (socket) => {
             if (!['red', 'blue'].includes(team)) return;
 
             const angle = normalizeAngle(payload.angle);
-            // Accept both avatarColor (HaxBall) and textColor (legacy)
+            // Accept both avatarColor (current) and textColor (legacy)
             const avatarColor = normalizeHex(payload.avatarColor || payload.textColor) || 'FFFFFF';
             const colors = Array.isArray(payload.colors)
                 ? payload.colors.map(c => normalizeHex(c)).filter(Boolean)
@@ -540,34 +568,20 @@ function leaveCurrentRoom(socket) {
 
     const room = rooms.get(roomId);
     if (room) {
-        // HOST MODE: If host (creator) leaves, transfer admin and notify
-        if (socket.id === room.creatorId) {
-            room.players.delete(socket.id);
+        // HOST MODE: the room does not outlive its host. When the host leaves
+        // the room is closed for everyone instead of transferring ownership.
+        if (socket.id === room.creatorId || socket.id === room.hostId) {
             socket.leave(roomId);
-            playerRooms.delete(socket.id);
+            room.close('Oda sahibi ayrıldı');
+            rooms.delete(roomId);
 
-            // The leaving host's ping is no longer meaningful for this room
-            // Transfer host to next player
-            if (room.players.size > 0) {
-                const newHost = room.players.values().next().value;
-                newHost.isAdmin = true;
-                room.hostId = newHost.id;
-                room.creatorId = newHost.id;
-                room.broadcast('adminUpdate', {
-                    playerId: newHost.id,
-                    isAdmin: true,
-                    players: room.getPlayerList()
-                });
-                room.broadcast('chatMessage', {
-                    playerName: 'SİSTEM',
-                    message: `👑 Oda sahibi ayrıldı. Yeni sahip: ${newHost.name}`,
-                    system: true
-                });
-            } else {
-                room.game.stop();
-                rooms.delete(roomId);
+            // Everyone still in the closed room must forget it, otherwise they
+            // would be treated as members of a room that no longer exists.
+            for (const [otherId, otherRoomId] of playerRooms) {
+                if (otherRoomId === roomId) playerRooms.delete(otherId);
             }
-            console.log(`[Server] Host left, transferred ownership: ${roomId}`);
+
+            console.log(`[Server] Host left, room closed: ${roomId}`);
             return;
         }
 
@@ -576,7 +590,7 @@ function leaveCurrentRoom(socket) {
 
         // Delete empty rooms
         if (remaining === 0) {
-            room.game.stop();
+            room.close('Oda boşaldı');
             rooms.delete(roomId);
             console.log(`[Server] Room deleted: ${roomId}`);
         }
@@ -589,7 +603,7 @@ function leaveCurrentRoom(socket) {
 // Latency measurement loop
 // ============================================
 // Every 2 seconds: probe every socket and publish the measured pings, which is
-// the same cadence HaxBall uses for the values shown in the player list.
+// the same cadence used for the values shown in the player list.
 const NET_PROBE_INTERVAL = 2000;
 // A probe unanswered after this long counts as a lost packet ("red bar").
 const NET_PROBE_TIMEOUT = 6000;
@@ -626,7 +640,14 @@ netProbeTimer.unref();
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
     console.log(`[GokBall Server] Running on port ${PORT}`);
+    console.log(`[GokBall Server] Max rooms per IP: ${MAX_ROOMS_PER_IP}`);
+    console.log(`[GokBall Server] ICE servers: ${getIceServers().map(s => s.urls).join(', ')}`);
 });
+
+// --- WebRTC signaling (room discovery + SDP/ICE relay only) ---
+// Game traffic and physics never pass through here: once the peers negotiate a
+// data channel, the host talks to each guest directly.
+attachSignaling(io, { getPlayerRoom });
 
 // --- Optional Admin HTTP Endpoint to change team colors (requires ADMIN_SECRET header) ---
 // POST /admin/rooms/:id/teamColors

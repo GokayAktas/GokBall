@@ -1,5 +1,5 @@
 /**
- * HaxBall-compatible HEX color utilities for GokBall.
+ * HEX color utilities for GokBall.
  * 
  * Normalizes color input to uppercase 6-char hex (no # prefix).
  * Accepts: FFFFFF, #FFFFFF, ffffff, #ffffff
@@ -56,7 +56,7 @@ export function normalizeAngle(angle) {
 }
 
 /**
- * Normalize a HaxBall team color config.
+ * Normalize a team color config.
  * Handles both old { textColor } and new { avatarColor } formats.
  * 
  * @param {object} raw - { angle, textColor?, avatarColor?, colors }
@@ -67,7 +67,7 @@ export function normalizeTeamColors(raw) {
     
     const angle = normalizeAngle(raw.angle);
     
-    // Support both textColor (old) and avatarColor (HaxBall format)
+    // Support both textColor (old) and avatarColor (current format)
     const avatarColor = normalizeHex(raw.avatarColor || raw.textColor);
     if (!avatarColor) return null;
     

@@ -1,6 +1,6 @@
 /**
- * HBSParser - A JSON5-compatible parser for Haxball Stadium (.hbs) files.
- * This implementation follows the logic typically used in Haxball clients.
+ * HBSParser - A JSON5-compatible parser for .hbs stadium definition files.
+ * This implementation follows the classic stadium file layout.
  */
 
 const HBSParser = (function() {

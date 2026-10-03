@@ -8,8 +8,6 @@ import { io } from 'socket.io-client';
 const PING_TIMEOUT = 3000;
 // Rolling window (in samples) used for the packet loss percentage.
 const PING_WINDOW = 20;
-// Samples kept for the HUD ping graph (a lost sample is stored as null).
-const GRAPH_SAMPLES = 60;
 
 export class NetworkManager {
     constructor() {
@@ -27,7 +25,6 @@ export class NetworkManager {
         this.maxPing = null;
         this.jitter = null;
         this.packetLoss = 0;
-        this.pingGraph = []; // last GRAPH_SAMPLES: round trip in ms, null = lost
 
         this._pingSeq = 0;
         this._pendingPings = new Map(); // pingId -> sendTime
@@ -103,6 +100,7 @@ export class NetworkManager {
             this.socket.on('gameState', (state) => this._trigger('gameState', state));
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));
+            this.socket.on('roomClosed', (data) => this._trigger('roomClosed', data));
             this.socket.on('goalScored', (data) => this._trigger('goalScored', data));
             this.socket.on('gameOver', (data) => this._trigger('gameOver', data));
             this.socket.on('chatMessage', (data) => this._trigger('chatMessage', data));
@@ -125,7 +123,6 @@ export class NetworkManager {
 
                 const rtt = Date.now() - sentAt;
                 this.ping = rtt;
-                this._pushGraphSample(rtt);
 
                 // Track history for jitter/min/avg (rolling 20 samples)
                 this.pingHistory.push(rtt);
@@ -148,7 +145,7 @@ export class NetworkManager {
 
             // Server-initiated latency probe. We only echo the sequence number
             // back - the round trip is measured by the server so nobody can
-            // report a ping they do not have (this is how HaxBall does it).
+            // report a ping they do not have.
             this.socket.on('netProbe', (data) => {
                 const n = data && typeof data.n === 'number' ? data.n : null;
                 if (n === null) return;
@@ -187,7 +184,6 @@ export class NetworkManager {
             if (now - sentAt > PING_TIMEOUT) {
                 this._pendingPings.delete(id);
                 this._pushPingResult('lost');
-                this._pushGraphSample(null); // red bar for the lost packet
                 changed = true;
             }
         }
@@ -201,12 +197,6 @@ export class NetworkManager {
         this.packetLoss = Math.round((lost / this._pingWindow.length) * 100);
     }
 
-    /** Keep a bounded history for the HUD ping graph (null marks a lost packet) */
-    _pushGraphSample(sample) {
-        this.pingGraph.push(sample);
-        if (this.pingGraph.length > GRAPH_SAMPLES) this.pingGraph.shift();
-    }
-
     _emitPingUpdate() {
         const avg = this.pingHistory.length
             ? this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length
@@ -217,8 +207,7 @@ export class NetworkManager {
             minPing: this.minPing,
             maxPing: this.maxPing,
             avgPing: avg != null ? Math.round(avg) : null,
-            packetLoss: this.packetLoss,
-            pingGraph: this.pingGraph
+            packetLoss: this.packetLoss
         });
     }
 
@@ -230,7 +219,6 @@ export class NetworkManager {
         this.maxPing = null;
         this.jitter = null;
         this.packetLoss = 0;
-        this.pingGraph = [];
         this._pendingPings.clear();
         this._pingWindow = [];
         this._emitPingUpdate();
@@ -328,7 +316,7 @@ export class NetworkManager {
         this.socket.emit('getMapList');
     }
 
-    // === Admin: Update team colors at runtime (HaxBall-compatible) ===
+    // === Admin: Update team colors at runtime ===
     setTeamColors(payload) {
         // payload: { team: 'red'|'blue', angle, avatarColor, colors: [] }
         if (!this.socket) return;

@@ -1,6 +1,6 @@
 /**
  * AudioManager - Handles sound effects using Web Audio API
- * Generates Haxball-like sounds without needing external files
+ * Generates browser sounds without needing external files
  */
 export class AudioManager {
     constructor() {
@@ -31,7 +31,7 @@ export class AudioManager {
     }
 
     /**
-     * Plays a short 'thud' sound similar to Haxball's kick
+     * Plays a short 'thud' sound similar to a classic arcade kick
      */
     playKick() {
         if (!this.enabled) return;

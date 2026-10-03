@@ -33,23 +33,22 @@ export class MainMenu {
             Odalara Göz At
           </button>
           <button class="btn btn-secondary btn-lg btn-block" id="btnSettings">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M16.36 16.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M16.36 7.64l1.42-1.42"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/>
+              <circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>
+            </svg>
             Ayarlar
           </button>
         </div>
 
         <footer class="menu-footer">
-          <p class="menu-footer-tagline">
-            GokBall, tarayıcıda ücretsiz oynanan gerçek zamanlı çok oyunculu futbol oyunudur.
-            Oda oluştur, arkadaşlarını davet et ve gol atmaya başla — kurulum gerekmez.
-          </p>
-          <nav class="menu-footer-links" aria-label="Site içi bağlantılar">
-            <a href="/" data-screen-link="home" title="Ana menüye dön">Ana Sayfa</a>
-            <a href="/?screen=roomList" data-screen-link="roomList" title="Açık odaları görüntüle">Oda Listesi</a>
-            <a href="/?screen=createRoom" data-screen-link="createRoom" title="Yeni bir oda oluştur">Oda Oluştur</a>
-            <a href="/?screen=settings" data-screen-link="settings" title="Kontrolleri ve görsel ayarları düzenle">Ayarlar</a>
-            <a href="https://github.com/GokayAktas/GokBall" target="_blank" rel="noopener" title="GitHub deposunu aç">GitHub</a>
-          </nav>
+          <button class="btn btn-ghost btn-block" id="btnAbout" aria-haspopup="dialog">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/>
+            </svg>
+            Hakkında
+          </button>
+          <p class="menu-footer-credit">&copy; <span id="footerYear"></span> Gökay &mdash; GokBall</p>
         </footer>
       </div>
     `;
@@ -65,20 +64,8 @@ export class MainMenu {
     // Create floating particles
     this._createParticles();
 
-    // Footer internal links navigate through the SPA router
-    document.querySelectorAll('.menu-footer-links a[data-screen-link]').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const target = link.getAttribute('data-screen-link');
-        if (target === 'home') {
-          this.app.ui.showScreen('mainMenu');
-        } else if (target === 'roomList' || target === 'createRoom') {
-          if (this._saveName()) this.app.ui.showScreen(target);
-        } else if (target === 'settings') {
-          this.app.ui.showScreen('settings');
-        }
-      });
-    });
+    const yearEl = document.getElementById('footerYear');
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
     // Deep links: /?screen=roomList opens the room list directly
     const params = new URLSearchParams(window.location.search);
@@ -104,6 +91,50 @@ export class MainMenu {
 
     document.getElementById('btnSettings')?.addEventListener('click', () => {
       this.app.ui.showScreen('settings');
+    });
+
+    document.getElementById('btnAbout')?.addEventListener('click', () => this._showAbout());
+  }
+
+  /** Hakkında dialog: what GokBall is and who made it. */
+  _showAbout() {
+    const old = document.getElementById('aboutModal');
+    if (old) old.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'aboutModal';
+    overlay.className = 'about-overlay';
+    overlay.innerHTML = `
+      <div class="about-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <h2 id="aboutTitle" class="about-title">Hakkında</h2>
+        <p class="about-text">
+          <strong>GokBall</strong>, tarayıcıda çalışan ücretsiz ve gerçek zamanlı çok oyunculu
+          bir 2D futbol oyunudur. Kurulum gerekmez: bir oda oluştur, arkadaşlarını davet et,
+          kırmızı ve mavi takımlara ayrıl ve gol atmaya başla.
+        </p>
+        <ul class="about-list">
+          <li>Gerçek zamanlı çok oyunculu oda ve maç sistemi</li>
+          <li>Sohbet, takım değiştirme ve skor tablosu</li>
+          <li>Özelleştirilebilir tuş atamaları ve görsel ayarlar</li>
+        </ul>
+        <p class="about-author">
+          GokBall'ı <strong>Gökay</strong> geliştirdi.
+        </p>
+        <button class="btn btn-primary btn-block" id="aboutClose">Kapat</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#aboutClose')?.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') {
+        close();
+        document.removeEventListener('keydown', onKey);
+      }
     });
   }
 

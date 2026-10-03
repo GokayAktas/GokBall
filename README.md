@@ -1,6 +1,6 @@
 # ⚽ GokBall
 
-**GokBall**, tarayıcıda çalışan ücretsiz, gerçek zamanlı çok oyunculu bir futbol oyunudur. Klasik HaxBall tarzı 2D top oyununu modern bir arayüzle sunar: bir oda oluştur, arkadaşlarınla aynı odaya katıl, kırmızı ve mavi takımlara ayrıl ve gol atmak için mücadele et. Kurulum gerekmez — tarayıcıdan [gokball.vercel.app](https://gokball.vercel.app/) adresine gir ve oynamaya başla.
+**GokBall**, tarayıcıda çalışan ücretsiz, gerçek zamanlı çok oyunculu bir futbol oyunudur. Klasik 2D top oyununu modern bir arayüzle sunar: bir oda oluştur, arkadaşlarınla aynı odaya katıl, kırmızı ve mavi takımlara ayrıl ve gol atmak için mücadele et. Kurulum gerekmez — tarayıcıdan [gokball.vercel.app](https://gokball.vercel.app/) adresine gir ve oynamaya başla.
 
 ## Özellikler
 
