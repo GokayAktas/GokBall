@@ -21,11 +21,12 @@ import { InGameMenu } from './ui/components/InGameMenu.js';
 import { SettingsModal } from './ui/components/SettingsModal.js';
 import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
+import { pingLevel } from './ui/components/PingBadge.js';
 
 // Used for snapshot interpolation while no latency measurement exists yet.
 const DEFAULT_INTERPOLATION_DELAY = 40;
-// How often the host reports its own ping to the room.
-const HOST_PING_BROADCAST_MS = 2000;
+// The host's measured RTT older than this is treated as unknown.
+const HOST_RTT_TTL = 6000;
 
 class GokBallApp {
     constructor() {
@@ -78,7 +79,13 @@ class GokBallApp {
         this._hostTimeLimit = 180;
         this._hostKickOffTeam = 'red';
         this._hostAuthoritySendCounter = 0;
-        this._hostPingInterval = null;
+
+        // Latency data published by the server (every 2s)
+        this._hostRtt = null; // { ping, ts } for the room host
+        this._inputDelay = 0; // /handicap delay in ms, applied to own input
+        this._handicapQueue = [];
+        this._handicapLastInput = null;
+        this._pingSignature = null;
         this._hostLastGoalTeam = null; // Track last scored team for authority state
 
         // Pause state
@@ -188,7 +195,7 @@ class GokBallApp {
         statsHUD.className = 'stats-hud hidden';
         statsHUD.innerHTML = `
             <div class="stat-item stat-ping"><span class="stat-icon">📶</span><span class="stat-value" id="pingValue">--</span><span class="stat-unit">ms</span></div>
-            <div class="stat-item stat-host-ping hidden" id="hostPingItem"><span class="stat-icon">👑</span><span class="stat-value" id="hostPingValue">--</span><span class="stat-unit">ms</span></div>
+            <div class="stat-item stat-ping-graph"><canvas id="pingGraph" width="132" height="26"></canvas></div>
             <div class="stat-item stat-fps"><span class="stat-icon">🎮</span><span class="stat-value" id="fpsValue">0</span><span class="stat-unit">fps</span></div>
         `;
         document.body.appendChild(statsHUD);
@@ -201,27 +208,27 @@ class GokBallApp {
                 pingEl.textContent = data.ping != null ? data.ping : '--';
                 this._applyPingColor(pingEl, data.ping);
             }
-
-            // Host ping is shown separately and never added to the own ping
-            // (adding it made the host see 2x its real ping).
-            const hostPingItem = document.getElementById('hostPingItem');
-            const hostPingEl = document.getElementById('hostPingValue');
-            const showHostPing = data.hostPing != null && this._isHostAuthority && !this._isHost();
-            if (hostPingItem) hostPingItem.classList.toggle('hidden', !showHostPing);
-            if (hostPingEl) {
-                hostPingEl.textContent = showHostPing ? data.hostPing : '--';
-                if (showHostPing) this._applyPingColor(hostPingEl, data.hostPing);
-            }
+            this._drawPingGraph(data.pingGraph);
 
             // Dynamic interpolation delay: half of the round trip + buffer,
             // clamped 30-50ms. Without a measurement we keep a neutral default
             // instead of pretending to know the latency.
             if (this._snapshotBuffer) {
-                const latency = this._effectiveLatency(data.ping, data.hostPing);
+                const latency = this._effectiveLatency(data.ping);
                 this._snapshotBuffer.interpolationDelay = latency == null
                     ? DEFAULT_INTERPOLATION_DELAY
                     : Math.max(30, Math.min(50, latency / 2 + 20));
             }
+        });
+
+        // Latency snapshot published by the server every 2 seconds.
+        // Values are measured by the server, like HaxBall does it.
+        this.network.on('playerPings', (data) => this._applyPlayerPings(data));
+
+        this.network.on('disconnect', () => {
+            this._hostRtt = null;
+            this._inputDelay = 0;
+            this._resetHandicapInput();
         });
 
         // Room Update -> Update InGameMenu if visible
@@ -260,9 +267,9 @@ class GokBallApp {
     leaveRoom() {
         this.network.leaveRoom();
         this.stopGame();
-        this._stopHostPingBroadcast();
-        this.network.setRoomScope(null);
-        this.network.resetHostPing();
+        this._hostRtt = null;
+        this._inputDelay = 0;
+        this._resetHandicapInput();
         this.currentRoomData = null;
         this.ui.showScreen('mainMenu');
     }
@@ -382,7 +389,7 @@ class GokBallApp {
 
                     // Local player input
                     const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                    if (myDisc) myDisc.input = inputState;
+                    if (myDisc) myDisc.input = this._getHandicappedInput(inputState);
 
                     // Remote player inputs
                     for (const [playerId, ri] of this._remoteInputs) {
@@ -623,45 +630,119 @@ class GokBallApp {
     /**
      * Round trip that actually matters for this client.
      * Host-authority clients also depend on the host's connection, so their
-     * effective latency is own RTT + host RTT. Returns null when unknown.
+     * effective latency is own RTT + the host's server-measured RTT.
+     * Returns null when unknown.
      */
-    _effectiveLatency(ownPing, hostPing) {
+    _effectiveLatency(ownPing) {
         if (ownPing == null) return null;
         let latency = ownPing;
+        const hostPing = this._getHostRtt();
         if (this._isHostAuthority && !this._isHost() && hostPing != null) latency += hostPing;
         return latency;
+    }
+
+    /** Server-measured RTT of the room host, or null when unknown/stale */
+    _getHostRtt() {
+        if (!this._hostRtt || Date.now() - this._hostRtt.ts > HOST_RTT_TTL) return null;
+        return this._hostRtt.ping;
     }
 
     /** Color a ping value by quality; unmeasured values stay neutral */
     _applyPingColor(el, ping) {
         el.classList.remove('is-good', 'is-fair', 'is-bad');
-        if (ping == null) return;
-        if (ping < 80) el.classList.add('is-good');
-        else if (ping < 150) el.classList.add('is-fair');
-        else el.classList.add('is-bad');
+        const level = pingLevel(ping);
+        if (level === 'unknown') return;
+        el.classList.add(`is-${level}`);
     }
 
     /**
-     * Report our own ping to the room. Runs on its own timer (not tied to the
-     * physics loop) so the value is also available in the lobby and while the
-     * game is stopped. Sends null when we have no measurement, which makes
-     * clients show "--" instead of a made-up number.
+     * HaxBall-style ping graph: one bar per sample, red bars mark lost packets.
      */
-    _startHostPingBroadcast() {
-        this._stopHostPingBroadcast();
-        const send = () => {
-            if (!this._isHost() || !this.network.socket?.connected) return;
-            this.network.socket.emit('hostPing', { ping: this.network.ping });
-        };
-        send();
-        this._hostPingInterval = setInterval(send, HOST_PING_BROADCAST_MS);
+    _drawPingGraph(samples) {
+        const canvas = document.getElementById('pingGraph');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvas.clientWidth || 132;
+        const h = canvas.clientHeight || 26;
+        if (canvas.width !== Math.round(w * dpr)) {
+            canvas.width = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+
+        const data = samples || this.network.pingGraph || [];
+        if (data.length === 0) return;
+
+        const maxMs = 250; // graph scale
+        const barW = w / data.length;
+        for (let i = 0; i < data.length; i++) {
+            const sample = data[i];
+            const x = i * barW;
+            if (sample == null) {
+                // Lost packet -> full height red bar (HaxBall's "red bars")
+                ctx.fillStyle = '#FF5252';
+                ctx.fillRect(x, 0, Math.max(1, barW - 0.5), h);
+                continue;
+            }
+            const ratio = Math.min(1, sample / maxMs);
+            const barH = Math.max(2, ratio * h);
+            ctx.fillStyle = sample < 100 ? '#00E676' : (sample < 200 ? '#FFC400' : '#FF5252');
+            ctx.fillRect(x, h - barH, Math.max(1, barW - 0.5), barH);
+        }
     }
 
-    _stopHostPingBroadcast() {
-        if (this._hostPingInterval) {
-            clearInterval(this._hostPingInterval);
-            this._hostPingInterval = null;
+    /**
+     * Merge the latency snapshot the server publishes every 2 seconds into the
+     * current player list and refresh whichever list is visible.
+     */
+    _applyPlayerPings(data) {
+        const players = this.currentRoomData?.players;
+        if (!players || !data?.pings) return;
+
+        for (const entry of data.pings) {
+            const player = players.find(p => p.id === entry.id);
+            if (player) Object.assign(player, entry);
+
+            if (entry.id === this.network.playerId) {
+                this._inputDelay = entry.inputDelay || 0;
+                if (this._inputDelay === 0) this._resetHandicapInput();
+            } else if (this.currentRoomData.creatorId === entry.id) {
+                this._hostRtt = { ping: entry.ping, ts: Date.now() };
+            }
         }
+
+        // Only rebuild the lists when a value actually changed, so an in
+        // progress admin drag is not interrupted every 2 seconds
+        const signature = data.pings.map(p => `${p.id}:${p.ping}:${p.pingLoss}:${p.handicap}`).join('|');
+        if (signature === this._pingSignature) return;
+        this._pingSignature = signature;
+
+        const lobby = this.ui.screens.roomLobby;
+        if (this.ui.currentScreen === 'roomLobby' && lobby) lobby.updatePlayers(players);
+        if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+    }
+
+    /**
+     * HaxBall's /handicap: our own input is applied late so the lag we
+     * voluntarily add is actually felt. The delay is decided by the server.
+     */
+    _getHandicappedInput(inputState) {
+        const delay = this._inputDelay || 0;
+        if (delay <= 0) return inputState;
+
+        const now = performance.now();
+        this._handicapQueue.push({ at: now + delay, input: inputState });
+        while (this._handicapQueue.length && this._handicapQueue[0].at <= now) {
+            this._handicapLastInput = this._handicapQueue.shift().input;
+        }
+        return this._handicapLastInput || inputState;
+    }
+
+    _resetHandicapInput() {
+        this._handicapQueue = [];
+        this._handicapLastInput = null;
     }
 
     /**
@@ -1181,20 +1262,14 @@ class GokBallApp {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
-            this.network.setRoomScope(data.roomId);
-            this.network.resetHostPing();
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
-            this._startHostPingBroadcast();
             this.ui.showScreen('roomLobby', data);
         });
 
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
-            // Scope latency tracking to this room: any host ping reported for a
-            // previous room must not be displayed here.
-            this.network.setRoomScope(data.roomId);
             this.stadiumData = data.stadium;
             this._currentMapId = data.mapId || null;
             this._currentMapHash = data.mapHash || null;
@@ -1250,8 +1325,6 @@ class GokBallApp {
             // Host transfer: keep creatorId in sync so _isHost() stays correct
             if (this.currentRoomData && data.playerId && data.playerId === this.network.playerId) {
                 this.currentRoomData.creatorId = data.playerId;
-                this.network.resetHostPing();
-                this._startHostPingBroadcast();
             }
         });
 

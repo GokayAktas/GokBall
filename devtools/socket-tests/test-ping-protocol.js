@@ -1,14 +1,15 @@
 /**
- * Ping / hostPing protocol test
+ * Ping / handicap protocol test (HaxBall style: the authority measures)
  *
- * Run the server first (PORT=3011 ALLOW_ALL_ORIGINS=true npm run server),
- * then: node devtools/socket-tests/test-ping-protocol.js
+ * Run the server first:
+ *   PORT=3011 ALLOW_ALL_ORIGINS=true npm run server
+ * then:
+ *   node devtools/socket-tests/test-ping-protocol.js
  *
  * Verifies:
- *  - pong echoes the ping sequence number
- *  - only the host can broadcast hostPing, and it carries roomId/hostId
- *  - invalid ping values are rejected (no broadcast)
- *  - host leaving invalidates the host ping (ping: null)
+ *  - the server probes and measures the round trip itself
+ *  - every 2s it publishes a quantized ping per player (null until measured)
+ *  - /handicap changes the handicap and produces the equal input delay
  */
 import { io } from 'socket.io-client';
 
@@ -27,65 +28,76 @@ const guest = io(URL, opts);
 let roomId = null;
 const hostPings = [];
 const guestPings = [];
+const guestChats = [];
+const guestRoomUpdates = [];
 
-host.on('hostPing', (d) => hostPings.push(d));
-guest.on('hostPing', (d) => guestPings.push(d));
+// Emulate the app client: answer the server's latency probe immediately.
+function answerProbes(socket, label) {
+  socket.on('netProbe', (d) => {
+    if (d && typeof d.n === 'number') socket.emit('netProbeAck', { n: d.n });
+  });
+  socket.on('connect', () => console.log(`${label} connected`, socket.id));
+}
 
-let pongSeq = null;
-guest.on('pong', (d) => { pongSeq = d && d.n; });
+host.on('playerPings', (d) => hostPings.push(d));
+guest.on('playerPings', (d) => guestPings.push(d));
+guest.on('chatMessage', (m) => guestChats.push(m));
+guest.on('roomUpdate', (d) => guestRoomUpdates.push(d));
 
 host.on('connect', () => {
   host.emit('createRoom', { name: `ping-test-${Date.now()}`, playerName: 'Host' });
 });
+
+answerProbes(host, 'host');
+answerProbes(guest, 'guest');
 
 host.on('roomCreated', (data) => {
   roomId = data.roomId;
   guest.emit('joinRoom', { roomId, password: '', playerName: 'Guest' });
 });
 
-guest.on('roomJoined', () => setTimeout(runChecks, 300));
+guest.on('roomJoined', () => {
+  // Wait for at least two probe rounds so a measurement exists
+  setTimeout(runChecks, 5000);
+});
 
 function runChecks() {
-  // 1. pong must echo the sequence number
-  guest.emit('ping', { n: 42 });
+  const measured = guestPings.filter(d =>
+    d.pings.some(p => p.id === guest.id && p.ping !== null));
+  check('server measures and publishes pings', measured.length > 0,
+    JSON.stringify(guestPings[guestPings.length - 1]));
 
-  // 2. host broadcasts a valid host ping
-  host.emit('hostPing', { ping: 120 });
+  const entry = guestPings[guestPings.length - 1]?.pings.find(p => p.id === guest.id);
+  check('published ping is a 16 ms step', entry && entry.ping != null && entry.ping % 16 === 0,
+    `ping=${entry?.ping}`);
+  check('ping list covers every player',
+    guestPings[guestPings.length - 1]?.pings.length === 2);
 
-  // 3. non-host must NOT be able to broadcast
-  guest.emit('hostPing', { ping: 999 });
-
-  // 4. invalid values must be rejected
-  host.emit('hostPing', { ping: 'abc' });
-  host.emit('hostPing', { ping: -5 });
-  host.emit('hostPing', { ping: 99999 });
-
+  // /handicap: adds lag to the player and the same delay to everyone else
+  guest.emit('chatMessage', '/handicap 50');
   setTimeout(() => {
-    check('pong echoes ping sequence', pongSeq === 42, `got n=${pongSeq}`);
+    const after = guestPings[guestPings.length - 1]?.pings || [];
+    const g = after.find(p => p.id === guest.id);
+    const h = after.find(p => p.id === host.id);
+    check('handicap is stored on the player', g && g.handicap === 50, `handicap=${g?.handicap}`);
+    check('handicapper pays the handicap', g && g.inputDelay === 50, `inputDelay=${g?.inputDelay}`);
+    check('others pay the same delay (fairness)', h && h.inputDelay === 50, `inputDelay=${h?.inputDelay}`);
+    check('player list carries the handicap', guestRoomUpdates.some(d =>
+      d.players && d.players.some(p => p.handicap === 50)));
 
-    const valid = hostPings.filter((p) => p.ping === 120);
-    check('host ping reaches the guest', guestPings.some((p) => p.ping === 120));
-    check('host ping is room scoped', valid.length > 0 && valid.every((p) => p.roomId === roomId),
-      JSON.stringify(valid[0]));
-    check('host ping carries hostId', valid.length > 0 && valid.every((p) => p.hostId === host.id));
-
-    check('non-host ping is ignored', !guestPings.some((p) => p.ping === 999));
-    check('invalid ping values are ignored',
-      !guestPings.some((p) => p.ping === -5 || p.ping === 99999 || typeof p.ping === 'string'));
-
-    // 5. host leaving must invalidate the displayed value
-    hostPings.length = 0;
-    guestPings.length = 0;
-    host.disconnect();
-
+    // Reset
+    guest.emit('chatMessage', '/handicap 0');
     setTimeout(() => {
-      check('host leaving clears host ping', guestPings.some((p) => p.ping === null && p.reason === 'hostLeft'),
-        JSON.stringify(guestPings));
+      const reset = guestPings[guestPings.length - 1]?.pings.find(p => p.id === guest.id);
+      check('handicap can be removed', reset && reset.handicap === 0 && reset.inputDelay === 0,
+        `handicap=${reset?.handicap} inputDelay=${reset?.inputDelay}`);
+
       guest.disconnect();
+      host.disconnect();
       console.log(failures === 0 ? '\nAll checks passed' : `\n${failures} check(s) failed`);
       process.exit(failures === 0 ? 0 : 1);
-    }, 600);
-  }, 600);
+    }, 3000);
+  }, 3000);
 }
 
 host.on('connect_error', (err) => {

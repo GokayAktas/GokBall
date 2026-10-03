@@ -1,6 +1,8 @@
 /**
  * In-Game Management Menu (Esc)
  */
+import { renderPingBadge } from './PingBadge.js';
+
 export class InGameMenu {
     constructor(app) {
         this.app = app;
@@ -67,6 +69,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--red-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
+                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>
@@ -85,6 +88,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--text-muted);">${p.avatar || p.name[0]}</div>
                                         <span style="color:var(--text-muted);">${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
+                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>
@@ -103,6 +107,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--blue-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
+                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>

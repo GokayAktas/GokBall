@@ -3,6 +3,7 @@
  */
 import JSON5 from 'json5';
 import HBSParser from '../../engine/HBSParser.js';
+import { renderPingBadge } from '../components/PingBadge.js';
 
 export class RoomLobby {
   constructor(app) {
@@ -598,6 +599,11 @@ export class RoomLobby {
     this._updateAdminVisibility(this.roomData);
   }
 
+  /** Public entry point so the app can refresh the list when pings change */
+  updatePlayers(players) {
+    this._updatePlayers(players);
+  }
+
   _updatePlayers(players) {
     const redTeam = players.filter(p => p.team === 'red');
     const blueTeam = players.filter(p => p.team === 'blue');
@@ -626,6 +632,7 @@ export class RoomLobby {
             ${p.avatar || p.name.charAt(0).toUpperCase()}
           </div>
           <span class="team-player-name" style="${isSelf ? 'font-weight:700;' : ''} color:${p.team === 'spectator' ? 'var(--text-2)' : 'var(--white)'};">${this._esc(p.name)}${isSelf ? ' <span style="color:var(--text-muted);">(Ben)</span>' : ''}</span>
+          ${renderPingBadge(p, isSelf ? this.app.network.ping : null)}
           ${p.isAdmin ? '<span class="team-player-admin" title="Admin">👑</span>' : ''}
           ${isAdmin && !p.isAdmin ? `
             <div style="display:flex; gap:4px;">

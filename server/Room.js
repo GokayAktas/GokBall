@@ -6,6 +6,7 @@ import { Player } from './Player.js';
 import { Game } from './Game.js';
 import { MapManager } from './MapManager.js';
 import { normalizeHex, normalizeAngle } from './utils/colors.js';
+import { MAX_HANDICAP } from './utils/ping.js';
 
 // Stadium Generator
 function createStadium(name, fieldW, fieldH, spawnDist = 170) {
@@ -112,7 +113,6 @@ export class Room {
         this.bannedIPs = new Set();
         this.hostId = null;
         this.creatorId = null; // The original room creator
-        this.hostPing = null; // { ping, ts, hostId } - last valid host ping report
         this.teamsLocked = false;
         this._closing = false; // Flag to prevent recursive cleanup
         this.playerSpeedMultiplier = options.playerSpeedMultiplier || 1.0;
@@ -221,8 +221,6 @@ export class Room {
 
         // Transfer admin if host left
         if (this.hostId === socketId && this.players.size > 0) {
-            // Old host's ping must not be shown as if it still belongs to this room
-            this.clearHostPing('hostLeft');
             const newHost = this.players.values().next().value;
             newHost.isAdmin = true;
             this.hostId = newHost.id;
@@ -799,6 +797,7 @@ export class Room {
                 helpText += "👤 /avatar [yazı] - Formandaki yazıyı/emojiyi değiştirir (Max 2 harf)\n";
                 helpText += "🎲 /avatar random - 1 ile 99 arasında rastgele forma numarası verir\n";
                 helpText += "💤 /afk - 2 maç boyunca AFK modunu aç/kapat\n";
+                helpText += "⏱ /handicap [ms] - Kendi pingine gecikme ekler (adil oyun için). 0 ile kaldırılır\n";
                 
                 if (player.isAdmin) {
                     helpText += "\n👑 Admin Komutları:\n";
@@ -822,6 +821,31 @@ export class Room {
                     });
                 }
                 break;
+            case '/handicap': {
+                // HaxBall's ping handicap: add lag to yourself while removing
+                // the lag advantage your connection gives you.
+                const raw = Number(parts[1]);
+                if (!parts[1] || !Number.isFinite(raw) || raw < 0) {
+                    player.socket.emit('chatMessage', {
+                        playerName: 'SİSTEM',
+                        message: `⏱ Ping handicap requires a value in milliseconds. Şu anki: ${player.handicap}ms`,
+                        system: true
+                    });
+                    break;
+                }
+                const value = Math.min(MAX_HANDICAP, Math.round(raw));
+                player.handicap = value;
+                this.broadcast('chatMessage', {
+                    playerName: '🏟 SİSTEM',
+                    message: value > 0
+                        ? `⏱ ${player.name} ping handicap uyguladı: ${value}ms`
+                        : `⏱ ${player.name} ping handicap kaldırıldı`,
+                    system: true
+                });
+                this.broadcast('roomUpdate', { players: this.getPlayerList() });
+                this.broadcast('playerPings', { pings: this.getPingList() });
+                break;
+            }
             default:
                 player.socket.emit('chatMessage', {
                     playerName: 'System',
@@ -851,29 +875,46 @@ export class Room {
     }
 
     /**
-     * Store the host's reported ping (callers must validate the value first)
-     */
-    setHostPing(ping) {
-        this.hostPing = { ping, ts: Date.now(), hostId: this.hostId };
+ * Record a round trip measured by the server for a player.
+ */
+    recordPing(playerId, rtt, lost = 0) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+        player.addPingSample(rtt);
+        player.pingLoss = lost;
     }
 
     /**
-     * Drop the stored host ping and tell clients it is no longer valid,
-     * so nobody keeps displaying a stale number
+     * Latency snapshot for the player list. Sent every 2 seconds, matching
+     * HaxBall's update cadence for clients that are not the authority.
      */
-    clearHostPing(reason = 'cleared') {
-        if (!this.hostPing) return;
-        this.hostPing = null;
-        this.broadcast('hostPing', { roomId: this.id, hostId: null, ping: null, reason });
+    getPingList() {
+        return [...this.players.values()].map(p => ({
+            id: p.id,
+            ping: p.ping,
+            pingLoss: p.pingLoss || 0,
+            handicap: p.handicap || 0,
+            inputDelay: this.inputDelayFor(p.id)
+        }));
     }
 
     /**
-     * Host ping info, or null when unknown/stale (older than maxAge)
+     * HaxBall's /handicap fairness model.
+     *
+     * A handicapper's own input is delayed by their handicap, and every other
+     * player's input is delayed by the same amount. Nobody gains an advantage:
+     * the high ping player's actions are seen relatively earlier by everyone,
+     * and the cost is the same added delay for everybody. (Our netcode cannot
+     * render another player earlier than real time, so this equal-delay variant
+     * is what actually delivers the fairness the original feature promises.)
      */
-    getHostPingInfo(maxAge = 5000) {
-        if (!this.hostPing) return null;
-        if (Date.now() - this.hostPing.ts > maxAge) return null;
-        return { ...this.hostPing };
+    inputDelayFor(playerId) {
+        let others = 0;
+        for (const p of this.players.values()) {
+            if (p.id === playerId) continue;
+            if ((p.handicap || 0) > others) others = p.handicap;
+        }
+        return (this.players.get(playerId)?.handicap || 0) + others;
     }
 
     getTeamPlayers(team) {
@@ -898,7 +939,6 @@ export class Room {
             teamColors: this.teamColors,
             roomType: this.roomType,
             playerSpeedMultiplier: this.playerSpeedMultiplier,
-            host: this.getHostPingInfo(),
             game: this.game.getInfo(),
             chatHistory: this.chatHistory.slice()
         };

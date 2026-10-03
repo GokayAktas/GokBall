@@ -59,6 +59,9 @@ const playerRooms = new Map(); // socketId -> roomId
 io.on('connection', (socket) => {
     console.log(`[Server] Player connected: ${socket.id}`);
 
+    // Server-side latency measurement state (HaxBall measures, players don't)
+    socket.data.net = { seq: 0, pending: new Map(), lost: 0 };
+
     // Log remote address in a standardized way (works with trust proxy)
     try {
         const remote = socket.handshake.address || (socket.request && socket.request.connection && socket.request.connection.remoteAddress) || 'unknown';
@@ -83,27 +86,21 @@ io.on('connection', (socket) => {
         socket.emit('pong', { n });
     });
 
-    // --- Host Ping Broadcast (for Local rooms)
-    socket.on('hostPing', (payload) => {
+    // --- Latency probes (server measures, like HaxBall's authority does) ---
+    // The server sends a probe, the client answers immediately, and the round
+    // trip is measured here so a client can never report a fake value.
+    socket.on('netProbeAck', (data) => {
+        const net = socket.data.net;
+        const n = data && typeof data.n === 'number' ? data.n : null;
+        if (!net || n === null || !net.pending.has(n)) return;
+
+        const sentAt = net.pending.get(n);
+        net.pending.delete(n);
+
         const room = getPlayerRoom(socket.id);
         if (!room) return;
-        // Only the current host may report a host ping. `room.adminId` does not
-        // exist on Room (only hostId/creatorId), so the hostId check is the
-        // authoritative one.
-        if (!room.hostId || socket.id !== room.hostId) return;
-
-        const ping = Number(payload?.ping);
-        if (!Number.isFinite(ping) || ping < 0 || ping > 5000) return;
-
-        room.setHostPing(Math.round(ping));
-        // Broadcast to everyone in the room (including the host, which simply
-        // ignores its own value) so the UI never double-counts it.
-        io.to(room.id).emit('hostPing', {
-            roomId: room.id,
-            hostId: room.hostId,
-            ping: Math.round(ping),
-            ts: Date.now()
-        });
+        room.recordPing(socket.id, Date.now() - sentAt, net.lost);
+        net.lost = 0;
     });
 
     // --- Create Room ---
@@ -272,9 +269,20 @@ io.on('connection', (socket) => {
         // HOST-AUTHORITY MODE: Relay non-host inputs to the host
         if (room.hostId && socket.id !== room.hostId) {
             const hostSocket = io.sockets.sockets.get(room.hostId);
-            if (hostSocket) {
-                hostSocket.emit('remoteInput', { playerId: socket.id, input });
+            if (!hostSocket) return;
+
+            // /handicap: hold the input back so the player feels the lag they
+            // asked for (and everyone else is delayed the same amount, so
+            // nobody gains an advantage - see Room.inputDelayFor).
+            const delay = room.inputDelayFor(socket.id);
+            if (delay > 0) {
+                setTimeout(() => {
+                    hostSocket.emit('remoteInput', { playerId: socket.id, input });
+                }, delay);
+                return;
             }
+
+            hostSocket.emit('remoteInput', { playerId: socket.id, input });
             return;
         }
 
@@ -539,8 +547,6 @@ function leaveCurrentRoom(socket) {
             playerRooms.delete(socket.id);
 
             // The leaving host's ping is no longer meaningful for this room
-            room.clearHostPing('hostLeft');
-
             // Transfer host to next player
             if (room.players.size > 0) {
                 const newHost = room.players.values().next().value;
@@ -570,7 +576,6 @@ function leaveCurrentRoom(socket) {
 
         // Delete empty rooms
         if (remaining === 0) {
-            room.clearHostPing('roomClosed');
             room.game.stop();
             rooms.delete(roomId);
             console.log(`[Server] Room deleted: ${roomId}`);
@@ -579,6 +584,41 @@ function leaveCurrentRoom(socket) {
 
     playerRooms.delete(socket.id);
 }
+
+// ============================================
+// Latency measurement loop
+// ============================================
+// Every 2 seconds: probe every socket and publish the measured pings, which is
+// the same cadence HaxBall uses for the values shown in the player list.
+const NET_PROBE_INTERVAL = 2000;
+// A probe unanswered after this long counts as a lost packet ("red bar").
+const NET_PROBE_TIMEOUT = 6000;
+
+const netProbeTimer = setInterval(() => {
+    const now = Date.now();
+
+    for (const socket of io.sockets.sockets.values()) {
+        const net = socket.data.net;
+        if (!net) continue;
+
+        for (const [id, sentAt] of net.pending) {
+            if (now - sentAt > NET_PROBE_TIMEOUT) {
+                net.pending.delete(id);
+                net.lost++;
+            }
+        }
+
+        const n = ++net.seq;
+        net.pending.set(n, now);
+        socket.emit('netProbe', { n });
+    }
+
+    for (const room of rooms.values()) {
+        if (room.isEmpty()) continue;
+        io.to(room.id).emit('playerPings', { pings: room.getPingList() });
+    }
+}, NET_PROBE_INTERVAL);
+netProbeTimer.unref();
 
 // ============================================
 // Start Server

@@ -8,8 +8,8 @@ import { io } from 'socket.io-client';
 const PING_TIMEOUT = 3000;
 // Rolling window (in samples) used for the packet loss percentage.
 const PING_WINDOW = 20;
-// Host ping reports older than this are treated as "unknown" instead of shown.
-const HOST_PING_TTL = 5000;
+// Samples kept for the HUD ping graph (a lost sample is stored as null).
+const GRAPH_SAMPLES = 60;
 
 export class NetworkManager {
     constructor() {
@@ -19,16 +19,15 @@ export class NetworkManager {
         this.callbacks = {};
 
         // RTT to the server. `null` means "not measured yet" - never fake a value.
+        // This is the player's own precise measurement (shown in the HUD).
+        // The coarser per-player value in the lists is measured by the server.
         this.ping = null;
         this.pingHistory = [];
         this.minPing = null;
         this.maxPing = null;
         this.jitter = null;
         this.packetLoss = 0;
-
-        // Host ping is scoped to a room: { ping, ts, hostId, roomId } or null.
-        this.hostPing = null;
-        this._roomId = null;
+        this.pingGraph = []; // last GRAPH_SAMPLES: round trip in ms, null = lost
 
         this._pingSeq = 0;
         this._pendingPings = new Map(); // pingId -> sendTime
@@ -82,7 +81,6 @@ export class NetworkManager {
                 // A dead connection has no latency: drop the numbers instead of
                 // leaving a stale value on screen.
                 this.resetMeasurements();
-                this.setRoomScope(null);
                 console.log('[Network] Disconnected:', reason);
                 this._trigger('disconnect', reason);
             });
@@ -127,6 +125,7 @@ export class NetworkManager {
 
                 const rtt = Date.now() - sentAt;
                 this.ping = rtt;
+                this._pushGraphSample(rtt);
 
                 // Track history for jitter/min/avg (rolling 20 samples)
                 this.pingHistory.push(rtt);
@@ -147,30 +146,16 @@ export class NetworkManager {
             this._pingInterval = setInterval(() => this._sendPing(), 500); // 500ms ping interval
             this._pingTimeoutInterval = setInterval(() => this._expirePings(), 1000);
 
-            // Host ping broadcast (host -> server -> all clients)
-            this.socket.on('hostPing', (data) => {
-                if (!data) return;
-                // Ignore reports belonging to a room we are not in anymore
-                if (this._roomId && data.roomId && data.roomId !== this._roomId) return;
-
-                if (data.ping === null || data.ping === undefined) {
-                    // Host left / value was invalidated -> show nothing instead of a stale number
-                    if (!this.hostPing) return;
-                    this.hostPing = null;
-                    this._emitPingUpdate();
-                    return;
-                }
-
-                const ping = Number(data.ping);
-                if (!Number.isFinite(ping) || ping < 0 || ping > 5000) return;
-                this.hostPing = {
-                    ping: Math.round(ping),
-                    ts: Date.now(), // client clock: TTL must not mix clocks
-                    hostId: data.hostId || null,
-                    roomId: data.roomId || null
-                };
-                this._emitPingUpdate();
+            // Server-initiated latency probe. We only echo the sequence number
+            // back - the round trip is measured by the server so nobody can
+            // report a ping they do not have (this is how HaxBall does it).
+            this.socket.on('netProbe', (data) => {
+                const n = data && typeof data.n === 'number' ? data.n : null;
+                if (n === null) return;
+                this.socket.emit('netProbeAck', { n });
             });
+
+            this.socket.on('playerPings', (data) => this._trigger('playerPings', data));
 
             this.socket.on('playerKicked', (data) => this._trigger('playerKicked', data));
             this.socket.on('stadiumChanged', (data) => this._trigger('stadiumChanged', data));
@@ -202,6 +187,7 @@ export class NetworkManager {
             if (now - sentAt > PING_TIMEOUT) {
                 this._pendingPings.delete(id);
                 this._pushPingResult('lost');
+                this._pushGraphSample(null); // red bar for the lost packet
                 changed = true;
             }
         }
@@ -215,6 +201,12 @@ export class NetworkManager {
         this.packetLoss = Math.round((lost / this._pingWindow.length) * 100);
     }
 
+    /** Keep a bounded history for the HUD ping graph (null marks a lost packet) */
+    _pushGraphSample(sample) {
+        this.pingGraph.push(sample);
+        if (this.pingGraph.length > GRAPH_SAMPLES) this.pingGraph.shift();
+    }
+
     _emitPingUpdate() {
         const avg = this.pingHistory.length
             ? this.pingHistory.reduce((a, b) => a + b, 0) / this.pingHistory.length
@@ -226,40 +218,11 @@ export class NetworkManager {
             maxPing: this.maxPing,
             avgPing: avg != null ? Math.round(avg) : null,
             packetLoss: this.packetLoss,
-            hostPing: this.getHostPing()
+            pingGraph: this.pingGraph
         });
     }
 
-    /**
-     * Host's ping in ms, or null when unknown/stale.
-     * Never returns a value from another room or an expired report.
-     */
-    getHostPing() {
-        if (!this.hostPing) return null;
-        if (this._roomId && this.hostPing.roomId && this.hostPing.roomId !== this._roomId) return null;
-        if (Date.now() - this.hostPing.ts > HOST_PING_TTL) return null;
-        return this.hostPing.ping;
-    }
-
-    /** Scope host ping tracking to a room (null = not in a room) */
-    setRoomScope(roomId) {
-        const next = roomId || null;
-        const changed = this.hostPing && this.hostPing.roomId !== next;
-        this._roomId = next;
-        if (changed) {
-            this.hostPing = null;
-            this._emitPingUpdate();
-        }
-    }
-
-    /** Forget the host ping (room change, host left, disconnect) */
-    resetHostPing() {
-        if (!this.hostPing) return;
-        this.hostPing = null;
-        this._emitPingUpdate();
-    }
-
-    /** Forget every RTT measurement (disconnect / reconnect / room change) */
+    /** Forget every RTT measurement (disconnect / reconnect) */
     resetMeasurements() {
         this.ping = null;
         this.pingHistory = [];
@@ -267,9 +230,9 @@ export class NetworkManager {
         this.maxPing = null;
         this.jitter = null;
         this.packetLoss = 0;
+        this.pingGraph = [];
         this._pendingPings.clear();
         this._pingWindow = [];
-        this.hostPing = null;
         this._emitPingUpdate();
     }
 

@@ -2416,13 +2416,43 @@ select.input option {
 .stat-ping .stat-icon { color: var(--green); }
 .stat-ping .stat-value { color: var(--green); }
 
-.stat-host-ping .stat-icon,
-.stat-host-ping .stat-value { color: #FFC400; }
+.stat-ping-graph { padding: 2px 6px; }
+.stat-ping-graph canvas { display: block; width: 132px; height: 26px; }
 
 /* Ping quality: only applied when a real measurement exists */
 .stat-value.is-good { color: var(--green); }
 .stat-value.is-fair { color: #FFC400; }
 .stat-value.is-bad { color: var(--red); }
+
+/* -------------------------------------------
+   Player list ping badges (HaxBall style)
+   ------------------------------------------- */
+.ping-badge {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 999px;
+    min-width: 26px;
+    text-align: center;
+}
+
+.ping-good { background: rgba(0, 230, 118, 0.18); color: var(--green); }
+.ping-fair { background: rgba(255, 196, 0, 0.18); color: #FFC400; }
+.ping-bad { background: rgba(255, 82, 82, 0.18); color: var(--red); }
+.ping-unknown { background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
+
+.ping-bars {
+    margin-left: 3px;
+    font-size: 10px;
+    color: var(--red);
+}
+
+.ping-handicap {
+    margin-left: 3px;
+    font-size: 10px;
+    color: #FFC400;
+}
 
 .stat-fps .stat-icon { color: var(--blue); }
 .stat-fps .stat-value { color: var(--blue); }
