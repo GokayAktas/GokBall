@@ -1,17 +1,19 @@
 /**
- * Snapshot interpolation for remote discs. Snapshot time is the local receive
- * time, so no clock synchronization between the host and guest is required.
+ * Snapshot interpolation for remote discs. Host simulation ticks define the
+ * timeline; local receive times only anchor that timeline to the render clock.
  */
 
-const MAX_EXTRAPOLATION_MS = 80;
 const FIXED_STEP_MS = 1000 / 60;
+const MAX_EXTRAPOLATION_MS = 80;
+const MIN_INTERPOLATION_DELAY_MS = 50;
+const MAX_INTERPOLATION_DELAY_MS = 180;
 
 export class SnapshotBuffer {
-    constructor(interpolationDelay = 50) {
+    constructor(interpolationDelay = MIN_INTERPOLATION_DELAY_MS) {
         this.buffer = [];
-        this.interpolationDelay = interpolationDelay;
+        this.initialInterpolationDelay = Math.max(MIN_INTERPOLATION_DELAY_MS, interpolationDelay);
+        this.interpolationDelay = this.initialInterpolationDelay;
         this.maxBufferSize = 20;
-        this._averageInterval = FIXED_STEP_MS;
         this._arrivalJitter = 0;
     }
 
@@ -20,38 +22,55 @@ export class SnapshotBuffer {
         if (!state?.physics?.discs) return false;
 
         const tick = Number.isFinite(state.tick) ? state.tick : null;
-        const latest = this.buffer[this.buffer.length - 1];
+        const timelineTick = Number.isFinite(state.physicsTick) ? state.physicsTick : tick;
+        let latest = this.buffer[this.buffer.length - 1];
+        if (latest && (timelineTick === null) !== (latest.timelineTick === null)) {
+            // Do not mix local receive timestamps from a control snapshot with
+            // the host-tick timeline used for gameplay snapshots.
+            this.clear();
+            latest = null;
+        }
         if (tick !== null && latest?.tick !== null && latest?.tick !== undefined && tick <= latest.tick) {
             return false;
         }
 
+        const time = timelineTick !== null ? timelineTick * FIXED_STEP_MS : receivedAt;
         if (latest) {
-            const interval = receivedAt - latest.time;
-            if (interval >= 8 && interval <= 250) {
-                this._arrivalJitter += (Math.abs(interval - this._averageInterval) - this._arrivalJitter) / 8;
-                this._averageInterval += (interval - this._averageInterval) / 16;
-                this.interpolationDelay = Math.max(30, Math.min(120,
-                    this._averageInterval * 2 + this._arrivalJitter * 3));
+            const arrivalInterval = receivedAt - latest.receivedAt;
+            const tickInterval = timelineTick !== null && latest.timelineTick !== null
+                ? (timelineTick - latest.timelineTick) * FIXED_STEP_MS
+                : arrivalInterval;
+            if (arrivalInterval > 0 && arrivalInterval <= 1000 && tickInterval > 0 && tickInterval <= 1000) {
+                // Compare receive cadence with the host's simulation ticks. If
+                // packets were skipped, receive time alone compresses several
+                // host frames into one client frame and makes players jump.
+                const deviation = Math.abs(arrivalInterval - tickInterval);
+                this._arrivalJitter += (deviation - this._arrivalJitter) / 8;
+                this.interpolationDelay = Math.max(
+                    MIN_INTERPOLATION_DELAY_MS,
+                    Math.min(MAX_INTERPOLATION_DELAY_MS, FIXED_STEP_MS * 3 + this._arrivalJitter * 2)
+                );
             }
         }
 
-        this.buffer.push({ time: receivedAt, tick, state });
+        this.buffer.push({ time, receivedAt, tick, timelineTick, state });
         while (this.buffer.length > this.maxBufferSize) this.buffer.shift();
         return true;
     }
 
-    /** Return a state at local time minus the interpolation safety delay. */
+    /** Return the host-tick state at local render time minus the safety delay. */
     getInterpolatedState(localTime) {
         if (this.buffer.length === 0) return null;
-        const renderTime = localTime - this.interpolationDelay;
+        const latest = this.buffer[this.buffer.length - 1];
+        const elapsed = latest.state.paused ? 0 : Math.max(0, localTime - latest.receivedAt);
+        const estimatedHostTime = latest.time + elapsed;
+        const renderTime = estimatedHostTime - this.interpolationDelay;
         const first = this.buffer[0];
         if (this.buffer.length === 1) {
             if (renderTime <= first.time) return first.state;
             const elapsed = Math.min(renderTime - first.time, MAX_EXTRAPOLATION_MS);
             return this._extrapolateState(first.state, elapsed / FIXED_STEP_MS);
         }
-
-        const latest = this.buffer[this.buffer.length - 1];
 
         // At startup or directly after a state transition, begin at the oldest
         // available point instead of jumping ahead to the newest snapshot.
@@ -84,7 +103,10 @@ export class SnapshotBuffer {
     }
 
     adjustDelay(jitter) {
-        this.interpolationDelay = Math.max(20, jitter * 2 + 10);
+        this.interpolationDelay = Math.max(
+            MIN_INTERPOLATION_DELAY_MS,
+            Math.min(MAX_INTERPOLATION_DELAY_MS, jitter * 2 + MIN_INTERPOLATION_DELAY_MS)
+        );
     }
 
     _interpolateStates(stateA, stateB, t) {
@@ -143,5 +165,7 @@ export class SnapshotBuffer {
 
     clear() {
         this.buffer = [];
+        this._arrivalJitter = 0;
+        this.interpolationDelay = this.initialInterpolationDelay;
     }
 }

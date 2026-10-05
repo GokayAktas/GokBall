@@ -7,6 +7,7 @@
 const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 const CONNECT_TIMEOUT = 15000;
 const MAX_BUFFERED_SNAPSHOT_BYTES = 32 * 1024;
+const MAX_BUFFERED_INPUT_BYTES = 4 * 1024;
 
 export class PeerLink {
     constructor({ socket, peerId = null, onMessage, onState }) {
@@ -219,16 +220,25 @@ export class PeerLink {
      * queues drop the current snapshot and wait for the next one.
      */
     send(msg) {
-        return this.sendSerialized(JSON.stringify(msg), msg?.type === 'state');
+        return this.sendSerialized(
+            JSON.stringify(msg),
+            msg?.type === 'state',
+            msg?.type === 'input'
+        );
     }
 
-    sendSerialized(payload, isSnapshot = false) {
+    sendSerialized(payload, isSnapshot = false, isInput = false) {
         if (this._closed || !this.peerId) return false;
 
         if (this.connected && !this.relaying && this.channel?.readyState === 'open' &&
             this.pc?.connectionState !== 'failed' && this.pc?.connectionState !== 'closed') {
             if (isSnapshot && this.channel.bufferedAmount > MAX_BUFFERED_SNAPSHOT_BYTES) {
                 return true;
+            }
+            // Keep input out of a backlog of old snapshots. The caller will
+            // route it through the server relay when the direct queue is busy.
+            if (isInput && this.channel.bufferedAmount > MAX_BUFFERED_INPUT_BYTES) {
+                return false;
             }
             try {
                 this.channel.send(payload);
@@ -246,6 +256,11 @@ export class PeerLink {
             return true;
         }
         return false;
+    }
+
+    /** Prefer the server relay after missed peer heartbeats. */
+    useRelay(reason = 'peer heartbeat timed out') {
+        this._fallbackToRelay(reason);
     }
 
     close() {

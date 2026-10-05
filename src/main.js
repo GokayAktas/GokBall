@@ -23,6 +23,8 @@ import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 
+const REMOTE_INPUT_TIMEOUT_MS = 1500;
+
 class GokBallApp {
     constructor() {
         this.network = new NetworkManager();
@@ -52,7 +54,7 @@ class GokBallApp {
         this._serverGameState = 'stopped';
 
         // Snapshot interpolation buffer for non-host clients
-        this._snapshotBuffer = new SnapshotBuffer(30); // 30ms interpolation delay for low-latency rendering
+        this._snapshotBuffer = new SnapshotBuffer(50); // Buffer three host ticks to absorb packet jitter
         this._lastSnapshotTime = 0;
         this._lastAuthorityTick = -1;
 
@@ -279,6 +281,7 @@ class GokBallApp {
 
         this.gameRunning = true;
         this.currentRoomData = roomData;
+        this.network.setAuthorityStreamActive(!this._isHost());
         this._firstStateReceived = false; // Wait for initial server state before client prediction
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
         this._snapshotBuffer.clear();
@@ -321,6 +324,7 @@ class GokBallApp {
 
     stopGame() {
         this.gameRunning = false;
+        this.network.setAuthorityStreamActive(false);
         this._isPaused = false;
         this._removePauseOverlay();
         this.input.disable();
@@ -400,7 +404,7 @@ class GokBallApp {
                     for (const [playerId, ri] of this._remoteInputs) {
                         const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
                         if (remoteDisc) {
-                            remoteDisc.input = performance.now() - ri.receivedAt > 250
+                            remoteDisc.input = performance.now() - ri.receivedAt > REMOTE_INPUT_TIMEOUT_MS
                                 ? { up: false, down: false, left: false, right: false, kick: false }
                                 : ri.input;
                             this._lastRemoteInputSeq.set(playerId, ri.seq);
@@ -409,6 +413,7 @@ class GokBallApp {
 
                     // Step physics
                     const result = this.physics.step();
+                    this._hostPhysicsTick++;
                     this._releaseConsumedKickInputs();
 
                     // Track ball touches for goal attribution (host mode)
@@ -473,6 +478,7 @@ class GokBallApp {
                     }
                     // Physics still runs (for ball momentum), but players don't move
                     this.physics.step();
+                    this._hostPhysicsTick++;
                     this._hostGoalPauseTicks--;
 
                     // Send authority state during goal pause so non-host clients see the ball
@@ -516,7 +522,7 @@ class GokBallApp {
                     this.accumulator -= stepSize;
                     continue;
                 }
-                if (this._serverGameState === 'playing') {
+                if (this._serverGameState === 'playing' && !this._isPaused) {
                     const myId = this.network.socket?.id;
                     const myDisc = this.physics.discs.find(d => d.id === myId);
 
@@ -606,7 +612,7 @@ class GokBallApp {
 
         for (let i = 0; i < snapshots.length; i++) {
             const snapshot = snapshots[i];
-            if (snapshot.isPlayer && snapshot.id === myId && this._serverGameState === 'playing') continue;
+            if (snapshot.isPlayer && snapshot.id === myId && this._serverGameState === 'playing' && !this._isPaused) continue;
 
             const disc = snapshot.isPlayer
                 ? localById.get(snapshot.id)
@@ -745,13 +751,14 @@ class GokBallApp {
                                 for (const [playerId, remoteInput] of this._remoteInputs) {
                                     const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
                                     if (remoteDisc) {
-                                        remoteDisc.input = performance.now() - remoteInput.receivedAt > 250
+                                        remoteDisc.input = performance.now() - remoteInput.receivedAt > REMOTE_INPUT_TIMEOUT_MS
                                             ? { up: false, down: false, left: false, right: false, kick: false }
                                             : remoteInput.input;
                                         this._lastRemoteInputSeq.set(playerId, remoteInput.seq);
                                     }
                                 }
                                 const result = this.physics.step();
+                                this._hostPhysicsTick++;
                                 this._releaseConsumedKickInputs();
                                 if (result.kickHappened) this.audio.playKick();
                                 if (result.goalTeam && this._hostGameState === 'playing') {
@@ -765,6 +772,7 @@ class GokBallApp {
                                     if (disc.isPlayer) { disc.input = { up: false, down: false, left: false, right: false, kick: false }; disc.kicking = false; }
                                 }
                                 this.physics.step();
+                                this._hostPhysicsTick++;
                                 this._hostGoalPauseTicks--;
                                 this._sendAuthorityState();
                                 if (this._hostGoalPauseTicks <= 0) {
@@ -807,6 +815,7 @@ class GokBallApp {
         this._hostTimeElapsed = 0;
         this._hostGoalPauseTicks = 0;
         this._hostGameState = 'playing';
+        this._hostPhysicsTick = 0;
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
         this._hostTimeLimit = this.currentRoomData?.game?.timeLimit || 180;
@@ -1234,6 +1243,8 @@ class GokBallApp {
 
         this.network.sendAuthorityState({
             tick: this._hostAuthoritySendCounter,
+            physicsTick: this._hostPhysicsTick,
+            paused: this._isPaused,
             state: this._hostGameState,
             physics: this.physics.getState(),
             scoreRed: this._hostScoreRed,
@@ -1369,7 +1380,12 @@ class GokBallApp {
                 console.log('[GokBall] Host players spawned:', this.currentRoomData?.players?.length);
             }
 
-            if (data?.state) this._handleGameState(data.state);
+            // A late join receives the server's placeholder physics state
+            // before the host's live authority stream. It has no host tick and
+            // must not seed prediction or the guest interpolation timeline.
+            if (data?.state && (!data?.isHostAuthority || Number.isFinite(data.state.tick))) {
+                this._handleGameState(data.state);
+            }
         });
 
         // Remote inputs from other players (relayed by server)

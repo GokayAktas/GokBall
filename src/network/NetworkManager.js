@@ -9,6 +9,10 @@ import { PeerLink } from './PeerLink.js';
 const PING_TIMEOUT = 3000;
 // Rolling window (in samples) used for the packet loss percentage.
 const PING_WINDOW = 20;
+const PEER_PING_INTERVAL = 500;
+const PEER_PING_TIMEOUT = 1200;
+const PEER_PING_FAILURE_THRESHOLD = 2;
+const AUTHORITY_STATE_TIMEOUT = 1200;
 const AUTHORITY_METADATA_INTERVAL = 15; // refresh static metadata 4 times per second
 const AUTHORITY_METADATA_FIELDS = [
     'colors', 'colorAngle', 'avatarColor', 'name', 'avatar',
@@ -48,6 +52,10 @@ export class NetworkManager {
         this._peerPingTimer = null;
         this._peerPingSeq = 0;
         this._peerPingPending = new Map();
+        this._peerPingFailures = new Map();
+        this._authorityStreamActive = false;
+        this._authorityStateAt = null;
+        this._lastPeerAuthorityTick = -1;
         this._authorityMetadataSignatures = new Map();
         this._lastAuthorityTick = -1;
     }
@@ -120,7 +128,10 @@ export class NetworkManager {
             this.socket.on('teamChanged', (data) => this._trigger('teamChanged', data));
             this.socket.on('teamLockChanged', (data) => this._trigger('teamLockChanged', data));
             this.socket.on('gameState', (state) => this._trigger('serverGameState', state));
-            this.socket.on('authorityState', (state) => this._trigger('gameState', state));
+            this.socket.on('authorityState', (state) => {
+                this._noteAuthorityState(state);
+                this._trigger('gameState', state);
+            });
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));
             this.socket.on('roomClosed', (data) => {
@@ -325,8 +336,11 @@ export class NetworkManager {
         this._peerRoomId = roomId;
         this._peerHostId = hostId;
         this._isPeerHost = hostId === this.playerId;
+        this._authorityStreamActive = false;
+        this._authorityStateAt = null;
+        this._lastPeerAuthorityTick = -1;
         if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId });
-        this._peerPingTimer = setInterval(() => this._sendPeerPings(), 1000);
+        this._peerPingTimer = setInterval(() => this._sendPeerPings(), PEER_PING_INTERVAL);
     }
 
     /** Stop all peer channels when leaving or replacing a room. */
@@ -339,11 +353,29 @@ export class NetworkManager {
         this._peerLinks.clear();
         this._peerSignals.clear();
         this._peerPingPending.clear();
+        this._peerPingFailures.clear();
         this._peerRoomId = null;
         this._peerHostId = null;
         this._isPeerHost = false;
+        this._authorityStreamActive = false;
+        this._authorityStateAt = null;
+        this._lastPeerAuthorityTick = -1;
         this._authorityMetadataSignatures.clear();
         this._lastAuthorityTick = -1;
+    }
+
+    setAuthorityStreamActive(active) {
+        this._authorityStreamActive = !!active;
+        this._authorityStateAt = active ? performance.now() : null;
+        if (active) this._lastPeerAuthorityTick = -1;
+    }
+
+    _noteAuthorityState(state) {
+        if (Number.isFinite(state?.tick)) {
+            if (state.tick <= this._lastPeerAuthorityTick) return;
+            this._lastPeerAuthorityTick = state.tick;
+        }
+        this._authorityStateAt = performance.now();
     }
 
     /** Broadcast one current authoritative snapshot to connected guests. */
@@ -405,7 +437,7 @@ export class NetworkManager {
             // A room can be playable while a peer is negotiating or unable to
             // establish WebRTC. Keep snapshots flowing without queuing stale
             // positions; active peer links continue to carry the fast path.
-            this.socket?.volatile.emit('authorityState', state);
+            this.socket?.volatile.emit('authorityState', compactState);
             return;
         }
         for (const link of this._peerLinks.values()) link.sendSerialized(payload, true);
@@ -473,16 +505,20 @@ export class NetworkManager {
 
     _onPeerMessage(peerId, message) {
         if (message?.type === 'ping') {
+            if (message.relayRequested) {
+                this._peerLinks.get(peerId)?.useRelay('peer requested relay');
+            }
             this._peerLinks.get(peerId)?.send({ type: 'pong', id: message.id });
         } else if (message?.type === 'pong') {
             const key = `${peerId}:${message.id}`;
             const sentAt = this._peerPingPending.get(key);
             if (sentAt === undefined) return;
             this._peerPingPending.delete(key);
+            this._peerPingFailures.set(peerId, 0);
             this._trigger('peerPingUpdate', {
                 peerId,
                 ping: performance.now() - sentAt,
-                direct: !!this._peerLinks.get(peerId)?.connected
+                direct: !!this._peerLinks.get(peerId)?.connected && !this._peerLinks.get(peerId)?.relaying
             });
         } else if (message?.type === 'input' && this._isPeerHost) {
             this._trigger('remoteInput', {
@@ -490,20 +526,43 @@ export class NetworkManager {
                 input: message.input
             });
         } else if (message?.type === 'state' && !this._isPeerHost) {
+            this._noteAuthorityState(message.state);
             this._trigger('gameState', message.state);
         }
     }
 
     _sendPeerPings() {
+        const now = performance.now();
+        if (!this._isPeerHost && this._authorityStreamActive && this._authorityStateAt != null &&
+            now - this._authorityStateAt > AUTHORITY_STATE_TIMEOUT) {
+            const hostLink = this._peerHostId && this._peerLinks.get(this._peerHostId);
+            if (hostLink && !hostLink.relaying) {
+                hostLink.useRelay('authority snapshots stalled');
+            }
+        }
+
+        for (const [key, sentAt] of this._peerPingPending) {
+            if (now - sentAt <= PEER_PING_TIMEOUT) continue;
+            this._peerPingPending.delete(key);
+
+            const separator = key.lastIndexOf(':');
+            const peerId = key.slice(0, separator);
+            const failures = (this._peerPingFailures.get(peerId) || 0) + 1;
+            this._peerPingFailures.set(peerId, failures);
+            if (failures >= PEER_PING_FAILURE_THRESHOLD) {
+                this._peerLinks.get(peerId)?.useRelay('peer heartbeat timed out');
+            }
+        }
+
         for (const [peerId, link] of this._peerLinks) {
             const id = ++this._peerPingSeq;
-            this._peerPingPending.set(`${peerId}:${id}`, performance.now());
+            this._peerPingPending.set(`${peerId}:${id}`, now);
             // Keep only recent probes so a disconnected peer cannot grow this map.
             if (this._peerPingPending.size > 32) {
                 const oldest = this._peerPingPending.keys().next().value;
                 this._peerPingPending.delete(oldest);
             }
-            link.send({ type: 'ping', id });
+            link.send({ type: 'ping', id, relayRequested: link.relaying });
         }
     }
 
@@ -513,6 +572,10 @@ export class NetworkManager {
         link.close();
         this._peerLinks.delete(peerId);
         this._peerSignals.delete(peerId);
+        this._peerPingFailures.delete(peerId);
+        for (const key of this._peerPingPending.keys()) {
+            if (key.startsWith(`${peerId}:`)) this._peerPingPending.delete(key);
+        }
     }
 
     getInputSeqNum() {
