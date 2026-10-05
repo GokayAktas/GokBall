@@ -12,9 +12,6 @@
 export const PING_STEP = 16;
 /** How many round trips are averaged into the effective ping. */
 export const PING_SAMPLE_COUNT = 10;
-/** Upper bound for the /handicap command. */
-export const MAX_HANDICAP = 500;
-
 /**
  * Round to the nearest 16 ms step, like the player list display does.
  * Returns null when there is no measurement yet - never invent a value.

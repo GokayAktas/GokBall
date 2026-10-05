@@ -565,6 +565,11 @@ export class RoomLobby {
     this._updatePlayers(players);
   }
 
+  updateTeamColors(teamColors) {
+    this.roomData.teamColors = teamColors || {};
+    this._refreshJerseySelection?.();
+  }
+
   _updatePlayers(players) {
     const redTeam = players.filter(p => p.team === 'red');
     const blueTeam = players.filter(p => p.team === 'blue');
@@ -739,9 +744,7 @@ export class RoomLobby {
       btnEl.classList.toggle('off', !this.overtimeEnabled);
     }
   }    _setupJerseySelector() {
-    // Track selected jersey per team - persist across re-renders
-    const saved = localStorage.getItem('gokball_selectedJersey');
-    this._selectedJersey = saved ? JSON.parse(saved) : { red: -1, blue: -1 };
+    this._selectedJersey = { red: -1, blue: -1 };
 
     // Jersey presets with flag images
     const presets = [
@@ -810,9 +813,9 @@ export class RoomLobby {
               const preset = presets[idx];
               if (!preset) return;
 
-              // Track selection
+              // Show the selection immediately; the server broadcasts the
+              // shared team colors to every player in the room.
               this._selectedJersey[team] = idx;
-              localStorage.setItem('gokball_selectedJersey', JSON.stringify(this._selectedJersey));
 
               // Apply colors directly via socket event (max 3 colors)
               this.app.network.socket.emit('setTeamColors', {
@@ -832,9 +835,22 @@ export class RoomLobby {
       renderItems();
     };
 
-    // Build both dropdowns
-    buildDropdown('red', 'jerseyDropdownRed');
-    buildDropdown('blue', 'jerseyDropdownBlue');
+    const refreshSelection = () => {
+      for (const team of ['red', 'blue']) {
+        const selected = this.roomData?.teamColors?.[team];
+        this._selectedJersey[team] = selected
+          ? presets.findIndex(p =>
+            p.angle === (selected.angle || 0) &&
+            p.avatarColor.toLowerCase() === String(selected.avatarColor || 'FFFFFF').toLowerCase() &&
+            p.colors.length === (selected.colors || []).length &&
+            p.colors.every((color, i) => color.toLowerCase() === String(selected.colors[i]).toLowerCase()))
+          : -1;
+      }
+      buildDropdown('red', 'jerseyDropdownRed');
+      buildDropdown('blue', 'jerseyDropdownBlue');
+    };
+    this._refreshJerseySelection = refreshSelection;
+    refreshSelection();
 
     // Toggle handlers
     const setupToggle = (btnId, dropdownId, wrapperId) => {

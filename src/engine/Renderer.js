@@ -236,11 +236,12 @@ export class Renderer {
 
         for (const disc of physics.discs) {
             const isSelf = disc.isPlayer && disc.id === myId;
+            const pos = disc._renderPosition || disc.pos;
 
             // Self-identifier: translucent white glow circle (always visible)
             if (isSelf) {
                 ctx.beginPath();
-                ctx.arc(disc.pos.x, disc.pos.y, disc.radius + 10, 0, Math.PI * 2);
+                ctx.arc(pos.x, pos.y, disc.radius + 10, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
                 ctx.lineWidth = 3;
                 ctx.stroke();
@@ -275,7 +276,7 @@ export class Renderer {
             // Canvas default draws horizontal bands, so we add 90° offset
             if (disc.isPlayer && colors.length > 1) {
                 ctx.save();
-                ctx.translate(disc.pos.x, disc.pos.y);
+                ctx.translate(pos.x, pos.y);
                 // Rotate canvas: +90° offset so angle 0 = vertical stripes
                 const rot = (angle + 90) * Math.PI / 180;
                 ctx.rotate(rot);
@@ -301,7 +302,7 @@ export class Renderer {
             } else {
                 // Single color: simple filled circle
                 ctx.beginPath();
-                ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
+                ctx.arc(pos.x, pos.y, disc.radius, 0, Math.PI * 2);
                 // colors[] may already be '#xxxxxx' or 'xxxxxx'
                 ctx.fillStyle = colors[0].startsWith('#') ? colors[0] : '#' + colors[0];
                 ctx.fill();
@@ -309,7 +310,7 @@ export class Renderer {
 
             // Draw border
             ctx.beginPath();
-            ctx.arc(disc.pos.x, disc.pos.y, disc.radius, 0, Math.PI * 2);
+            ctx.arc(pos.x, pos.y, disc.radius, 0, Math.PI * 2);
             ctx.strokeStyle = border;
             ctx.lineWidth = lw;
             ctx.stroke();
@@ -321,7 +322,7 @@ export class Renderer {
                 ctx.font = `700 ${disc.radius * 1.1}px "Space Grotesk", Inter, "Segoe UI", Tahoma, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(avatarChar, disc.pos.x, disc.pos.y + (disc.radius * 0.05));
+                ctx.fillText(avatarChar, pos.x, pos.y + (disc.radius * 0.05));
             }
 
             // Name label BELOW other players (NOT self)
@@ -330,12 +331,12 @@ export class Renderer {
                 ctx.font = 'bold 11px "Space Grotesk", Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText(disc._playerName || disc.name || "", disc.pos.x, disc.pos.y + disc.radius + 5);
+                ctx.fillText(disc._playerName || disc.name || "", pos.x, pos.y + disc.radius + 5);
             }
 
             // Typing Bubble
             if (disc.isPlayer && disc.typing) {
-                this._drawTypingBubble(disc.pos.x, disc.pos.y - disc.radius - 12);
+                this._drawTypingBubble(pos.x, pos.y - disc.radius - 12);
             }
         }
     }

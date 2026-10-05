@@ -21,7 +21,6 @@ export class Player {
         this.pingSamples = []; // raw round trips, newest last
         this.ping = null; // quantized effective ping, null until measured
         this.pingLoss = 0; // probes lost in the last round
-        this.handicap = 0; // /handicap in ms, 0 = disabled
     }
 
     /**
@@ -44,8 +43,7 @@ export class Player {
             typing: this.typing,
             afk: this.afk,
             ping: this.ping,
-            pingLoss: this.pingLoss,
-            handicap: this.handicap
+            pingLoss: this.pingLoss
         };
     }
 }

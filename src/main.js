@@ -23,11 +23,6 @@ import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 
-// Used for snapshot interpolation while no latency measurement exists yet.
-const DEFAULT_INTERPOLATION_DELAY = 40;
-// The host's measured RTT older than this is treated as unknown.
-const HOST_RTT_TTL = 6000;
-
 class GokBallApp {
     constructor() {
         this.network = new NetworkManager();
@@ -66,6 +61,7 @@ class GokBallApp {
         this._inputHistory = []; // [{seq, input, time}]
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
+        this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
         this._lastServerBallState = null; // {x, y, sx, sy} for collision reconciliation
 
         // Host-authority mode (room creator runs physics)
@@ -83,11 +79,7 @@ class GokBallApp {
         this._hostAuthoritySendCounter = 0;
 
         // Latency data published by the server (every 2s)
-        this._hostRtt = null; // { ping, ts } for the room host
         this._peerHostRtt = null; // measured host RTT over the active WebRTC route
-        this._inputDelay = 0; // /handicap delay in ms, applied to own input
-        this._handicapQueue = [];
-        this._handicapLastInput = null;
         this._pingSignature = null;
         this._hostLastGoalTeam = null; // Track last scored team for authority state
 
@@ -213,7 +205,6 @@ class GokBallApp {
                 this._applyPingColor(pingEl, shownPing);
             }
 
-            this._updateInterpolationDelay(data.ping);
         });
 
         this.network.on('peerPingUpdate', (data) => {
@@ -226,7 +217,6 @@ class GokBallApp {
                 pingEl.textContent = Math.round(data.ping);
                 this._applyPingColor(pingEl, data.ping);
             }
-            this._updateInterpolationDelay(this.network.ping);
         });
 
         // Latency snapshot published by the server every 2 seconds.
@@ -234,10 +224,7 @@ class GokBallApp {
         this.network.on('playerPings', (data) => this._applyPlayerPings(data));
 
         this.network.on('disconnect', () => {
-            this._hostRtt = null;
             this._peerHostRtt = null;
-            this._inputDelay = 0;
-            this._resetHandicapInput();
         });
 
         // Room Update -> Update InGameMenu if visible
@@ -278,10 +265,7 @@ class GokBallApp {
         this.network.leaveRoom();
         this.stopGame();
         this._isHostAuthority = false;
-        this._hostRtt = null;
         this._peerHostRtt = null;
-        this._inputDelay = 0;
-        this._resetHandicapInput();
         this.currentRoomData = null;
         this.ui.showScreen('mainMenu');
     }
@@ -303,6 +287,7 @@ class GokBallApp {
         this._inputHistory = [];
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
+        this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
 
         // Load stadium immediately so render loop can draw the field
         const stadiumData = this.stadiumData || roomData?.stadium;
@@ -370,9 +355,7 @@ class GokBallApp {
             this.physics.myPlayerId = this.network.socket.id;
         }
 
-        // The direct peer path applies the voluntary handicap locally. If no
-        // peer exists yet, the legacy server input path applies it instead.
-        const peerInput = this._isHost() ? inputState : this._getHandicappedInput(inputState);
+        const peerInput = inputState;
         this.network.sendInput(peerInput, inputState);
         const inputSeq = this.network._inputSeqNum;
 
@@ -410,7 +393,7 @@ class GokBallApp {
 
                     // Local player input
                     const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                    if (myDisc) myDisc.input = this._getHandicappedInput(inputState);
+                    if (myDisc) myDisc.input = inputState;
 
                     // Remote player inputs
                     for (const [playerId, ri] of this._remoteInputs) {
@@ -425,6 +408,7 @@ class GokBallApp {
 
                     // Step physics
                     const result = this.physics.step();
+                    this._releaseConsumedKickInputs();
 
                     // Track ball touches for goal attribution (host mode)
                     if (this.physics.ballDisc) {
@@ -449,7 +433,7 @@ class GokBallApp {
                         const savePlayer = this.currentRoomData?.players?.find(p => p.id === result.saveDetected);
                         const saveName = savePlayer?.name || '';
                         if (!this._hostMatchStats[result.saveDetected]) {
-                            this._hostMatchStats[result.saveDetected] = { goals: 0, assists: 0, saves: 0, name: saveName, team: savePlayer?.team };
+                            this._hostMatchStats[result.saveDetected] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: saveName, team: savePlayer?.team };
                         }
                         this._hostMatchStats[result.saveDetected].saves++;
                     }
@@ -548,6 +532,8 @@ class GokBallApp {
                         if (this._reconciliationPending && this._lastConfirmedServerState) {
                             const confirmed = this._lastConfirmedServerState.discs.find(d => d.id === myId);
                             if (confirmed) {
+                                const predictedX = myDisc.pos.x;
+                                const predictedY = myDisc.pos.y;
                                 myDisc.pos.x = confirmed.x;
                                 myDisc.pos.y = confirmed.y;
                                 myDisc.speed.x = confirmed.sx;
@@ -559,6 +545,9 @@ class GokBallApp {
                                     if (h.seq <= this._lastConfirmedServerSeq) continue;
                                     this.physics.predictPlayerStep(myDisc, h.input);
                                 }
+                                this._localRenderCorrection.x += predictedX - myDisc.pos.x;
+                                this._localRenderCorrection.y += predictedY - myDisc.pos.y;
+                                this._localRenderCorrection.updatedAt = performance.now();
                                 reconciled = true;
                             }
                             this._reconciliationPending = false;
@@ -607,6 +596,7 @@ class GokBallApp {
     }
 
     _applyInterpolatedSnapshots(localTime) {
+        for (const disc of this.physics.discs) disc._renderPosition = null;
         const snapshots = this._snapshotBuffer.getInterpolatedState(localTime)?.physics?.discs;
         if (!snapshots) return;
 
@@ -629,9 +619,55 @@ class GokBallApp {
             disc.pos.y = snapshot.y;
             disc.speed.x = snapshot.sx;
             disc.speed.y = snapshot.sy;
+            disc._renderPosition = { x: snapshot.x, y: snapshot.y };
             if (snapshot.kicking !== undefined) disc.kicking = snapshot.kicking;
             if (snapshot.color !== undefined) disc.color = snapshot.color;
         }
+
+        const localDisc = localById.get(myId);
+        if (localDisc && this._localRenderCorrection) {
+            const elapsed = Math.max(0, Math.min(100, localTime - this._localRenderCorrection.updatedAt));
+            const decay = Math.exp(-elapsed / 90);
+            this._localRenderCorrection.x *= decay;
+            this._localRenderCorrection.y *= decay;
+            this._localRenderCorrection.updatedAt = localTime;
+            localDisc._renderPosition = {
+                x: localDisc.pos.x + this._localRenderCorrection.x,
+                y: localDisc.pos.y + this._localRenderCorrection.y
+            };
+        }
+
+        // Independent interpolation can briefly place the ball inside a
+        // player's disc between two collision-resolved host snapshots. Keep
+        // the rendered positions tangent while leaving simulation state intact.
+        const ball = this.physics.ballDisc;
+        if (!ball) return;
+        const ballPos = { ...(ball._renderPosition || ball.pos) };
+        for (let pass = 0; pass < 2; pass++) {
+            for (const player of this.physics.discs) {
+                if (!player.isPlayer) continue;
+                const playerPos = player._renderPosition || player.pos;
+                let dx = ballPos.x - playerPos.x;
+                let dy = ballPos.y - playerPos.y;
+                let distance = Math.hypot(dx, dy);
+                const minDistance = ball.radius + player.radius;
+                if (distance >= minDistance) continue;
+                if (distance < 0.001) {
+                    dx = player.speed.x - ball.speed.x;
+                    dy = player.speed.y - ball.speed.y;
+                    distance = Math.hypot(dx, dy);
+                    if (distance < 0.001) {
+                        dx = player.team === 'red' ? 1 : -1;
+                        dy = 0;
+                        distance = 1;
+                    }
+                }
+                const correction = minDistance - distance + 0.1;
+                ballPos.x += (dx / distance) * correction;
+                ballPos.y += (dy / distance) * correction;
+            }
+        }
+        if (ball._renderPosition) ball._renderPosition = ballPos;
     }
 
     /** Check if this client is the room creator/host */
@@ -639,38 +675,10 @@ class GokBallApp {
         return this.currentRoomData?.creatorId === this.network.socket?.id;
     }
 
-    /**
-     * Round trip that actually matters for this client.
-     * Host-authority clients also depend on the host's connection, so their
-     * effective latency is own RTT + the host's server-measured RTT.
-     * Returns null when unknown.
-     */
-    _effectiveLatency(ownPing) {
-        if (ownPing == null) return null;
-        let latency = ownPing;
-        const hostPing = this._getHostRtt();
-        if (this._isHostAuthority && !this._isHost() && hostPing != null) latency += hostPing;
-        return latency;
-    }
-
     /** Latest measured RTT to the host over WebRTC, or null if unavailable. */
     _getPeerHostRtt() {
         if (!this._peerHostRtt || Date.now() - this._peerHostRtt.ts > 3000) return null;
         return this._peerHostRtt.ping;
-    }
-
-    _updateInterpolationDelay(serverPing = this.network.ping) {
-        if (!this._snapshotBuffer) return;
-        const latency = this._getPeerHostRtt() ?? this._effectiveLatency(serverPing);
-        this._snapshotBuffer.interpolationDelay = latency == null
-            ? DEFAULT_INTERPOLATION_DELAY
-            : Math.max(40, Math.min(100, latency / 2 + 20));
-    }
-
-    /** Server-measured RTT of the room host, or null when unknown/stale */
-    _getHostRtt() {
-        if (!this._hostRtt || Date.now() - this._hostRtt.ts > HOST_RTT_TTL) return null;
-        return this._hostRtt.ping;
     }
 
     /** Color a ping value by quality; unmeasured values stay neutral */
@@ -694,45 +702,17 @@ class GokBallApp {
         for (const entry of data.pings) {
             const player = players.find(p => p.id === entry.id);
             if (player) Object.assign(player, entry);
-
-            if (entry.id === this.network.playerId) {
-                this._inputDelay = entry.inputDelay || 0;
-                if (this._inputDelay === 0) this._resetHandicapInput();
-            } else if (this.currentRoomData.creatorId === entry.id) {
-                this._hostRtt = { ping: entry.ping, ts: Date.now() };
-            }
         }
 
         // Only rebuild the lists when a value actually changed, so an in
         // progress admin drag is not interrupted every 2 seconds
-        const signature = data.pings.map(p => `${p.id}:${p.ping}:${p.pingLoss}:${p.handicap}`).join('|');
+        const signature = data.pings.map(p => `${p.id}:${p.ping}:${p.pingLoss}`).join('|');
         if (signature === this._pingSignature) return;
         this._pingSignature = signature;
 
         const lobby = this.ui.screens.roomLobby;
         if (this.ui.currentScreen === 'roomLobby' && lobby) lobby.updatePlayers(players);
         if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
-    }
-
-    /**
-     * /handicap: our own input is applied late so the lag we
-     * voluntarily add is actually felt. The delay is decided by the server.
-     */
-    _getHandicappedInput(inputState) {
-        const delay = this._inputDelay || 0;
-        if (delay <= 0) return inputState;
-
-        const now = performance.now();
-        this._handicapQueue.push({ at: now + delay, input: inputState });
-        while (this._handicapQueue.length && this._handicapQueue[0].at <= now) {
-            this._handicapLastInput = this._handicapQueue.shift().input;
-        }
-        return this._handicapLastInput || inputState;
-    }
-
-    _resetHandicapInput() {
-        this._handicapQueue = [];
-        this._handicapLastInput = null;
     }
 
     /**
@@ -774,6 +754,7 @@ class GokBallApp {
                                     }
                                 }
                                 const result = this.physics.step();
+                                this._releaseConsumedKickInputs();
                                 if (result.kickHappened) this.audio.playKick();
                                 if (result.goalTeam && this._hostGameState === 'playing') {
                                     this._hostHandleGoal(result.goalTeam);
@@ -913,11 +894,16 @@ class GokBallApp {
         this.physics.kickOffTeam = scoredOnTeam;
         this.physics.inGoalPause = true;
 
-        // Record scorer and assister
-        const scorerName = this._hostLastToucher ? (this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher)?.name || '') : '';
+        // Attribute an own goal to the last toucher from the team that
+        // conceded, and deduct the matching three player points.
+        const lastTouchPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher);
+        const ownGoal = !!lastTouchPlayer && lastTouchPlayer.team === scoredOnTeam;
+        const scorerName = ownGoal
+            ? `${lastTouchPlayer.name} (K.K)`
+            : (this._hostLastToucher ? (lastTouchPlayer?.name || '') : '');
         // Assister: last toucher on same team as scorer, before the scorer
         let assisterName = '';
-        if (this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
+        if (!ownGoal && this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
             const prevPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostPrevToucher);
             if (prevPlayer && prevPlayer.team === scoringTeam) {
                 assisterName = prevPlayer.name || '';
@@ -925,12 +911,13 @@ class GokBallApp {
         }
 
         // Track match stats locally
-        if (this._hostLastToucher) {
-            if (!this._hostMatchStats[this._hostLastToucher]) this._hostMatchStats[this._hostLastToucher] = { goals: 0, assists: 0, saves: 0, name: scorerName, team: scoringTeam };
-            this._hostMatchStats[this._hostLastToucher].goals++;
+        if (this._hostLastToucher && (ownGoal || lastTouchPlayer?.team === scoringTeam)) {
+            if (!this._hostMatchStats[this._hostLastToucher]) this._hostMatchStats[this._hostLastToucher] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: lastTouchPlayer.name, team: lastTouchPlayer.team };
+            if (ownGoal) this._hostMatchStats[this._hostLastToucher].ownGoals++;
+            else this._hostMatchStats[this._hostLastToucher].goals++;
         }
         if (assisterName) {
-            if (!this._hostMatchStats[this._hostPrevToucher]) this._hostMatchStats[this._hostPrevToucher] = { goals: 0, assists: 0, saves: 0, name: assisterName, team: scoringTeam };
+            if (!this._hostMatchStats[this._hostPrevToucher]) this._hostMatchStats[this._hostPrevToucher] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: assisterName, team: scoringTeam };
             this._hostMatchStats[this._hostPrevToucher].assists++;
         }
 
@@ -946,7 +933,8 @@ class GokBallApp {
         // Format: 🔴 GOL! PlayerName ⚽ PlayerName 👟
         const teamEmoji = scoringTeam === 'red' ? '🔴' : '🔵';
         let goalMsg = `${teamEmoji} GOL!`;
-        if (scorerName) goalMsg += ` ${scorerName} ⚽`;
+        if (ownGoal) goalMsg += ` 😂 ${scorerName} kendi kalesine attı! -3 puan`;
+        else if (scorerName) goalMsg += ` ${scorerName} ⚽`;
         if (assisterName) goalMsg += ` ${assisterName} 👟`;
         goalMsg += ` (${this._hostScoreRed} - ${this._hostScoreBlue})`;
         this.chat.addMessage({ message: goalMsg, system: true });
@@ -957,7 +945,8 @@ class GokBallApp {
             scoreRed: this._hostScoreRed,
             scoreBlue: this._hostScoreBlue,
             scorer: scorerName,
-            assister: assisterName
+            assister: assisterName,
+            ownGoal
         });
     }
 
@@ -971,11 +960,11 @@ class GokBallApp {
 
         // Calculate points: goals=3, assists=1, saves=0.25
         const ranked = Object.entries(this._hostMatchStats)
-            .filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0)
+            .filter(([_, s]) => s.goals > 0 || s.assists > 0 || s.saves > 0 || s.ownGoals > 0)
             .map(([id, s]) => ({
                 id, name: s.name, team: s.team,
-                goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0,
-                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+                goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
+                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
             }))
             .sort((a, b) => b.points - a.points);
 
@@ -1011,6 +1000,7 @@ class GokBallApp {
                         if (p.goals > 0) stats.push(`⚽${p.goals}`);
                         if (p.assists > 0) stats.push(`👟${p.assists}`);
                         if (p.saves > 0) stats.push(`🧤${p.saves}`);
+                        if (p.ownGoals > 0) stats.push(`K.K ${p.ownGoals}`);
                         return `<div class="ranking-row" style="color:${color}">
                             <span class="ranking-medal">${medal}</span>
                             <span class="ranking-name">${p.name}</span>
@@ -1031,6 +1021,7 @@ class GokBallApp {
                 const parts = [];
                 if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
                 if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
+                if (p.ownGoals > 0) parts.push(`K.K ${p.ownGoals}`);
                 statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
             }
             this.chat.addMessage({ message: statsMsg, system: true });
@@ -1257,13 +1248,24 @@ class GokBallApp {
         });
     }
 
+    _releaseConsumedKickInputs() {
+        for (const disc of this.physics.discs) {
+            if (!disc.isPlayer || !disc._autoKickReleased) continue;
+            disc._autoKickReleased = false;
+            if (disc.id === this.network.socket?.id) {
+                this.input.suppressKickUntilKeyUp();
+            } else if (disc.id) {
+                this.network.releasePlayerKick(disc.id);
+            }
+        }
+    }
+
     /** Setup callback handlers for network events */
     _setupNetworkCallbacks() {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
             this._isHostAuthority = false;
-            this._hostRtt = null;
             this._peerHostRtt = null;
             this.network.connectRoomPeers(data);
             this.stadiumData = data.stadium;
@@ -1275,7 +1277,6 @@ class GokBallApp {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
             this._isHostAuthority = ['playing', 'countdown', 'goal'].includes(data.game?.state);
-            this._hostRtt = null;
             this._peerHostRtt = null;
             this.network.connectRoomPeers(data);
             // New room: force the next ping snapshot to repaint the player list
@@ -1393,6 +1394,15 @@ class GokBallApp {
             if (this.gameRunning) this._handleGameState(state);
         });
 
+        this.network.on('kickReleased', () => {
+            this.input.suppressKickUntilKeyUp();
+            const localDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
+            if (localDisc) {
+                localDisc.kicking = false;
+                localDisc._autoKickReleased = false;
+            }
+        });
+
         // Server state events are control-path leftovers (for example map or
         // kit updates). In host-authority matches, only host peer snapshots
         // may enter prediction/interpolation.
@@ -1407,6 +1417,13 @@ class GokBallApp {
                 this.scoreboard.showGoal(data.team);
             }
             this.audio.playGoal();
+            if (data.ownGoal) {
+                this.chat.addMessage({
+                    message: `😂 ${data.scorer || 'Oyuncu (K.K)'} kendi kalesine attı! -3 puan. (${data.scoreRed} - ${data.scoreBlue})`,
+                    system: true
+                });
+                return;
+            }
             // Format: 🔴 GOL! PlayerName ⚽ PlayerName 👟
             const teamEmoji = data.team === 'red' ? '🔴' : '🔵';
             let goalMsg = `${teamEmoji} GOL!`;
@@ -1424,11 +1441,11 @@ class GokBallApp {
             const ranked = [];
             if (data.matchStats && Object.keys(data.matchStats).length > 0) {
                 for (const [id, s] of Object.entries(data.matchStats)) {
-                    if (s.goals > 0 || s.assists > 0 || s.saves > 0) {
+                    if (s.goals > 0 || s.assists > 0 || s.saves > 0 || s.ownGoals > 0) {
                         ranked.push({
                             id, name: s.name, team: s.team,
-                            goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0,
-                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+                            goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
+                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
                         });
                     }
                 }
@@ -1459,6 +1476,7 @@ class GokBallApp {
                             if (p.goals > 0) stats.push(`⚽${p.goals}`);
                             if (p.assists > 0) stats.push(`👟${p.assists}`);
                             if (p.saves > 0) stats.push(`🧤${p.saves}`);
+                            if (p.ownGoals > 0) stats.push(`K.K ${p.ownGoals}`);
                             return `<div class="ranking-row" style="color:${color}">
                                 <span class="ranking-medal">${medal}</span>
                                 <span class="ranking-name">${p.name}</span>
@@ -1479,6 +1497,7 @@ class GokBallApp {
                     const parts = [];
                     if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
                     if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
+                    if (p.ownGoals > 0) parts.push(`K.K ${p.ownGoals}`);
                     statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
                 }
                 this.chat.addMessage({ message: statsMsg, system: true });
@@ -1506,10 +1525,7 @@ class GokBallApp {
         // Room closed (the host left, so the room is gone)
         this.network.on('roomClosed', (data) => {
             this._isHostAuthority = false;
-            this._hostRtt = null;
             this._peerHostRtt = null;
-            this._inputDelay = 0;
-            this._resetHandicapInput();
             this.stopGame();
             this.currentRoomData = null;
 
@@ -1584,7 +1600,17 @@ class GokBallApp {
                 if (data.scoreLimit !== undefined) this.currentRoomData.game.scoreLimit = data.scoreLimit;
                 if (data.timeLimit !== undefined) this.currentRoomData.game.timeLimit = data.timeLimit;
                 if (data.teamsLocked !== undefined) this.currentRoomData.teamsLocked = data.teamsLocked;
-                if (data.players) this.currentRoomData.players = data.players;
+                if (data.players) {
+                    this.currentRoomData.players = data.players;
+                    for (const player of data.players) {
+                        if (player.avatar == null) continue;
+                        const disc = this.physics.discs.find(d => d.isPlayer && d.id === player.id);
+                        if (disc) {
+                            disc.avatar = player.avatar;
+                            disc._avatar = player.avatar;
+                        }
+                    }
+                }
                 if (data.playerSpeedMultiplier !== undefined) {
                     const previous = this.currentRoomData.playerSpeedMultiplier || 1;
                     const ratio = data.playerSpeedMultiplier / previous;
@@ -1609,6 +1635,10 @@ class GokBallApp {
                 if (!this.currentRoomData.teamColors) this.currentRoomData.teamColors = {};
                 if (data.team && data.teamColors) {
                     this.currentRoomData.teamColors[data.team] = data.teamColors;
+                }
+                const lobby = this.ui.screens.roomLobby;
+                if (this.ui.currentScreen === 'roomLobby' && lobby) {
+                    lobby.updateTeamColors(this.currentRoomData.teamColors);
                 }
                 // Apply to local physics discs if game is running
                 if (this.gameRunning && data.team && data.teamColors) {

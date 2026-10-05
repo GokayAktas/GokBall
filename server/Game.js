@@ -438,7 +438,8 @@ export class Game {
                 team: player ? player.team : 'spectator',
                 goals: s.goals || 0,
                 assists: s.assists || 0,
-                saves: s.saves || 0
+                saves: s.saves || 0,
+                ownGoals: s.ownGoals || 0
             };
         }
         return stats;
@@ -446,7 +447,7 @@ export class Game {
 
     _ensurePlayerStats(playerId) {
         if (!this._matchStats[playerId]) {
-            this._matchStats[playerId] = { goals: 0, assists: 0, saves: 0 };
+            this._matchStats[playerId] = { goals: 0, assists: 0, saves: 0, ownGoals: 0 };
         }
     }
 
@@ -464,15 +465,17 @@ export class Game {
         this.state = 'goal';
         this.physics.kickOffReset = true;
 
-        // Record goal scorer and assister from touch history
-        if (this._lastToucher) {
-            const scorerPlayer = this.room.players.get(this._lastToucher);
-            if (scorerPlayer && scorerPlayer.team === scoringTeam) {
-                this._ensurePlayerStats(this._lastToucher);
-                this._matchStats[this._lastToucher].goals++;
-            }
+        // Award own goals to the last player from the team that conceded.
+        const lastTouchPlayer = this._lastToucher ? this.room.players.get(this._lastToucher) : null;
+        const ownGoal = !!lastTouchPlayer && lastTouchPlayer.team === scoredOnTeam;
+        if (ownGoal) {
+            this._ensurePlayerStats(this._lastToucher);
+            this._matchStats[this._lastToucher].ownGoals++;
+        } else if (this._lastToucher && lastTouchPlayer?.team === scoringTeam) {
+            this._ensurePlayerStats(this._lastToucher);
+            this._matchStats[this._lastToucher].goals++;
         }
-        if (this._prevToucher) {
+        if (!ownGoal && this._prevToucher) {
             const assisterPlayer = this.room.players.get(this._prevToucher);
             if (assisterPlayer && assisterPlayer.team === scoringTeam && this._prevToucher !== this._lastToucher) {
                 this._ensurePlayerStats(this._prevToucher);
@@ -481,14 +484,19 @@ export class Game {
         }
 
         // Broadcast goal with scorer/assist info
-        const scorerName = this._lastToucher ? (this.room.players.get(this._lastToucher)?.name || '') : '';
-        const assisterName = (this._prevToucher && this._prevToucher !== this._lastToucher) ? (this.room.players.get(this._prevToucher)?.name || '') : '';
+        const scorerName = ownGoal
+            ? `${lastTouchPlayer.name} (K.K)`
+            : (this._lastToucher ? (lastTouchPlayer?.name || '') : '');
+        const assisterName = !ownGoal && this._prevToucher && this._prevToucher !== this._lastToucher
+            ? (this.room.players.get(this._prevToucher)?.name || '')
+            : '';
         this.room.broadcast('goalScored', {
             team: scoringTeam,
             scoreRed: this.scoreRed,
             scoreBlue: this.scoreBlue,
             scorer: scorerName,
-            assister: assisterName
+            assister: assisterName,
+            ownGoal
         });
         // set cooldown until we allow next goal to be counted (score pause length in ticks)
         // Add a small safety margin to avoid re-processing due to rounding or

@@ -477,6 +477,10 @@ export class NetworkManager {
         this.socket.emit('kickPlayer', { playerId, reason });
     }
 
+    releasePlayerKick(playerId) {
+        this.socket.emit('releasePlayerKick', { playerId });
+    }
+
     banPlayer(playerId, reason) {
         this.socket.emit('banPlayer', { playerId, reason });
     }

@@ -167,16 +167,19 @@ export class GamePhysics {
             disc.speed.x += ax * accel;
             disc.speed.y += ay * accel;
 
-            if (disc.input.kick) {
+            if (disc.input.kick && !disc._kickInputBlockedUntilRelease) {
                 if (!disc.kicking) disc.kicking = true;
                 if (!disc._kickHoldConsumed && this._ballInKickRange(disc)) {
                     if (this._performKick(disc)) {
                         disc._kickHoldConsumed = true;
                     }
                 }
-            } else {
+            } else if (!disc.input.kick) {
                 disc.kicking = false;
                 disc._kickHoldConsumed = false;
+                disc._kickInputBlockedUntilRelease = false;
+            } else {
+                disc.kicking = false;
             }
         }
 
@@ -257,6 +260,9 @@ export class GamePhysics {
         }
 
         this.ballDisc.color = 'FFFFFF';
+        playerDisc._kickHoldConsumed = true;
+        playerDisc._kickInputBlockedUntilRelease = true;
+        playerDisc.kicking = false;
         playerDisc._autoKickReleased = true;
 
         const nx = dx / dist;

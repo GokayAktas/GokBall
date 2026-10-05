@@ -6,7 +6,6 @@ import { Player } from './Player.js';
 import { Game } from './Game.js';
 import { MapManager } from './MapManager.js';
 import { normalizeHex, normalizeAngle } from './utils/colors.js';
-import { MAX_HANDICAP } from './utils/ping.js';
 
 // Stadium Generator
 function createStadium(name, fieldW, fieldH, spawnDist = 170) {
@@ -822,7 +821,6 @@ export class Room {
                 helpText += "👤 /avatar [yazı] - Formandaki yazıyı/emojiyi değiştirir (Max 2 harf)\n";
                 helpText += "🎲 /avatar random - 1 ile 99 arasında rastgele forma numarası verir\n";
                 helpText += "💤 /afk - 2 maç boyunca AFK modunu aç/kapat\n";
-                helpText += "⏱ /handicap [ms] - Kendi pingine gecikme ekler (adil oyun için). 0 ile kaldırılır\n";
                 
                 if (player.isAdmin) {
                     helpText += "\n👑 Admin Komutları:\n";
@@ -846,31 +844,6 @@ export class Room {
                     });
                 }
                 break;
-            case '/handicap': {
-                // Ping handicap: add lag to yourself while removing
-                // the lag advantage your connection gives you.
-                const raw = Number(parts[1]);
-                if (!parts[1] || !Number.isFinite(raw) || raw < 0) {
-                    player.socket.emit('chatMessage', {
-                        playerName: 'SİSTEM',
-                        message: `⏱ Ping handicap requires a value in milliseconds. Şu anki: ${player.handicap}ms`,
-                        system: true
-                    });
-                    break;
-                }
-                const value = Math.min(MAX_HANDICAP, Math.round(raw));
-                player.handicap = value;
-                this.broadcast('chatMessage', {
-                    playerName: '🏟 SİSTEM',
-                    message: value > 0
-                        ? `⏱ ${player.name} ping handicap uyguladı: ${value}ms`
-                        : `⏱ ${player.name} ping handicap kaldırıldı`,
-                    system: true
-                });
-                this.broadcast('roomUpdate', { players: this.getPlayerList() });
-                this.broadcast('playerPings', { pings: this.getPingList() });
-                break;
-            }
             default:
                 player.socket.emit('chatMessage', {
                     playerName: 'System',
@@ -917,29 +890,8 @@ export class Room {
         return [...this.players.values()].map(p => ({
             id: p.id,
             ping: p.ping,
-            pingLoss: p.pingLoss || 0,
-            handicap: p.handicap || 0,
-            inputDelay: this.inputDelayFor(p.id)
+            pingLoss: p.pingLoss || 0
         }));
-    }
-
-    /**
-     * /handicap fairness model.
-     *
-     * A handicapper's own input is delayed by their handicap, and every other
-     * player's input is delayed by the same amount. Nobody gains an advantage:
-     * the high ping player's actions are seen relatively earlier by everyone,
-     * and the cost is the same added delay for everybody. (Our netcode cannot
-     * render another player earlier than real time, so this equal-delay variant
-     * is what actually delivers the fairness the original feature promises.)
-     */
-    inputDelayFor(playerId) {
-        let others = 0;
-        for (const p of this.players.values()) {
-            if (p.id === playerId) continue;
-            if ((p.handicap || 0) > others) others = p.handicap;
-        }
-        return (this.players.get(playerId)?.handicap || 0) + others;
     }
 
     getTeamPlayers(team) {

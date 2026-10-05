@@ -20,7 +20,7 @@ export function pingLevel(ms) {
 /**
  * HTML for the badge shown next to a player's name.
  *
- * @param {object} player     room player entry (ping, pingLoss, handicap)
+ * @param {object} player     room player entry (ping, pingLoss)
  * @param {number|null} ownPing  locally measured ping, used for the own entry
  *                              so it updates instantly instead of every 2s
  */
@@ -35,10 +35,7 @@ export function renderPingBadge(player, ownPing = null) {
         const jittery = player.pingLoss > 0
             ? `<span class="ping-bars" title="${player.pingLoss} kayıp ping">▮</span>`
             : '';
-        const handicap = player.handicap > 0
-            ? `<span class="ping-handicap" title="Handicap: ${player.handicap}ms">⏱${player.handicap}</span>`
-            : '';
-        parts.push(`<span class="ping-badge ping-${level}" title="Ping">${ping}</span>${jittery}${handicap}`);
+        parts.push(`<span class="ping-badge ping-${level}" title="Ping">${ping}</span>${jittery}`);
     }
     return parts.join('');
 }

@@ -236,7 +236,7 @@ export class Physics {
             }
 
             // 3. Kick — auto-fire once per hold when ball enters range
-            if (disc.input.kick) {
+            if (disc.input.kick && !disc._kickInputBlockedUntilRelease) {
                 if (!disc.kicking) disc.kicking = true;
                 if (!disc._kickHoldConsumed && this._ballInKickRange(disc)) {
                     if (this._performKick(disc)) {
@@ -244,9 +244,12 @@ export class Physics {
                         kickHappened = true;
                     }
                 }
-            } else {
+            } else if (!disc.input.kick) {
                 disc.kicking = false;
                 disc._kickHoldConsumed = false;
+                disc._kickInputBlockedUntilRelease = false;
+            } else {
+                disc.kicking = false;
             }
         }
 
@@ -348,14 +351,17 @@ export class Physics {
             disc.speed.y += (ay / magnitude) * acceleration;
         }
 
-        if (input.kick) {
+        if (input.kick && !disc._kickInputBlockedUntilRelease) {
             if (!disc.kicking) disc.kicking = true;
             if (!disc._kickHoldConsumed && this._ballInKickRange(disc) && this._performKick(disc)) {
                 disc._kickHoldConsumed = true;
             }
-        } else {
+        } else if (!input.kick) {
             disc.kicking = false;
             disc._kickHoldConsumed = false;
+            disc._kickInputBlockedUntilRelease = false;
+        } else {
+            disc.kicking = false;
         }
 
         const damping = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
@@ -409,6 +415,9 @@ export class Physics {
         this.ballDisc.color = 'FFFFFF';
         this.ballDisc.lastTouchedBy = playerDisc.ownerId || playerDisc.id;
         this.ballDisc.lastTouchedTeam = playerDisc.team;
+        playerDisc._kickHoldConsumed = true;
+        playerDisc._kickInputBlockedUntilRelease = true;
+        playerDisc.kicking = false;
         playerDisc._autoKickReleased = true;
 
         const nx = dx / dist;

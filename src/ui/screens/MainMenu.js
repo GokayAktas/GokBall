@@ -42,12 +42,6 @@ export class MainMenu {
         </div>
 
         <footer class="menu-footer">
-          <button class="btn btn-ghost btn-block" id="btnAbout" aria-haspopup="dialog">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/>
-            </svg>
-            Hakkında
-          </button>
           <p class="menu-footer-credit">&copy; <span id="footerYear"></span> GokBall</p>
         </footer>
       </div>
@@ -93,63 +87,6 @@ export class MainMenu {
       this.app.ui.showScreen('settings');
     });
 
-    document.getElementById('btnAbout')?.addEventListener('click', () => this._showAbout());
-  }
-
-  /** Hakkında dialog */
-  _showAbout() {
-    const old = document.getElementById('aboutModal');
-    if (old) old.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'aboutModal';
-    overlay.className = 'about-overlay';
-    overlay.innerHTML = `
-      <div class="about-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutDescription">
-        <button class="about-close-icon" id="aboutCloseIcon" aria-label="Hakkında penceresini kapat">×</button>
-        <div class="about-mark" aria-hidden="true"><span>⚽</span></div>
-        <p class="about-eyebrow">OYUN HAKKINDA</p>
-        <h2 id="aboutTitle" class="about-title">Sahaya çık, maç başlasın.</h2>
-        <p id="aboutDescription" class="about-text">
-          <strong>GokBall</strong>, tarayıcınızda arkadaşlarınızla oynayabileceğiniz gerçek zamanlı,
-          çok oyunculu bir 2D futbol oyunudur. Oda kurun, takımınızı seçin ve maça başlayın.
-        </p>
-        <div class="about-features">
-          <div class="about-feature">
-            <span class="about-feature-icon">⚡</span>
-            <span><strong>Canlı maçlar</strong><small>Arkadaşlarınla aynı sahada buluş.</small></span>
-          </div>
-          <div class="about-feature">
-            <span class="about-feature-icon">⚽</span>
-            <span><strong>Takım oyunu</strong><small>Sohbet et, paslaş ve skor yap.</small></span>
-          </div>
-          <div class="about-feature">
-            <span class="about-feature-icon">🎨</span>
-            <span><strong>Sana göre</strong><small>Kontrolleri ve görünümü düzenle.</small></span>
-          </div>
-        </div>
-        <div class="about-bottom">
-          <span>Bir oda oluştur. Takımını kur. Oyuna gir.</span>
-          <button class="btn btn-primary" id="aboutClose">Tamam</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    function close() {
-      overlay.remove();
-      document.removeEventListener('keydown', onKey);
-      document.getElementById('btnAbout')?.focus();
-    }
-    function onKey(e) {
-      if (e.key === 'Escape') close();
-    }
-    overlay.querySelector('#aboutClose')?.addEventListener('click', close);
-    overlay.querySelector('#aboutCloseIcon')?.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
-    document.addEventListener('keydown', onKey);
   }
 
   _saveName() {

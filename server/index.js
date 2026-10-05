@@ -300,23 +300,18 @@ io.on('connection', (socket) => {
             const hostSocket = io.sockets.sockets.get(room.hostId);
             if (!hostSocket) return;
 
-            // /handicap: hold the input back so the player feels the lag they
-            // asked for (and everyone else is delayed the same amount, so
-            // nobody gains an advantage - see Room.inputDelayFor).
-            const delay = room.inputDelayFor(socket.id);
-            if (delay > 0) {
-                setTimeout(() => {
-                    hostSocket.volatile.emit('remoteInput', { playerId: socket.id, input });
-                }, delay);
-                return;
-            }
-
             hostSocket.volatile.emit('remoteInput', { playerId: socket.id, input });
             return;
         }
 
         // Normal mode: apply to server physics
         room.game.setPlayerInput(socket.id, input);
+    });
+
+    socket.on('releasePlayerKick', ({ playerId } = {}) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room || socket.id !== room.hostId || !playerId) return;
+        room.players.get(playerId)?.socket?.emit('kickReleased');
     });
 
     // --- Authority State (from Host in host-authority mode) ---
@@ -348,7 +343,8 @@ io.on('connection', (socket) => {
             scoreRed: data.scoreRed, 
             scoreBlue: data.scoreBlue,
             scorer: data.scorer || '',
-            assister: data.assister || ''
+            assister: data.assister || '',
+            ownGoal: !!data.ownGoal
         });
     });
 

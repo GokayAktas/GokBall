@@ -9,6 +9,7 @@ export class Chat {
     }
 
     show() {
+        this.collapsed = false;
         if (!this.container) this.container = document.getElementById('chatContainer');
         if (!this.container) return;
 
@@ -33,6 +34,14 @@ export class Chat {
 
         this.container.classList.remove('hidden');
 
+        const box = document.getElementById('gameChatBox');
+        const minHeight = 144;
+        const maxHeight = Math.max(minHeight, window.innerHeight - 20);
+        const savedHeight = Number(localStorage.getItem('gokball_chat_height'));
+        if (box && Number.isFinite(savedHeight) && savedHeight > 0) {
+            box.style.height = `${Math.min(maxHeight, Math.max(minHeight, savedHeight))}px`;
+        }
+
         document.getElementById('gameChatSend')?.addEventListener('click', () => this._send());
         const chatInput = document.getElementById('gameChatInput');
         chatInput?.addEventListener('keydown', (e) => {
@@ -52,40 +61,42 @@ export class Chat {
             this._toggleCollapse();
         });
 
-        // Custom Resize Logic
+        // Resize vertically from the top grip. Pointer events also support
+        // touch screens; the chat width remains fixed.
         const resizer = document.getElementById('gameChatResizer');
-        const box = document.getElementById('gameChatBox');
         let isResizing = false;
         let startY, startHeight;
 
-        const onMouseMove = (e) => {
+        const onPointerMove = (e) => {
             if (!isResizing) return;
-            const dy = startY - e.clientY; // moving up increases height
-            let h = startHeight + dy;
-            if (h < 100) h = 100;
-            if (h > window.innerHeight * 0.8) h = window.innerHeight * 0.8;
-            box.style.height = h + 'px';
+            const height = Math.min(maxHeight, Math.max(minHeight, startHeight + startY - e.clientY));
+            box.style.height = `${height}px`;
         };
 
-        const onMouseUp = () => {
+        const onPointerUp = () => {
             if (isResizing) {
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                window.removeEventListener('mousemove', onMouseMove);
-                window.removeEventListener('mouseup', onMouseUp);
+                box.classList.remove('is-resizing');
+                localStorage.setItem('gokball_chat_height', String(box.offsetHeight));
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('pointercancel', onPointerUp);
             }
         };
 
-        resizer?.addEventListener('mousedown', (e) => {
+        resizer?.addEventListener('pointerdown', (e) => {
             if (this.collapsed) return; // don't resize if collapsed
             isResizing = true;
             startY = e.clientY;
             startHeight = box.offsetHeight;
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
+            box.classList.add('is-resizing');
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
             e.preventDefault();
         });
 

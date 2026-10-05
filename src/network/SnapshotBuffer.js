@@ -3,7 +3,7 @@
  * time, so no clock synchronization between the host and guest is required.
  */
 
-const MAX_EXTRAPOLATION_MS = 50;
+const MAX_EXTRAPOLATION_MS = 80;
 const FIXED_STEP_MS = 1000 / 60;
 
 export class SnapshotBuffer {
@@ -11,6 +11,8 @@ export class SnapshotBuffer {
         this.buffer = [];
         this.interpolationDelay = interpolationDelay;
         this.maxBufferSize = 20;
+        this._averageInterval = FIXED_STEP_MS;
+        this._arrivalJitter = 0;
     }
 
     /** Add a newer host snapshot; stale unordered packets are ignored. */
@@ -21,6 +23,16 @@ export class SnapshotBuffer {
         const latest = this.buffer[this.buffer.length - 1];
         if (tick !== null && latest?.tick !== null && latest?.tick !== undefined && tick <= latest.tick) {
             return false;
+        }
+
+        if (latest) {
+            const interval = receivedAt - latest.time;
+            if (interval >= 8 && interval <= 250) {
+                this._arrivalJitter += (Math.abs(interval - this._averageInterval) - this._arrivalJitter) / 8;
+                this._averageInterval += (interval - this._averageInterval) / 16;
+                this.interpolationDelay = Math.max(30, Math.min(120,
+                    this._averageInterval * 2 + this._arrivalJitter * 3));
+            }
         }
 
         this.buffer.push({ time: receivedAt, tick, state });

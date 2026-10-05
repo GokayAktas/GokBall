@@ -32,6 +32,7 @@ export class InputManager {
         window.removeEventListener('keydown', this._onKeyDown);
         window.removeEventListener('keyup', this._onKeyUp);
         this.keys = {};
+        this._suppressKick = false;
     }
 
     _onKeyDown(e) {
@@ -49,7 +50,7 @@ export class InputManager {
     _onKeyUp(e) {
         this.keys[e.code] = false;
         // If the user released a kick key, clear suppression so they can press again
-        if (this._suppressKick && (this.bindings.kick || []).includes(e.code)) {
+        if (this._suppressKick && (this.bindings.kick || []).includes(e.code) && !this._isAction('kick')) {
             this._suppressKick = false;
         }
     }
@@ -72,7 +73,7 @@ export class InputManager {
      * Used when server auto-fires a held kick so client must re-press to kick again.
      */
     suppressKickUntilKeyUp() {
-        this._suppressKick = true;
+        this._suppressKick = this._isAction('kick');
     }
 
     _isAction(action) {
