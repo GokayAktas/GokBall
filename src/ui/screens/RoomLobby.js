@@ -1,8 +1,6 @@
 /**
  * Room Lobby Screen - Team picker, player list, chat, admin controls
  */
-import JSON5 from 'json5';
-import HBSParser from '../../engine/HBSParser.js';
 import { renderPingBadge } from '../components/PingBadge.js';
 
 export class RoomLobby {
@@ -193,10 +191,6 @@ export class RoomLobby {
               <button class="btn btn-overtime on" id="btnToggleOvertime" style="height:38px;">
                 ⏱ <span id="overtimeText">Uzatma Var</span>
               </button>
-              <label class="btn btn-secondary btn-sm" style="cursor:pointer; height:38px;">
-                📁 Saha Yükle
-                <input type="file" id="lobbyHbsUpload" accept=".hbs" style="display:none;" />
-              </label>
             </div>
           </div>
         </div>
@@ -353,38 +347,6 @@ export class RoomLobby {
       });
     }
 
-    // HBS Upload
-    const hbsUpload = document.getElementById('lobbyHbsUpload');
-    if (hbsUpload) {
-      hbsUpload.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const hbsContent = event.target.result;
-            const stadiumData = HBSParser.parse(hbsContent);
-            
-            // Basic validation
-            if (!stadiumData.name) stadiumData.name = file.name.replace('.hbs', '');
-            
-            console.log('HBS parsed successfully:', stadiumData.name);
-            this.app.network.changeStadium(stadiumData);
-            
-            // Re-select value if it was a preset
-            if (stadiumSelect) stadiumSelect.value = 'classic'; // Reset selector visually
-          } catch (err) {
-            console.error('HBS Parse Error:', err);
-            alert('Saha dosyası okunamadı: ' + err.message);
-          }
-        };
-        reader.readAsText(file);
-        // Clear input so same file can be uploaded twice if needed
-        hbsUpload.value = '';
-      });
-    }
-
     // Score/Time Limits
     const scoreSelect = document.getElementById('lobbyScoreLimit');
     if (scoreSelect) {
@@ -399,22 +361,6 @@ export class RoomLobby {
 
     // Drag and drop setup once
     this._setupDragDrop();
-
-    // HBS upload in lobby
-    document.getElementById('lobbyHbsUpload')?.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const stadium = JSON5.parse(ev.target.result);
-          this.app.network.changeStadium(stadium);
-        } catch (err) {
-          alert('HBS dosyası geçersiz: ' + err.message);
-        }
-      };
-      reader.readAsText(file);
-    });
 
     // Chat - Fix: prevent duplicate sends
     const chatInput = document.getElementById('lobbyChatInput');

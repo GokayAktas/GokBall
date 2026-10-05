@@ -333,7 +333,50 @@ export class Physics {
         return { goalTeam, kickHappened, saveDetected };
     }
 
-    // Removed stepLocalOnly as we will now use full prediction via step()
+    /** Replay one local player's input without advancing the rest of the pitch. */
+    predictPlayerStep(disc, input = {}) {
+        if (!disc?.isPlayer || disc.invMass === 0) return;
+
+        let ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        let ay = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        const magnitude = Math.hypot(ax, ay);
+        if (magnitude > 0) {
+            const acceleration = disc.kicking
+                ? (disc.kickingAcceleration || 0.07)
+                : (disc.acceleration || 0.1);
+            disc.speed.x += (ax / magnitude) * acceleration;
+            disc.speed.y += (ay / magnitude) * acceleration;
+        }
+
+        if (input.kick) {
+            if (!disc.kicking) disc.kicking = true;
+            if (!disc._kickHoldConsumed && this._ballInKickRange(disc) && this._performKick(disc)) {
+                disc._kickHoldConsumed = true;
+            }
+        } else {
+            disc.kicking = false;
+            disc._kickHoldConsumed = false;
+        }
+
+        const damping = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
+        disc.speed.x *= damping;
+        disc.speed.y *= damping;
+        disc.pos.x += disc.speed.x;
+        disc.pos.y += disc.speed.y;
+
+        this._applyPlayerKickOffConstraint(disc);
+
+        if (this.stadium && !this.inGoalPause) {
+            const fieldHeight = this.stadium.bg?.height || 170;
+            if (disc.pos.y + disc.radius < -fieldHeight) {
+                disc.pos.y = -fieldHeight - disc.radius;
+                if (disc.speed.y < 0) disc.speed.y *= -0.5;
+            } else if (disc.pos.y - disc.radius > fieldHeight) {
+                disc.pos.y = fieldHeight + disc.radius;
+                if (disc.speed.y > 0) disc.speed.y *= -0.5;
+            }
+        }
+    }
 
     _ballInKickRange(playerDisc) {
         if (!this.ballDisc) return false;
@@ -612,67 +655,72 @@ export class Physics {
         if (!this.kickOffReset || !this.kickOffTeam) return;
         if (this.inGoalPause) return; // Don't constrain during goal pause
 
+        for (const disc of this.discs) {
+            this._applyPlayerKickOffConstraint(disc);
+        }
+    }
+
+    _applyPlayerKickOffConstraint(disc) {
+        if (!this.kickOffReset || !this.kickOffTeam || this.inGoalPause) return;
+        if (!disc.isPlayer || !disc.team) return;
+
         const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
 
-        for (const disc of this.discs) {
-            if (!disc.isPlayer || !disc.team) continue;
-            
-            const isRed = disc.team === 'red';
-            const isKickoffTeam = disc.team === this.kickOffTeam;
+        const isRed = disc.team === 'red';
+        const isKickoffTeam = disc.team === this.kickOffTeam;
 
-            // Non-kickoff team: own half + cannot enter center circle
-            // Kickoff team: own half + entire center circle (can cross into opponent half within circle)
+        // Non-kickoff team: own half + cannot enter center circle
+        // Kickoff team: own half + entire center circle (can cross into opponent half within circle)
 
-            // Check if disc is inside the center circle
-            const distSqCenter = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
-            const inCircle = distSqCenter < (kickOffRadius + disc.radius) * (kickOffRadius + disc.radius);
+        // Check if disc is inside the center circle
+        const distSqCenter = disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y;
+        const inCircle = distSqCenter < (kickOffRadius + disc.radius) * (kickOffRadius + disc.radius);
 
-            // Constraint 1: Center circle block for non-kickoff team
-            if (!isKickoffTeam) {
-                if (inCircle) {
-                    const dist = Math.sqrt(distSqCenter);
-                    const minDist = kickOffRadius + disc.radius;
-                    if (dist > 0) {
-                        const pushX = (disc.pos.x / dist) * minDist;
-                        const pushY = (disc.pos.y / dist) * minDist;
-                        disc.pos.x = pushX;
-                        disc.pos.y = pushY;
-                        const nx = pushX / minDist;
-                        const ny = pushY / minDist;
-                        const vn = disc.speed.x * nx + disc.speed.y * ny;
-                        if (vn < 0) {
-                            disc.speed.x -= 1.5 * vn * nx;
-                            disc.speed.y -= 1.5 * vn * ny;
-                        }
-                    } else {
-                        disc.pos.x = isRed ? -minDist : minDist;
-                        disc.speed.x = 0;
-                    }
-                }
-            }
-
-            // Constraint 2: Stay on own side of center line (invisible wall at x=0)
-            // Kickoff team is exempt if they are inside the center circle
-            if (!isKickoffTeam || !inCircle) {
-                if (isRed) {
-                    // Red cannot cross center line (x=0) to the right
-                    const penetration = disc.pos.x + disc.radius;
-                    if (penetration > 0) {
-                        disc.pos.x = -disc.radius;
-                        // Reflect velocity off the invisible wall
-                        if (disc.speed.x > 0) {
-                            disc.speed.x *= -0.3;
-                        }
+        // Constraint 1: Center circle block for non-kickoff team
+        if (!isKickoffTeam) {
+            if (inCircle) {
+                const dist = Math.sqrt(distSqCenter);
+                const minDist = kickOffRadius + disc.radius;
+                if (dist > 0) {
+                    const pushX = (disc.pos.x / dist) * minDist;
+                    const pushY = (disc.pos.y / dist) * minDist;
+                    disc.pos.x = pushX;
+                    disc.pos.y = pushY;
+                    const nx = pushX / minDist;
+                    const ny = pushY / minDist;
+                    const vn = disc.speed.x * nx + disc.speed.y * ny;
+                    if (vn < 0) {
+                        disc.speed.x -= 1.5 * vn * nx;
+                        disc.speed.y -= 1.5 * vn * ny;
                     }
                 } else {
-                    // Blue cannot cross center line (x=0) to the left
-                    const penetration = disc.radius - disc.pos.x;
-                    if (penetration > 0) {
-                        disc.pos.x = disc.radius;
-                        // Reflect velocity off the invisible wall
-                        if (disc.speed.x < 0) {
-                            disc.speed.x *= -0.3;
-                        }
+                    disc.pos.x = isRed ? -minDist : minDist;
+                    disc.speed.x = 0;
+                }
+            }
+        }
+
+        // Constraint 2: Stay on own side of center line (invisible wall at x=0)
+        // Kickoff team is exempt if they are inside the center circle
+        if (!isKickoffTeam || !inCircle) {
+            if (isRed) {
+                // Red cannot cross center line (x=0) to the right
+                const penetration = disc.pos.x + disc.radius;
+                if (penetration > 0) {
+                    disc.pos.x = -disc.radius;
+                    // Reflect velocity off the invisible wall
+                    if (disc.speed.x > 0) {
+                        disc.speed.x *= -0.3;
+                    }
+                }
+            } else {
+                // Blue cannot cross center line (x=0) to the left
+                const penetration = disc.radius - disc.pos.x;
+                if (penetration > 0) {
+                    disc.pos.x = disc.radius;
+                    // Reflect velocity off the invisible wall
+                    if (disc.speed.x < 0) {
+                        disc.speed.x *= -0.3;
                     }
                 }
             }

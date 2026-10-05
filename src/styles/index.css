@@ -335,10 +335,10 @@ body::before {
 
 .about-box {
   position: relative;
-  background: linear-gradient(155deg, rgba(27, 42, 35, 0.99), rgba(13, 22, 19, 0.99));
-  border: 1px solid rgba(167, 243, 208, 0.22);
-  border-radius: 24px;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.06);
+  background: linear-gradient(155deg, var(--panel), var(--bg));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
   padding: 34px;
   max-width: 520px;
   width: 100%;
@@ -357,7 +357,7 @@ body::before {
   font-size: clamp(25px, 5vw, 34px);
   line-height: 1.12;
   font-weight: 800;
-  color: #f1fff6;
+  color: var(--text-primary);
   letter-spacing: -0.7px;
 }
 
@@ -367,10 +367,10 @@ body::before {
   right: 17px;
   width: 34px;
   height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.78);
+  background: var(--panel-2);
+  color: var(--text-2);
   font-size: 25px;
   line-height: 1;
   cursor: pointer;
@@ -378,8 +378,8 @@ body::before {
 
 .about-close-icon:hover,
 .about-close-icon:focus-visible {
-  background: rgba(255, 255, 255, 0.13);
-  color: #fff;
+  background: var(--surface-3);
+  color: var(--text-primary);
 }
 
 .about-mark {
@@ -388,24 +388,20 @@ body::before {
   display: grid;
   place-items: center;
   margin-bottom: 18px;
-  border: 1px solid rgba(134, 239, 172, 0.36);
+  border: 1px solid rgba(0, 230, 118, 0.35);
   border-radius: 17px;
-  background: linear-gradient(145deg, rgba(34, 197, 94, 0.23), rgba(20, 83, 45, 0.28));
-  color: #9df0b7;
+  background: rgba(0, 230, 118, 0.1);
+  color: var(--green);
 }
 
-.about-mark svg {
-  width: 34px;
-  height: 34px;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.about-mark span {
+  font-size: 30px;
+  line-height: 1;
 }
 
 .about-eyebrow {
   margin: 0 0 8px;
-  color: #86efac;
+  color: var(--green);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.5px;
@@ -415,11 +411,11 @@ body::before {
   margin: 0 0 24px;
   font-size: 14px;
   line-height: 1.7;
-  color: rgba(236, 253, 243, 0.72);
+  color: var(--text-2);
 }
 
 .about-text strong {
-  color: #f1fff6;
+  color: var(--text-primary);
 }
 
 .about-features {
@@ -432,9 +428,9 @@ body::before {
   align-items: center;
   gap: 13px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--panel-2);
 }
 
 .about-feature-icon {
@@ -444,7 +440,7 @@ body::before {
   display: grid;
   place-items: center;
   border-radius: 11px;
-  background: rgba(134, 239, 172, 0.11);
+  background: rgba(0, 230, 118, 0.1);
   font-size: 18px;
 }
 
@@ -455,12 +451,12 @@ body::before {
 
 .about-feature strong {
   margin-bottom: 2px;
-  color: #f1fff6;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .about-feature small {
-  color: rgba(236, 253, 243, 0.62);
+  color: var(--text-2);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -471,7 +467,7 @@ body::before {
   justify-content: space-between;
   gap: 14px;
   margin-top: 23px;
-  color: rgba(236, 253, 243, 0.55);
+  color: var(--text-muted);
   font-size: 11px;
 }
 

@@ -107,9 +107,7 @@ export class MainMenu {
     overlay.innerHTML = `
       <div class="about-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutDescription">
         <button class="about-close-icon" id="aboutCloseIcon" aria-label="Hakkında penceresini kapat">×</button>
-        <div class="about-mark" aria-hidden="true">
-          <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="21"/><path d="m24 12 7 5-3 8h-8l-3-8 7-5Z"/><path d="m20 25-5 7 4 6m9-13 5 7-4 6m-9-21-7-2m18 2 7-2m-18 17-6 2m18-2 6 2"/></svg>
-        </div>
+        <div class="about-mark" aria-hidden="true"><span>⚽</span></div>
         <p class="about-eyebrow">OYUN HAKKINDA</p>
         <h2 id="aboutTitle" class="about-title">Sahaya çık, maç başlasın.</h2>
         <p id="aboutDescription" class="about-text">

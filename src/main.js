@@ -65,6 +65,7 @@ class GokBallApp {
         this._inputSequence = 0;
         this._inputHistory = []; // [{seq, input, time}]
         this._lastConfirmedServerSeq = 0;
+        this._reconciliationPending = false;
         this._lastServerBallState = null; // {x, y, sx, sy} for collision reconciliation
 
         // Host-authority mode (room creator runs physics)
@@ -300,6 +301,8 @@ class GokBallApp {
         this._lastAuthorityTick = -1;
         this._lastConfirmedServerState = null;
         this._inputHistory = [];
+        this._lastConfirmedServerSeq = 0;
+        this._reconciliationPending = false;
 
         // Load stadium immediately so render loop can draw the field
         const stadiumData = this.stadiumData || roomData?.stadium;
@@ -532,81 +535,38 @@ class GokBallApp {
                     const myId = this.network.socket?.id;
                     const myDisc = this.physics.discs.find(d => d.id === myId);
 
-                    // 1. Interpolate remote players + ball from snapshot buffer
-                    const interp = this._snapshotBuffer.getInterpolatedState(performance.now());
-                    if (interp && interp.physics && interp.physics.discs) {
-                        const localById = {};
-                        for (const d of this.physics.discs) {
-                            if (d.isPlayer && d.id) localById[d.id] = d;
-                        }
-                        for (let si = 0; si < interp.physics.discs.length; si++) {
-                            const sd = interp.physics.discs[si];
-                            let localDisc = null;
-                            if (sd.isPlayer && sd.id && localById[sd.id]) {
-                                localDisc = localById[sd.id];
-                            } else if (!sd.isPlayer) {
-                                localDisc = this.physics.discs[si];
-                            }
-                            if (!localDisc) continue;
-
-                            if (sd.isPlayer && sd.id === myId) {
-                                // Local player: handled by reconciliation below
-                                continue;
-                            } else if (!sd.isPlayer) {
-                                // Ball & non-player: interpolate from snapshot
-                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.4;
-                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.4;
-                                localDisc.speed.x = sd.sx;
-                                localDisc.speed.y = sd.sy;
-                                if (sd.color !== undefined) localDisc.color = sd.color;
-                            } else {
-                                // Remote players: smooth interpolation
-                                localDisc.pos.x += (sd.x - localDisc.pos.x) * 0.5;
-                                localDisc.pos.y += (sd.y - localDisc.pos.y) * 0.5;
-                                localDisc.speed.x = sd.sx;
-                                localDisc.speed.y = sd.sy;
-                                localDisc.kicking = sd.kicking;
-                            }
-                        }
-                    }
-
-                    // 2. Local player: apply input + step local physics
                     if (myDisc && myDisc.isPlayer) {
                         this._inputHistory.push({
                             seq: inputSeq,
-                            input: { ...inputState },
+                            input: { ...peerInput },
                             time: Date.now()
                         });
                         // Keep only last 60 inputs (~1 second)
                         if (this._inputHistory.length > 60) this._inputHistory.shift();
 
-                        // Apply input and step physics locally for responsiveness
-                        myDisc.input = inputState;
-                        this.physics.step();
-                    }
+                        let reconciled = false;
+                        if (this._reconciliationPending && this._lastConfirmedServerState) {
+                            const confirmed = this._lastConfirmedServerState.discs.find(d => d.id === myId);
+                            if (confirmed) {
+                                myDisc.pos.x = confirmed.x;
+                                myDisc.pos.y = confirmed.y;
+                                myDisc.speed.x = confirmed.sx;
+                                myDisc.speed.y = confirmed.sy;
 
-                    // 3. Server reconciliation: replay unacknowledged inputs
-                    if (myDisc && myDisc.isPlayer && this._lastConfirmedServerState) {
-                        const confirmed = this._lastConfirmedServerState.discs.find(d => d.id === myId);
-                        if (confirmed) {
-                            // Start from server-confirmed position
-                            myDisc.pos.x = confirmed.x;
-                            myDisc.pos.y = confirmed.y;
-                            myDisc.speed.x = confirmed.sx;
-                            myDisc.speed.y = confirmed.sy;
-
-                            // Replay unacknowledged inputs
-                            for (const h of this._inputHistory) {
-                                if (h.seq <= this._lastConfirmedServerSeq) continue;
-                                myDisc.input = h.input;
-                                this.physics.step();
+                                // Replay only this player; full physics replay
+                                // advances the ball and all other players again.
+                                for (const h of this._inputHistory) {
+                                    if (h.seq <= this._lastConfirmedServerSeq) continue;
+                                    this.physics.predictPlayerStep(myDisc, h.input);
+                                }
+                                reconciled = true;
                             }
+                            this._reconciliationPending = false;
+                        }
 
-                            // Blend based on error magnitude
-                            const dx = myDisc.pos.x - (confirmed.x + myDisc.speed.x * 0);
-                            const dy = myDisc.pos.y - (confirmed.y + myDisc.speed.y * 0);
-                            // The corrected position is after replay - use it directly
-                            // Only apply gentle blending for very small corrections
+                        if (!reconciled) {
+                            myDisc.input = peerInput;
+                            this.physics.step();
                         }
                         myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
@@ -615,6 +575,10 @@ class GokBallApp {
 
             this.accumulator -= stepSize;
         }
+
+        // Render remote discs and the ball at every display frame. The
+        // snapshot buffer already interpolates positions between host ticks.
+        this._applyInterpolatedSnapshots(performance.now());
 
         // Update camera
         this.camera.targetX = 0;
@@ -640,6 +604,34 @@ class GokBallApp {
         }
 
         this._animFrame = requestAnimationFrame(() => this._gameLoop());
+    }
+
+    _applyInterpolatedSnapshots(localTime) {
+        const snapshots = this._snapshotBuffer.getInterpolatedState(localTime)?.physics?.discs;
+        if (!snapshots) return;
+
+        const myId = this.network.socket?.id;
+        const localById = new Map();
+        for (const disc of this.physics.discs) {
+            if (disc.isPlayer && disc.id) localById.set(disc.id, disc);
+        }
+
+        for (let i = 0; i < snapshots.length; i++) {
+            const snapshot = snapshots[i];
+            if (snapshot.isPlayer && snapshot.id === myId) continue;
+
+            const disc = snapshot.isPlayer
+                ? localById.get(snapshot.id)
+                : this.physics.discs[i];
+            if (!disc) continue;
+
+            disc.pos.x = snapshot.x;
+            disc.pos.y = snapshot.y;
+            disc.speed.x = snapshot.sx;
+            disc.speed.y = snapshot.sy;
+            if (snapshot.kicking !== undefined) disc.kicking = snapshot.kicking;
+            if (snapshot.color !== undefined) disc.color = snapshot.color;
+        }
     }
 
     /** Check if this client is the room creator/host */
@@ -1724,6 +1716,7 @@ class GokBallApp {
             const mySeq = state.lastProcessedSeq[myId] || 0;
             this._lastConfirmedServerState = state.physics;
             this._lastConfirmedServerSeq = mySeq;
+            this._reconciliationPending = true;
             // Trim old input history
             this._inputHistory = this._inputHistory.filter(h => h.seq > mySeq);
         }
