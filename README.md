@@ -34,11 +34,13 @@ Tüm tuşlar oyun içi **Ayarlar** ekranından yeniden atanabilir.
 | --- | --- |
 | İstemci | Vanilla JavaScript, Vite, HTML5 Canvas |
 | Sunucu | Node.js, Express, Socket.IO |
-| Ağ | Sunucu otoriter fizik + oda sahibi (host-authority) modu, client prediction, snapshot interpolasyon |
+| Ağ | Oda sahibi otoritesi, WebRTC P2P, Socket.IO sinyalleşme/yedek aktarım, client prediction, snapshot interpolasyon |
 
 ### Mimari
 
-- Oyun mantığı sunucuda ve oda sahibinin istemcisinde çalışır; diğer istemciler kendi oyuncusunu tahmin eder (prediction) ve diğer oyuncuları snapshot interpolasyonu ile çizer.
+- Oda sahibi fizik simülasyonunu yürütür. Girdiler ve fizik snapshot'ları oyuncularla oda sahibi arasında WebRTC üzerinden taşınır; doğrudan bağlantı kurulamazsa güncel paketler Socket.IO aktarımına düşer.
+- Diğer istemciler kendi oyuncularını tahmin eder ve uzak oyuncuları sıralı snapshot interpolasyonu ile çizer.
+- Socket.IO oda yönetimi ve WebRTC sinyalleşmesini sağlar; anlık oyun paketleri yedek aktarımda kuyrukta bekletilmez.
 - Oda sahibi sekmesini arka plana alırsa fizik döngüsü `setInterval` yedeğiyle çalışmaya devam eder.
 - Tekilleştirme (reconciliation) için girdi geçmişi ve sıra numaraları kullanılır.
 

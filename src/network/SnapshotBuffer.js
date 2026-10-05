@@ -1,144 +1,134 @@
 /**
- * Snapshot Interpolation Buffer
- * Buffers server snapshots and provides interpolated state for smooth rendering
+ * Snapshot interpolation for remote discs. Snapshot time is the local receive
+ * time, so no clock synchronization between the host and guest is required.
  */
+
+const MAX_EXTRAPOLATION_MS = 50;
+const FIXED_STEP_MS = 1000 / 60;
 
 export class SnapshotBuffer {
     constructor(interpolationDelay = 50) {
-        this.buffer = []; // Array of { time, state }
-        this.interpolationDelay = interpolationDelay; // ms
-        this.maxBufferSize = 20; // Keep last 20 snapshots
+        this.buffer = [];
+        this.interpolationDelay = interpolationDelay;
+        this.maxBufferSize = 20;
     }
 
-    /**
-     * Add a new snapshot to the buffer
-     * @param {number} serverTime - Server timestamp in ms
-     * @param {Object} state - Game state
-     */
-    addSnapshot(serverTime, state) {
-        this.buffer.push({ time: serverTime, state });
-        
-        // Trim old snapshots
-        while (this.buffer.length > this.maxBufferSize) {
-            this.buffer.shift();
+    /** Add a newer host snapshot; stale unordered packets are ignored. */
+    addSnapshot(receivedAt, state) {
+        if (!state?.physics?.discs) return false;
+
+        const tick = Number.isFinite(state.tick) ? state.tick : null;
+        const latest = this.buffer[this.buffer.length - 1];
+        if (tick !== null && latest?.tick !== null && latest?.tick !== undefined && tick <= latest.tick) {
+            return false;
         }
+
+        this.buffer.push({ time: receivedAt, tick, state });
+        while (this.buffer.length > this.maxBufferSize) this.buffer.shift();
+        return true;
     }
 
-    /**
-     * Get interpolated state for rendering
-     * Returns the interpolated disc positions between two snapshots
-     * @param {number} localTime - Current local time in ms
-     * @returns {Object|null} Interpolated state or null if not enough data
-     */
+    /** Return a state at local time minus the interpolation safety delay. */
     getInterpolatedState(localTime) {
-        if (this.buffer.length < 2) return null;
-
+        if (this.buffer.length === 0) return null;
         const renderTime = localTime - this.interpolationDelay;
-        
-        // Find the two snapshots to interpolate between
-        let prev = null;
-        let next = null;
-        
+        const first = this.buffer[0];
+        if (this.buffer.length === 1) {
+            if (renderTime <= first.time) return first.state;
+            const elapsed = Math.min(renderTime - first.time, MAX_EXTRAPOLATION_MS);
+            return this._extrapolateState(first.state, elapsed / FIXED_STEP_MS);
+        }
+
+        const latest = this.buffer[this.buffer.length - 1];
+
+        // At startup or directly after a state transition, begin at the oldest
+        // available point instead of jumping ahead to the newest snapshot.
+        if (renderTime <= first.time) return first.state;
+
         for (let i = 0; i < this.buffer.length - 1; i++) {
-            if (this.buffer[i].time <= renderTime && this.buffer[i + 1].time > renderTime) {
-                prev = this.buffer[i];
-                next = this.buffer[i + 1];
-                break;
+            const prev = this.buffer[i];
+            const next = this.buffer[i + 1];
+            if (prev.time <= renderTime && next.time >= renderTime) {
+                const timeDiff = next.time - prev.time;
+                if (timeDiff <= 0) return next.state;
+                const t = Math.max(0, Math.min(1, (renderTime - prev.time) / timeDiff));
+                return this._interpolateStates(prev.state, next.state, t);
             }
         }
-        
-        // If we haven't found a pair, use the last two snapshots
-        if (!prev || !next) {
-            // If we're behind, use the latest snapshot directly
-            const latest = this.buffer[this.buffer.length - 1];
-            return latest ? latest.state : null;
+
+        if (renderTime > latest.time) {
+            const elapsed = Math.min(renderTime - latest.time, MAX_EXTRAPOLATION_MS);
+            return this._extrapolateState(latest.state, elapsed / FIXED_STEP_MS);
         }
-
-        // Calculate interpolation factor (0 to 1)
-        const timeDiff = next.time - prev.time;
-        if (timeDiff <= 0) return next.state;
-        
-        const t = Math.max(0, Math.min(1, (renderTime - prev.time) / timeDiff));
-        
-        // Interpolate disc positions
-        return this._interpolateStates(prev.state, next.state, t);
+        return latest.state;
     }
 
-    /**
-     * Get the latest snapshot (for non-interpolated use)
-     */
     getLatestState() {
-        if (this.buffer.length === 0) return null;
-        return this.buffer[this.buffer.length - 1].state;
+        return this.buffer.length ? this.buffer[this.buffer.length - 1].state : null;
     }
 
-    /**
-     * Get the interpolation delay in ms
-     */
     getDelay() {
         return this.interpolationDelay;
     }
 
-    /**
-     * Adjust interpolation delay based on jitter
-     */
     adjustDelay(jitter) {
-        // Set delay to 2x jitter + minimum
         this.interpolationDelay = Math.max(20, jitter * 2 + 10);
     }
 
     _interpolateStates(stateA, stateB, t) {
         const result = {
-            state: stateB.state, // Use latest state enum
+            ...stateB,
             physics: {
-                kickOffReset: stateB.physics.kickOffReset,
-                kickOffTeam: stateB.physics.kickOffTeam,
-                discs: [],
-            },
-            scoreRed: stateB.scoreRed,
-            scoreBlue: stateB.scoreBlue,
-            time: stateB.time,
+                ...stateB.physics,
+                discs: []
+            }
         };
 
         const discsA = stateA.physics.discs;
         const discsB = stateB.physics.discs;
-
-        // Build a lookup of previous discs by ID for player discs
-        const prevById = {};
-        for (const d of discsA) {
-            if (d.isPlayer && d.id) prevById[d.id] = d;
+        const prevById = new Map();
+        for (const disc of discsA) {
+            if (disc.isPlayer && disc.id != null) prevById.set(disc.id, disc);
         }
 
-        // Match discs: player discs by ID, others (ball, posts) by index
         for (let i = 0; i < discsB.length; i++) {
-            const dB = discsB[i];
-            let dA = null;
+            const current = discsB[i];
+            const previous = current.isPlayer && current.id != null
+                ? prevById.get(current.id)
+                : (!current.isPlayer ? discsA[i] : null);
 
-            if (dB.isPlayer && dB.id && prevById[dB.id]) {
-                dA = prevById[dB.id];
-            } else if (!dB.isPlayer) {
-                dA = discsA[i]; // Ball & static discs: match by index (stable)
+            if (!previous) {
+                result.physics.discs.push({ ...current });
+                continue;
             }
 
-            if (dA) {
-                result.physics.discs.push({
-                    ...dB,
-                    x: dA.x + (dB.x - dA.x) * t,
-                    y: dA.y + (dB.y - dA.y) * t,
-                    sx: dA.sx + (dB.sx - dA.sx) * t,
-                    sy: dA.sy + (dB.sy - dA.sy) * t,
-                });
-            } else {
-                result.physics.discs.push({ ...dB });
-            }
+            result.physics.discs.push({
+                ...current,
+                x: previous.x + (current.x - previous.x) * t,
+                y: previous.y + (current.y - previous.y) * t,
+                sx: previous.sx + (current.sx - previous.sx) * t,
+                sy: previous.sy + (current.sy - previous.sy) * t
+            });
         }
 
         return result;
     }
 
-    /**
-     * Clear the buffer
-     */
+    _extrapolateState(state, ticks) {
+        if (ticks <= 0 || !state?.physics?.discs) return state;
+        return {
+            ...state,
+            physics: {
+                ...state.physics,
+                discs: state.physics.discs.map((disc) => ({
+                    ...disc,
+                    x: disc.x + (disc.sx || 0) * ticks,
+                    y: disc.y + (disc.sy || 0) * ticks
+                }))
+            }
+        };
+    }
+
     clear() {
         this.buffer = [];
     }

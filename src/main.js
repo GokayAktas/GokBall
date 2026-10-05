@@ -59,6 +59,7 @@ class GokBallApp {
         // Snapshot interpolation buffer for non-host clients
         this._snapshotBuffer = new SnapshotBuffer(30); // 30ms interpolation delay for low-latency rendering
         this._lastSnapshotTime = 0;
+        this._lastAuthorityTick = -1;
 
         // Client-side prediction infrastructure
         this._inputSequence = 0;
@@ -82,6 +83,7 @@ class GokBallApp {
 
         // Latency data published by the server (every 2s)
         this._hostRtt = null; // { ping, ts } for the room host
+        this._peerHostRtt = null; // measured host RTT over the active WebRTC route
         this._inputDelay = 0; // /handicap delay in ms, applied to own input
         this._handicapQueue = [];
         this._handicapLastInput = null;
@@ -204,19 +206,26 @@ class GokBallApp {
             const pingEl = document.getElementById('pingValue');
             if (pingEl) {
                 // Show a number ONLY when a real round trip was measured
-                pingEl.textContent = data.ping != null ? data.ping : '--';
-                this._applyPingColor(pingEl, data.ping);
+                const hostPing = this._getPeerHostRtt();
+                const shownPing = hostPing ?? data.ping;
+                pingEl.textContent = shownPing != null ? Math.round(shownPing) : '--';
+                this._applyPingColor(pingEl, shownPing);
             }
 
-            // Dynamic interpolation delay: half of the round trip + buffer,
-            // clamped 30-50ms. Without a measurement we keep a neutral default
-            // instead of pretending to know the latency.
-            if (this._snapshotBuffer) {
-                const latency = this._effectiveLatency(data.ping);
-                this._snapshotBuffer.interpolationDelay = latency == null
-                    ? DEFAULT_INTERPOLATION_DELAY
-                    : Math.max(30, Math.min(50, latency / 2 + 20));
+            this._updateInterpolationDelay(data.ping);
+        });
+
+        this.network.on('peerPingUpdate', (data) => {
+            if (data.peerId !== this.currentRoomData?.creatorId) return;
+            this._peerHostRtt = data.direct
+                ? { ping: data.ping, ts: Date.now() }
+                : null;
+            const pingEl = document.getElementById('pingValue');
+            if (pingEl && data.direct) {
+                pingEl.textContent = Math.round(data.ping);
+                this._applyPingColor(pingEl, data.ping);
             }
+            this._updateInterpolationDelay(this.network.ping);
         });
 
         // Latency snapshot published by the server every 2 seconds.
@@ -225,6 +234,7 @@ class GokBallApp {
 
         this.network.on('disconnect', () => {
             this._hostRtt = null;
+            this._peerHostRtt = null;
             this._inputDelay = 0;
             this._resetHandicapInput();
         });
@@ -263,9 +273,12 @@ class GokBallApp {
     }
 
     leaveRoom() {
+        this.network.disconnectRoomPeers();
         this.network.leaveRoom();
         this.stopGame();
+        this._isHostAuthority = false;
         this._hostRtt = null;
+        this._peerHostRtt = null;
         this._inputDelay = 0;
         this._resetHandicapInput();
         this.currentRoomData = null;
@@ -283,6 +296,10 @@ class GokBallApp {
         this.currentRoomData = roomData;
         this._firstStateReceived = false; // Wait for initial server state before client prediction
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
+        this._snapshotBuffer.clear();
+        this._lastAuthorityTick = -1;
+        this._lastConfirmedServerState = null;
+        this._inputHistory = [];
 
         // Load stadium immediately so render loop can draw the field
         const stadiumData = this.stadiumData || roomData?.stadium;
@@ -349,8 +366,10 @@ class GokBallApp {
             this.physics.myPlayerId = this.network.socket.id;
         }
 
-        // Send input to server (once per frame)
-        this.network.sendInput(inputState);
+        // The direct peer path applies the voluntary handicap locally. If no
+        // peer exists yet, the legacy server input path applies it instead.
+        const peerInput = this._isHost() ? inputState : this._getHandicappedInput(inputState);
+        this.network.sendInput(peerInput, inputState);
         const inputSeq = this.network._inputSeqNum;
 
         // Fixed Timestep Physics (60Hz)
@@ -393,7 +412,9 @@ class GokBallApp {
                     for (const [playerId, ri] of this._remoteInputs) {
                         const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
                         if (remoteDisc) {
-                            remoteDisc.input = ri.input;
+                            remoteDisc.input = performance.now() - ri.receivedAt > 250
+                                ? { up: false, down: false, left: false, right: false, kick: false }
+                                : ri.input;
                             this._lastRemoteInputSeq.set(playerId, ri.seq);
                         }
                     }
@@ -511,7 +532,7 @@ class GokBallApp {
                     const myDisc = this.physics.discs.find(d => d.id === myId);
 
                     // 1. Interpolate remote players + ball from snapshot buffer
-                    const interp = this._snapshotBuffer.getInterpolatedState(Date.now());
+                    const interp = this._snapshotBuffer.getInterpolatedState(performance.now());
                     if (interp && interp.physics && interp.physics.discs) {
                         const localById = {};
                         for (const d of this.physics.discs) {
@@ -639,6 +660,20 @@ class GokBallApp {
         return latency;
     }
 
+    /** Latest measured RTT to the host over WebRTC, or null if unavailable. */
+    _getPeerHostRtt() {
+        if (!this._peerHostRtt || Date.now() - this._peerHostRtt.ts > 3000) return null;
+        return this._peerHostRtt.ping;
+    }
+
+    _updateInterpolationDelay(serverPing = this.network.ping) {
+        if (!this._snapshotBuffer) return;
+        const latency = this._getPeerHostRtt() ?? this._effectiveLatency(serverPing);
+        this._snapshotBuffer.interpolationDelay = latency == null
+            ? DEFAULT_INTERPOLATION_DELAY
+            : Math.max(40, Math.min(100, latency / 2 + 20));
+    }
+
     /** Server-measured RTT of the room host, or null when unknown/stale */
     _getHostRtt() {
         if (!this._hostRtt || Date.now() - this._hostRtt.ts > HOST_RTT_TTL) return null;
@@ -738,7 +773,12 @@ class GokBallApp {
                                 // Apply remote inputs
                                 for (const [playerId, remoteInput] of this._remoteInputs) {
                                     const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
-                                    if (remoteDisc) remoteDisc.input = remoteInput;
+                                    if (remoteDisc) {
+                                        remoteDisc.input = performance.now() - remoteInput.receivedAt > 250
+                                            ? { up: false, down: false, left: false, right: false, kick: false }
+                                            : remoteInput.input;
+                                        this._lastRemoteInputSeq.set(playerId, remoteInput.seq);
+                                    }
                                 }
                                 const result = this.physics.step();
                                 if (result.kickHappened) this.audio.playKick();
@@ -802,6 +842,8 @@ class GokBallApp {
         this._hostPrevToucher = null;
         this._hostMatchStats = {};
         this._remoteInputs.clear();
+        this._lastRemoteInputSeq.clear();
+        this._hostAuthoritySendCounter = 0;
         console.log('[GokBall] Host game state initialized');
     }
 
@@ -1193,20 +1235,17 @@ class GokBallApp {
         }
     }
 
-    /** Send authoritative state to server (relayed to other players) */
+    /** Send authoritative state directly to guests through the peer mesh. */
     _sendAuthorityState() {
         this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
-        // Send every frame for responsive non-host clients (~60fps)
-        // if (this._hostAuthoritySendCounter % 2 !== 0) return;
-
-
         // Collect last processed input seq for client reconciliation
         const lastProcessedSeq = {};
         for (const [pid, seq] of this._lastRemoteInputSeq) {
             lastProcessedSeq[pid] = seq;
         }
 
-        this.network.socket?.emit('authorityState', {
+        this.network.sendAuthorityState({
+            tick: this._hostAuthoritySendCounter,
             state: this._hostGameState,
             physics: this.physics.getState(),
             scoreRed: this._hostScoreRed,
@@ -1224,6 +1263,10 @@ class GokBallApp {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
+            this._isHostAuthority = false;
+            this._hostRtt = null;
+            this._peerHostRtt = null;
+            this.network.connectRoomPeers(data);
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
             this.ui.showScreen('roomLobby', data);
@@ -1232,6 +1275,10 @@ class GokBallApp {
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
+            this._isHostAuthority = ['playing', 'countdown', 'goal'].includes(data.game?.state);
+            this._hostRtt = null;
+            this._peerHostRtt = null;
+            this.network.connectRoomPeers(data);
             // New room: force the next ping snapshot to repaint the player list
             this._pingSignature = null;
             this.stadiumData = data.stadium;
@@ -1266,6 +1313,10 @@ class GokBallApp {
             if (this.currentRoomData && data.players) {
                 this.currentRoomData.players = data.players;
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            }
+            if (this._isHost() && data?.playerId) {
+                this._remoteInputs.delete(data.playerId);
+                this._lastRemoteInputSeq.delete(data.playerId);
             }
         });
 
@@ -1326,14 +1377,29 @@ class GokBallApp {
         // Remote inputs from other players (relayed by server)
         this.network.on('remoteInput', (data) => {
             if (this._isHost() && this._isHostAuthority && data?.playerId && data?.input) {
-                this._remoteInputs.set(data.playerId, { input: data.input, seq: data.input._seq || 0 });
+                const seq = data.input._seq || 0;
+                const current = this._remoteInputs.get(data.playerId);
+                const confirmedSeq = this._lastRemoteInputSeq.get(data.playerId) || 0;
+                if (seq <= Math.max(current?.seq || 0, confirmedSeq)) return;
+                this._remoteInputs.set(data.playerId, {
+                    input: data.input,
+                    seq,
+                    receivedAt: performance.now()
+                });
             }
         });
 
         this.network.on('gameState', (state) => {
-            // Host ignores server gameState in host-authority mode (host IS the authority)
             if (this._isHost() && this._isHostAuthority) return;
             if (this.gameRunning) this._handleGameState(state);
+        });
+
+        // Server state events are control-path leftovers (for example map or
+        // kit updates). In host-authority matches, only host peer snapshots
+        // may enter prediction/interpolation.
+        this.network.on('serverGameState', (state) => {
+            if (this._isHostAuthority || !this.gameRunning) return;
+            this._handleGameState(state);
         });
 
         this.network.on('goalScored', (data) => {
@@ -1442,6 +1508,7 @@ class GokBallApp {
         this.network.on('roomClosed', (data) => {
             this._isHostAuthority = false;
             this._hostRtt = null;
+            this._peerHostRtt = null;
             this._inputDelay = 0;
             this._resetHandicapInput();
             this.stopGame();
@@ -1620,6 +1687,13 @@ class GokBallApp {
         // Skip if stadium hasn't loaded yet (race condition guard)
         if (this.gameRunning && !this._stadiumReady) return;
 
+        // The WebRTC channel is unordered and may lose packets. Ignore an old
+        // snapshot that arrives after a newer one so it cannot rewind a client.
+        if (Number.isFinite(state?.tick)) {
+            if (state.tick <= this._lastAuthorityTick) return;
+            this._lastAuthorityTick = state.tick;
+        }
+
         // Mark first state received for client prediction guard
         if (!this._firstStateReceived) this._firstStateReceived = true;
 
@@ -1644,7 +1718,7 @@ class GokBallApp {
 
         // Add to interpolation buffer for non-host clients
         if (!this._isHost() || !this._isHostAuthority) {
-            this._snapshotBuffer.addSnapshot(Date.now(), state);
+            this._snapshotBuffer.addSnapshot(performance.now(), state);
         }
 
         // Detect kicks for sound effects

@@ -1,8 +1,8 @@
 /**
- * WebRTC signaling - the ONLY thing the central server does for a match.
+ * WebRTC signaling and real-time relay fallback for a match.
  *
- * The server never relays game traffic and never runs physics. It only helps
- * two browsers find each other so they can open a direct peer connection:
+ * The server runs no match physics. It helps browsers find each other and
+ * relays gameplay only while a direct peer channel is unavailable:
  *
  *   guest -> server: p2pJoin { roomId }
  *   server -> host : p2pPeerJoined { peerId, name }
@@ -10,8 +10,8 @@
  *   host  -> guest : p2pSignal { to, type, payload }
  *   server -> guest: p2pReady { initiator: true|false }
  *
- * Once the data channel is open, everything else (input, snapshots, chat,
- * physics) travels directly between the host and the guest.
+ * Once the data channel is open, inputs and physics snapshots travel directly
+ * between the host and guests. The relay remains available as a fallback.
  */
 
 /** Public STUN servers used to discover the host's public address. */
@@ -60,7 +60,8 @@ export function attachSignaling(io, ctx) {
             // Tell the host a peer is waiting so it can answer later
             hostSocket.emit('p2pPeerJoined', {
                 peerId: socket.id,
-                name: room.players.get(socket.id)?.name || 'Oyuncu'
+                name: room.players.get(socket.id)?.name || 'Oyuncu',
+                iceServers: ICE_SERVERS
             });
         });
 
@@ -99,7 +100,9 @@ export function attachSignaling(io, ctx) {
             if (!senderRoom || !targetRoom || senderRoom.id !== targetRoom.id) return;
 
             const target = io.sockets.sockets.get(to);
-            if (target) target.emit('p2pRelay', { from: socket.id, payload });
+            // Input and snapshots are replaceable real-time state. Dropping an
+            // old relay is better than queueing it behind newer game frames.
+            if (target) target.volatile.emit('p2pRelay', { from: socket.id, payload });
         });
     });
 }

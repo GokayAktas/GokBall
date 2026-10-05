@@ -3,6 +3,7 @@
  * Handles connection, room management, and game state sync
  */
 import { io } from 'socket.io-client';
+import { PeerLink } from './PeerLink.js';
 
 // A ping that is never answered within this window counts as lost.
 const PING_TIMEOUT = 3000;
@@ -31,6 +32,16 @@ export class NetworkManager {
         this._pingWindow = []; // last PING_WINDOW results: 'ack' | 'lost'
         this._pingInterval = null;
         this._pingTimeoutInterval = null;
+
+        // WebRTC gameplay links: one host-to-guest data channel per guest.
+        this._peerLinks = new Map();
+        this._peerSignals = new Map();
+        this._peerRoomId = null;
+        this._peerHostId = null;
+        this._isPeerHost = false;
+        this._peerPingTimer = null;
+        this._peerPingSeq = 0;
+        this._peerPingPending = new Map();
     }
 
     /**
@@ -94,13 +105,19 @@ export class NetworkManager {
             this.socket.on('roomJoined', (data) => this._trigger('roomJoined', data));
             this.socket.on('roomError', (data) => this._trigger('roomError', data));
             this.socket.on('playerJoined', (data) => this._trigger('playerJoined', data));
-            this.socket.on('playerLeft', (data) => this._trigger('playerLeft', data));
+            this.socket.on('playerLeft', (data) => {
+                if (data?.playerId) this._removePeerLink(data.playerId);
+                this._trigger('playerLeft', data);
+            });
             this.socket.on('teamChanged', (data) => this._trigger('teamChanged', data));
             this.socket.on('teamLockChanged', (data) => this._trigger('teamLockChanged', data));
-            this.socket.on('gameState', (state) => this._trigger('gameState', state));
+            this.socket.on('gameState', (state) => this._trigger('serverGameState', state));
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));
-            this.socket.on('roomClosed', (data) => this._trigger('roomClosed', data));
+            this.socket.on('roomClosed', (data) => {
+                this.disconnectRoomPeers();
+                this._trigger('roomClosed', data);
+            });
             this.socket.on('goalScored', (data) => this._trigger('goalScored', data));
             this.socket.on('gameOver', (data) => this._trigger('gameOver', data));
             this.socket.on('chatMessage', (data) => this._trigger('chatMessage', data));
@@ -163,6 +180,14 @@ export class NetworkManager {
             this.socket.on('kickReleased', (data) => this._trigger('kickReleased', data));
             this.socket.on('remoteInput', (data) => this._trigger('remoteInput', data));
             this.socket.on('gamePaused', (data) => this._trigger('gamePaused', data));
+
+            // WebRTC signaling is centralized; game input and snapshots are
+            // routed through the peer links once a room is joined.
+            this.socket.on('p2pReady', (data) => this._onPeerReady(data));
+            this.socket.on('p2pPeerJoined', (data) => this._onPeerJoined(data));
+            this.socket.on('p2pSignal', (data) => this._onPeerSignal(data));
+            this.socket.on('p2pRelay', (data) => this._onPeerRelay(data));
+            this.socket.on('p2pError', (data) => this._trigger('peerError', data));
         });
     }
 
@@ -261,11 +286,164 @@ export class NetworkManager {
 
     // === Game Actions ===
 
-    sendInput(input) {
+    sendInput(input, serverFallbackInput = input) {
         this._inputSeqNum = (this._inputSeqNum || 0) + 1;
         // Send with sequence number for reconciliation
-        this.socket.emit('input', { ...input, _seq: this._inputSeqNum });
+        const packet = { ...input, _seq: this._inputSeqNum };
+
+        // The host already has its local input. Guests send input directly to
+        // the host when possible, with the server path kept as a fallback.
+        if (!this._isPeerHost) {
+            const link = this._peerHostId && this._peerLinks.get(this._peerHostId);
+            const sent = link?.send({ type: 'input', playerId: this.playerId, input: packet });
+            if (!sent && this.socket?.connected) {
+                this.socket.volatile.emit('input', {
+                    ...serverFallbackInput,
+                    _seq: this._inputSeqNum
+                });
+            }
+        }
         return this._inputSeqNum;
+    }
+
+    /** Join the host's peer mesh after the room has been confirmed by server. */
+    connectRoomPeers(roomData) {
+        this.disconnectRoomPeers();
+        const roomId = roomData?.id;
+        const hostId = roomData?.creatorId || roomData?.adminId;
+        if (!roomId || !hostId || !this.socket?.connected) return;
+
+        this._peerRoomId = roomId;
+        this._peerHostId = hostId;
+        this._isPeerHost = hostId === this.playerId;
+        if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId });
+        this._peerPingTimer = setInterval(() => this._sendPeerPings(), 1000);
+    }
+
+    /** Stop all peer channels when leaving or replacing a room. */
+    disconnectRoomPeers() {
+        if (this._peerPingTimer) {
+            clearInterval(this._peerPingTimer);
+            this._peerPingTimer = null;
+        }
+        for (const link of this._peerLinks.values()) link.close();
+        this._peerLinks.clear();
+        this._peerSignals.clear();
+        this._peerPingPending.clear();
+        this._peerRoomId = null;
+        this._peerHostId = null;
+        this._isPeerHost = false;
+    }
+
+    /** Broadcast one current authoritative snapshot to connected guests. */
+    sendAuthorityState(state) {
+        if (this._peerLinks.size === 0) return;
+        const payload = JSON.stringify({ type: 'state', state });
+        for (const link of this._peerLinks.values()) link.sendSerialized(payload, true);
+    }
+
+    _onPeerReady(data = {}) {
+        if (data.solo || !data.initiator || !data.hostId || this._isPeerHost) return;
+        this._peerHostId = data.hostId;
+
+        let link = this._peerLinks.get(data.hostId);
+        if (!link) {
+            link = this._createPeerLink(data.hostId);
+        }
+        link.initiate(data.hostId, data.iceServers);
+        this._flushPeerSignals(data.hostId, link);
+    }
+
+    _onPeerJoined(data = {}) {
+        const peerId = data.peerId;
+        if (!this._isPeerHost || !peerId || peerId === this.playerId) return;
+
+        let link = this._peerLinks.get(peerId);
+        if (!link) link = this._createPeerLink(peerId);
+        link.acceptPeer(peerId, data.iceServers);
+        this._flushPeerSignals(peerId, link);
+    }
+
+    _createPeerLink(peerId) {
+        const link = new PeerLink({
+            socket: this.socket,
+            peerId,
+            onMessage: (message) => this._onPeerMessage(peerId, message),
+            onState: (state) => this._trigger('peerState', state)
+        });
+        this._peerLinks.set(peerId, link);
+        return link;
+    }
+
+    _onPeerSignal(data = {}) {
+        const peerId = data.from;
+        if (!peerId) return;
+        const link = this._peerLinks.get(peerId);
+        if (link) {
+            link.receiveSignal(data);
+            return;
+        }
+
+        // A guest offer can race the host's p2pPeerJoined notification.
+        const pending = this._peerSignals.get(peerId) || [];
+        if (pending.length < 32) pending.push(data);
+        this._peerSignals.set(peerId, pending);
+    }
+
+    _flushPeerSignals(peerId, link) {
+        const pending = this._peerSignals.get(peerId) || [];
+        this._peerSignals.delete(peerId);
+        for (const signal of pending) link.receiveSignal(signal);
+    }
+
+    _onPeerRelay(data = {}) {
+        const peerId = data.from;
+        if (!peerId) return;
+        this._peerLinks.get(peerId)?.receiveRelay(data);
+    }
+
+    _onPeerMessage(peerId, message) {
+        if (message?.type === 'ping') {
+            this._peerLinks.get(peerId)?.send({ type: 'pong', id: message.id });
+        } else if (message?.type === 'pong') {
+            const key = `${peerId}:${message.id}`;
+            const sentAt = this._peerPingPending.get(key);
+            if (sentAt === undefined) return;
+            this._peerPingPending.delete(key);
+            this._trigger('peerPingUpdate', {
+                peerId,
+                ping: performance.now() - sentAt,
+                direct: !!this._peerLinks.get(peerId)?.connected
+            });
+        } else if (message?.type === 'input' && this._isPeerHost) {
+            this._trigger('remoteInput', {
+                playerId: peerId,
+                input: message.input
+            });
+        } else if (message?.type === 'state' && !this._isPeerHost) {
+            this._trigger('gameState', message.state);
+        }
+    }
+
+    _sendPeerPings() {
+        for (const [peerId, link] of this._peerLinks) {
+            const id = ++this._peerPingSeq;
+            this._peerPingPending.set(`${peerId}:${id}`, performance.now());
+            // Keep only recent probes so a disconnected peer cannot grow this map.
+            if (this._peerPingPending.size > 32) {
+                const oldest = this._peerPingPending.keys().next().value;
+                this._peerPingPending.delete(oldest);
+            }
+            link.send({ type: 'ping', id });
+        }
+    }
+
+    _removePeerLink(peerId) {
+        const link = this._peerLinks.get(peerId);
+        if (!link) return;
+        link.close();
+        this._peerLinks.delete(peerId);
+        this._peerSignals.delete(peerId);
     }
 
     getInputSeqNum() {
@@ -361,6 +539,7 @@ export class NetworkManager {
     /** Clean up connection resources */
     _cleanupConnection() {
         this._stopPingTimers();
+        this.disconnectRoomPeers();
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;

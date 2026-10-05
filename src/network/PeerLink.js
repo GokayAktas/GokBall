@@ -1,116 +1,67 @@
 /**
- * PeerLink - a direct WebRTC data channel between the room host and a guest.
- *
- * The central server is used only to introduce the two peers and to carry the
- * SDP offer/answer and ICE candidates. Once the channel is open, input,
- * snapshots and chat travel straight between the two browsers, so the latency
- * players feel is the host-to-player distance, not the server's.
- *
- * Negotiation uses the "perfect negotiation" pattern: the peer that knows both
- * ids (the newcomer) creates the offer, the host answers. If the direct
- * connection cannot be established (symmetric NAT, closed UPnP, filtered
- * networks) both sides fall back to relaying the same messages through the
- * signaling socket, so a game is still playable - only with server latency.
+ * One direct WebRTC data channel between a room guest and the room host.
+ * Socket.IO carries signaling and volatile relay traffic only when the direct
+ * channel is unavailable. Gameplay snapshots are intentionally not queued.
  */
 
 const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-
-// How long to wait for a direct data channel before giving up on P2P.
 const CONNECT_TIMEOUT = 15000;
-// A peer we have not heard from in this long is considered gone.
-const PEER_STALE_MS = 10000;
+const MAX_BUFFERED_SNAPSHOT_BYTES = 32 * 1024;
 
 export class PeerLink {
-    /**
-     * @param {object} opts
-     * @param {import('socket.io-client').Socket} opts.socket  signaling socket
-     * @param {(msg: object) => void} opts.onMessage  inbound peer messages
-     * @param {(state: object) => void} [opts.onState]   connection state changes
-     */
-    constructor({ socket, onMessage, onState }) {
+    constructor({ socket, peerId = null, onMessage, onState }) {
         this.socket = socket;
+        this.peerId = peerId;
         this.onMessage = onMessage || (() => {});
         this.onState = onState || (() => {});
 
-        this.peerId = null;
         this.isInitiator = false;
         this.pc = null;
         this.channel = null;
         this._pendingIce = [];
-        this._iceServers = null;
+        this._iceServers = DEFAULT_ICE_SERVERS;
+        this._connectTimer = null;
+        this._closed = false;
 
         this.connected = false;
-        // True when we could not open a direct channel and are relaying.
         this.relaying = false;
-
-        this._lastRecv = 0;
-        this._connectTimer = null;
-
-        this._bindSignaling();
     }
 
-    // ============================================
-    // Signaling
-    // ============================================
-
-    _bindSignaling() {
-        this.socket.on('p2pReady', (data) => this._onReady(data));
-        this.socket.on('p2pPeerJoined', (data) => this._onPeerJoined(data));
-        this.socket.on('p2pSignal', (data) => this._onSignal(data));
-        this.socket.on('p2pPeerReady', (data) => this._onPeerReady(data));
-        this.socket.on('p2pRelay', ({ from, payload }) => {
-            if (from) this.peerId = from;
-            this._lastRecv = Date.now();
-            let msg;
-            try {
-                msg = JSON.parse(payload);
-            } catch {
-                return;
-            }
-            this.onMessage(msg);
-        });
+    /** The guest creates the offer after p2pReady identifies its host. */
+    initiate(peerId, iceServers) {
+        this.peerId = peerId;
+        this.isInitiator = true;
+        if (iceServers?.length) this._iceServers = iceServers;
+        this._emitState({ status: 'negotiating' });
+        this._startConnectTimer();
+        try {
+            this._ensureConnection();
+        } catch (err) {
+            this._fallbackToRelay(err?.message || 'WebRTC is unavailable');
+        }
     }
 
-    /** Ask the host to open a direct channel with us. */
-    join(roomId) {
-        this.socket.emit('p2pJoin', { roomId });
+    /** The host waits for the guest's offer. */
+    acceptPeer(peerId, iceServers) {
+        this.peerId = peerId;
+        this.isInitiator = false;
+        if (iceServers?.length) this._iceServers = iceServers;
+        this._emitState({ status: 'negotiating' });
+        this._startConnectTimer();
     }
 
-    _onReady({ initiator, hostId, iceServers, solo }) {
-        if (solo) {
-            // Nobody else in the room yet: nothing to connect to.
-            this._emitState({ status: 'solo' });
+    async receiveSignal({ from, type, payload } = {}) {
+        if (this._closed || !from || !type) return;
+        if (this.peerId && from !== this.peerId) return;
+        this.peerId = from;
+
+        let pc;
+        try {
+            pc = this._ensureConnection();
+        } catch (err) {
+            this._fallbackToRelay(err?.message || 'WebRTC is unavailable');
             return;
         }
-        this.isInitiator = !!initiator;
-        this._iceServers = (iceServers && iceServers.length) ? iceServers : DEFAULT_ICE_SERVERS;
-        if (hostId) this.peerId = hostId;
-        this._emitState({ status: 'negotiating' });
-        this._startConnectTimer();
-    }
-
-    /** The host hears about a waiting guest and starts answering it. */
-    _onPeerJoined({ peerId }) {
-        if (this.peerId === peerId) return;
-        // The host never offers: it waits for the guest's offer.
-        this.peerId = peerId;
-        this._emitState({ status: 'negotiating' });
-        this._startConnectTimer();
-    }
-
-    /** If no direct channel opens in time, keep playing over the relay. */
-    _startConnectTimer() {
-        clearTimeout(this._connectTimer);
-        this._connectTimer = setTimeout(() => {
-            if (!this.connected) this._fallbackToRelay('direct connection timed out');
-        }, CONNECT_TIMEOUT);
-    }
-
-    async _onSignal({ from, type, payload }) {
-        this.peerId = from;
-        this._lastRecv = Date.now();
-
-        const pc = this._ensureConnection();
 
         try {
             if (type === 'offer') {
@@ -118,13 +69,12 @@ export class PeerLink {
                 await this._flushPendingIce();
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                this._signal('answer', answer);
+                this._signal('answer', pc.localDescription);
             } else if (type === 'answer') {
                 await pc.setRemoteDescription(payload);
                 await this._flushPendingIce();
             } else if (type === 'ice') {
-                // A candidate can arrive before the remote description is set
-                if (pc.remoteDescription && pc.remoteDescription.type) {
+                if (pc.remoteDescription?.type) {
                     await pc.addIceCandidate(payload);
                 } else {
                     this._pendingIce.push(payload);
@@ -132,72 +82,88 @@ export class PeerLink {
             }
         } catch (err) {
             console.warn('[PeerLink] signal handling failed:', err?.message || err);
+            if (type === 'offer' || type === 'answer') this._fallbackToRelay('negotiation failed');
         }
     }
 
-    /** Add ICE candidates that arrived before the remote description was ready. */
+    receiveRelay({ from, payload } = {}) {
+        if (this._closed || !from || (this.peerId && from !== this.peerId)) return;
+        this.peerId = from;
+
+        let msg;
+        try {
+            msg = JSON.parse(payload);
+        } catch {
+            return;
+        }
+        this.onMessage(msg);
+    }
+
+    _startConnectTimer() {
+        clearTimeout(this._connectTimer);
+        this._connectTimer = setTimeout(() => {
+            if (!this.connected) this._fallbackToRelay('direct connection timed out');
+        }, CONNECT_TIMEOUT);
+    }
+
     async _flushPendingIce() {
         const queued = this._pendingIce;
         this._pendingIce = [];
         for (const candidate of queued) {
             try {
-                await this.pc.addIceCandidate(candidate);
+                await this.pc?.addIceCandidate(candidate);
             } catch {
-                // A stale candidate is not fatal: the rest still apply
+                // A stale candidate does not invalidate the other candidates.
             }
         }
     }
 
-    /** The other side says its channel is open. */
-    _onPeerReady({ peerId }) {
-        this.peerId = peerId;
-        this._lastRecv = Date.now();
-    }
-
     _signal(type, payload) {
-        if (!this.peerId) return;
+        if (!this.peerId || !this.socket?.connected) return;
         this.socket.emit('p2pSignal', { to: this.peerId, type, payload });
     }
 
-    // ============================================
-    // Peer connection
-    // ============================================
-
     _ensureConnection() {
         if (this.pc) return this.pc;
+        if (typeof RTCPeerConnection === 'undefined') {
+            throw new Error('WebRTC is unavailable in this browser');
+        }
 
-        const pc = new RTCPeerConnection({ iceServers: this._iceServers || DEFAULT_ICE_SERVERS });
+        const pc = new RTCPeerConnection({ iceServers: this._iceServers });
         this.pc = pc;
         this._pendingIce = [];
 
-        pc.onicecandidate = (e) => {
-            if (e.candidate) this._signal('ice', e.candidate.toJSON());
+        pc.onicecandidate = (event) => {
+            if (event.candidate) this._signal('ice', event.candidate.toJSON());
         };
-
         pc.onconnectionstatechange = () => {
-            const state = pc.connectionState;
-            if (state === 'failed' || state === 'closed') {
-                this._fallbackToRelay('connection ' + state);
+            if (this._closed) return;
+            if (pc.connectionState === 'connected' && this.channel?.readyState === 'open') {
+                this._markConnected();
+            } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                this._fallbackToRelay(`connection ${pc.connectionState}`);
             }
         };
 
-        // The initiator creates the data channel; the answerer receives it.
         if (this.isInitiator) {
-            this._attachChannel(pc.createDataChannel('gokball', { ordered: false, maxRetransmits: 0 }));
+            const channel = pc.createDataChannel('gokball', {
+                ordered: false,
+                maxRetransmits: 0
+            });
+            this._attachChannel(channel);
             this._startNegotiation();
         } else {
-            pc.ondatachannel = (e) => this._attachChannel(e.channel);
+            pc.ondatachannel = (event) => this._attachChannel(event.channel);
         }
 
         return pc;
     }
 
     async _startNegotiation() {
-        const pc = this.pc;
         try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this._signal('offer', offer);
+            const offer = await this.pc.createOffer();
+            await this.pc.setLocalDescription(offer);
+            this._signal('offer', this.pc.localDescription);
         } catch (err) {
             console.warn('[PeerLink] could not create an offer:', err?.message || err);
             this._fallbackToRelay('offer failed');
@@ -205,25 +171,26 @@ export class PeerLink {
     }
 
     _attachChannel(channel) {
+        if (this._closed) {
+            channel.close();
+            return;
+        }
         this.channel = channel;
-
         channel.onopen = () => {
-            this.connected = true;
-            this.relaying = false;
-            this._lastRecv = Date.now();
-            clearTimeout(this._connectTimer);
-            // Let the other side know we can talk directly
-            if (this.peerId) this.socket.emit('p2pPeerReady', { to: this.peerId });
-            this._emitState({ status: 'connected' });
+            if (this._closed) return;
+            this._markConnected();
         };
-
-        channel.onclose = () => this._fallbackToRelay('channel closed');
-
-        channel.onmessage = (e) => {
-            this._lastRecv = Date.now();
+        channel.onclose = () => {
+            if (!this._closed) this._fallbackToRelay('channel closed');
+        };
+        channel.onerror = () => {
+            if (!this._closed) this._fallbackToRelay('channel error');
+        };
+        channel.onmessage = (event) => {
+            if (this._closed) return;
             let msg;
             try {
-                msg = JSON.parse(e.data);
+                msg = JSON.parse(event.data);
             } catch {
                 return;
             }
@@ -231,54 +198,66 @@ export class PeerLink {
         };
     }
 
-    /**
-     * The direct channel could not be set up. Keep playing by relaying the
-     * same messages over the signaling socket instead of dropping the peer.
-     */
     _fallbackToRelay(reason) {
-        if (this.relaying) return;
+        if (this._closed || this.relaying) return;
         this.relaying = true;
         clearTimeout(this._connectTimer);
-        console.warn('[PeerLink] falling back to server relay:', reason);
+        console.warn('[PeerLink] using server relay:', reason);
         this._emitState({ status: 'relay', reason });
     }
 
-    // ============================================
-    // Sending
-    // ============================================
+    _markConnected() {
+        this.connected = true;
+        this.relaying = false;
+        clearTimeout(this._connectTimer);
+        this._emitState({ status: 'connected' });
+    }
 
     /**
-     * Send a message to the peer. Uses the direct data channel when it is open
-     * and otherwise relays it, so callers never have to care which is active.
+     * Send real-time traffic without building a queue of stale positions.
+     * Inputs may use the relay while negotiating; congested direct snapshot
+     * queues drop the current snapshot and wait for the next one.
      */
     send(msg) {
-        const payload = JSON.stringify(msg);
+        return this.sendSerialized(JSON.stringify(msg), msg?.type === 'state');
+    }
 
-        if (this.connected && this.channel?.readyState === 'open') {
+    sendSerialized(payload, isSnapshot = false) {
+        if (this._closed || !this.peerId) return false;
+
+        if (this.connected && !this.relaying && this.channel?.readyState === 'open' &&
+            this.pc?.connectionState !== 'failed' && this.pc?.connectionState !== 'closed') {
+            if (isSnapshot && this.channel.bufferedAmount > MAX_BUFFERED_SNAPSHOT_BYTES) {
+                return true;
+            }
             try {
                 this.channel.send(payload);
                 return true;
             } catch {
-                // fall through to the relay
+                this._fallbackToRelay('data channel send failed');
             }
         }
 
-        // Reverse connection / fallback: the host's traffic reaches the guest
-        // through the server when a direct path could not be established.
-        if (this.peerId) {
-            this.socket.emit('p2pRelay', { to: this.peerId, payload });
+        if (this.socket?.connected) {
+            this.socket.volatile.emit('p2pRelay', {
+                to: this.peerId,
+                payload
+            });
+            return true;
         }
         return false;
     }
 
-    /** True when the peer has gone quiet for too long. */
-    isStale() {
-        return this.peerId !== null && Date.now() - this._lastRecv > PEER_STALE_MS;
-    }
-
     close() {
+        this._closed = true;
         clearTimeout(this._connectTimer);
-        try { this.channel?.close(); } catch { /* already closed */ }
+        if (this.channel) {
+            this.channel.onopen = null;
+            this.channel.onclose = null;
+            this.channel.onerror = null;
+            this.channel.onmessage = null;
+            try { this.channel.close(); } catch { /* already closed */ }
+        }
         try { this.pc?.close(); } catch { /* already closed */ }
         this.channel = null;
         this.pc = null;
@@ -287,6 +266,11 @@ export class PeerLink {
     }
 
     _emitState(state) {
-        this.onState({ peerId: this.peerId, connected: this.connected, relaying: this.relaying, ...state });
+        this.onState({
+            peerId: this.peerId,
+            connected: this.connected,
+            relaying: this.relaying,
+            ...state
+        });
     }
 }

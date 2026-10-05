@@ -305,12 +305,12 @@ io.on('connection', (socket) => {
             const delay = room.inputDelayFor(socket.id);
             if (delay > 0) {
                 setTimeout(() => {
-                    hostSocket.emit('remoteInput', { playerId: socket.id, input });
+                    hostSocket.volatile.emit('remoteInput', { playerId: socket.id, input });
                 }, delay);
                 return;
             }
 
-            hostSocket.emit('remoteInput', { playerId: socket.id, input });
+            hostSocket.volatile.emit('remoteInput', { playerId: socket.id, input });
             return;
         }
 
