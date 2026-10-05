@@ -293,6 +293,7 @@ class GokBallApp {
         const stadiumData = this.stadiumData || roomData?.stadium;
         if (stadiumData) {
             this.physics.loadStadium(stadiumData);
+            this._networkStaticDiscCount = this.physics.discs.length;
             this._currentStadium = stadiumData;
             this._stadiumReady = true;
         }
@@ -515,7 +516,7 @@ class GokBallApp {
                     this.accumulator -= stepSize;
                     continue;
                 }
-                if (this._serverGameState === 'playing' || this._serverGameState === 'goal') {
+                if (this._serverGameState === 'playing') {
                     const myId = this.network.socket?.id;
                     const myDisc = this.physics.discs.find(d => d.id === myId);
 
@@ -553,10 +554,7 @@ class GokBallApp {
                             this._reconciliationPending = false;
                         }
 
-                        if (!reconciled) {
-                            myDisc.input = peerInput;
-                            this.physics.step();
-                        }
+                        if (!reconciled) this.physics.predictPlayerStep(myDisc, peerInput);
                         myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
                 }
@@ -608,7 +606,7 @@ class GokBallApp {
 
         for (let i = 0; i < snapshots.length; i++) {
             const snapshot = snapshots[i];
-            if (snapshot.isPlayer && snapshot.id === myId) continue;
+            if (snapshot.isPlayer && snapshot.id === myId && this._serverGameState === 'playing') continue;
 
             const disc = snapshot.isPlayer
                 ? localById.get(snapshot.id)
@@ -1721,6 +1719,7 @@ class GokBallApp {
         // If a game is already running, atomically swap the stadium
         if (this.gameRunning) {
             this.physics.loadStadium(stadium);
+            this._networkStaticDiscCount = this.physics.discs.length;
             this._currentStadium = stadium;
             this.renderer._stadiumDirty = true;
         }
@@ -1811,32 +1810,58 @@ class GokBallApp {
         if (physicsState.kickOffReset !== undefined) this.physics.kickOffReset = physicsState.kickOffReset;
         if (physicsState.kickOffTeam !== undefined) this.physics.kickOffTeam = physicsState.kickOffTeam;
 
-        // Sync disc array length
-        while (this.physics.discs.length < physicsState.discs.length) {
-            this.physics.discs.push(new Disc());
-        }
-        while (this.physics.discs.length > physicsState.discs.length) {
-            this.physics.discs.pop();
-        }
+        const stateDiscs = physicsState.discs;
+        const firstPlayerIndex = stateDiscs.findIndex(d => d.isPlayer);
+        const staticCount = firstPlayerIndex >= 0
+            ? firstPlayerIndex
+            : (this._networkStaticDiscCount ?? this.physics.discs.length);
+        const staticDiscs = this.physics.discs.slice(0, staticCount);
+        while (staticDiscs.length < staticCount) staticDiscs.push(new Disc());
 
-        // Match player discs by ID (not index) to handle team changes correctly.
-        // When a player changes teams, the server removes a disc and adds a new one
-        // at a different index. Matching by index would apply colors to wrong discs.
-        for (let i = 0; i < physicsState.discs.length; i++) {
-            const sd = physicsState.discs[i];
-            let disc = this.physics.discs[i];
-            if (!disc) continue;
-
-            // For player discs, find the matching client disc by ID
-            if (sd.isPlayer && sd.id) {
-                const matched = this.physics.discs.find(d => d.isPlayer && d.id === sd.id);
-                if (matched) {
-                    disc = matched;
-                } else {
-                    // New player disc not yet on client - use slot and set ID
-                    disc.id = sd.id;
+        // Team changes remove and re-add player discs, shifting array indices.
+        // Rebuild the dynamic tail by ID so a length change cannot drop or reuse
+        // another player's disc at its stale position.
+        const existingPlayers = new Map();
+        for (const disc of this.physics.discs) {
+            if (disc.isPlayer && disc.id != null) existingPlayers.set(disc.id, disc);
+        }
+        const playerStates = stateDiscs.filter(d => d.isPlayer);
+        const playerDiscs = playerStates.map(sd => {
+            const existing = sd.id != null ? existingPlayers.get(sd.id) : null;
+            if (existing) {
+                if (existing.team !== sd.team) {
+                    existing.pos.x = sd.x;
+                    existing.pos.y = sd.y;
+                    existing.speed.x = sd.sx;
+                    existing.speed.y = sd.sy;
+                    existing._spawnPos = { x: sd.x, y: sd.y };
+                    if (sd.id === this.network.socket?.id) {
+                        this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+                    }
                 }
+                return existing;
             }
+
+            const disc = new Disc();
+            disc.pos.x = sd.x;
+            disc.pos.y = sd.y;
+            disc.speed.x = sd.sx;
+            disc.speed.y = sd.sy;
+            disc._spawnPos = { x: sd.x, y: sd.y };
+            if (sd.id === this.network.socket?.id) {
+                this._inputHistory = [];
+                this._lastConfirmedServerSeq = 0;
+                this._reconciliationPending = false;
+                this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+            }
+            return disc;
+        });
+        this.physics.discs = [...staticDiscs, ...playerDiscs];
+
+        for (let i = 0; i < stateDiscs.length; i++) {
+            const sd = stateDiscs[i];
+            const disc = i < staticCount ? staticDiscs[i] : playerDiscs[i - staticCount];
+            if (!disc) continue;
 
             // Sync metadata only (team, colors, physics params for prediction accuracy)
             if (sd.isPlayer !== undefined) {

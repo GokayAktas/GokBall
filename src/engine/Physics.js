@@ -373,14 +373,23 @@ export class Physics {
         this._applyPlayerKickOffConstraint(disc);
 
         if (this.stadium && !this.inGoalPause) {
-            const fieldHeight = this.stadium.bg?.height || 170;
-            if (disc.pos.y + disc.radius < -fieldHeight) {
-                disc.pos.y = -fieldHeight - disc.radius;
-                if (disc.speed.y < 0) disc.speed.y *= -0.5;
-            } else if (disc.pos.y - disc.radius > fieldHeight) {
-                disc.pos.y = fieldHeight + disc.radius;
-                if (disc.speed.y > 0) disc.speed.y *= -0.5;
+            for (const vertex of this.vertexes) {
+                if ((disc.cMask & vertex.cGroup) && (vertex.cMask & disc.cGroup)) {
+                    this._collideDiscVertex(disc, vertex);
+                }
             }
+            for (const segment of this.segments) {
+                if ((disc.cMask & segment.cGroup) && (segment.cMask & disc.cGroup)) {
+                    this._collideDiscSegment(disc, segment);
+                }
+            }
+            for (const plane of this.planes) {
+                if ((disc.cMask & plane.cGroup) && (plane.cMask & disc.cGroup)) {
+                    this._collideDiscPlane(disc, plane);
+                }
+            }
+            this._applyPlayerKickOffConstraint(disc);
+            this._enforcePlayerDiscBounds(disc);
         }
     }
 
@@ -744,27 +753,27 @@ export class Physics {
     _enforcePlayerBounds() {
         if (!this.stadium) return;
         if (this.inGoalPause) return;
-        
+        for (const disc of this.discs) {
+            if (!disc.isPlayer) continue;
+            this._enforcePlayerDiscBounds(disc);
+        }
+    }
+
+    _enforcePlayerDiscBounds(disc) {
+        if (!this.stadium || this.inGoalPause || !disc?.isPlayer) return;
+
         const fieldH = this.stadium.bg?.height || 170;
         const topBoundary = -fieldH;
         const bottomBoundary = fieldH;
-        
-        for (const disc of this.discs) {
-            if (!disc.isPlayer) continue;
-            
-            // Vertical (top/bottom field line) constraints
-            // Top: player's bottom edge can go up to the top line
-            const bottomEdge = disc.pos.y + disc.radius;
-            if (bottomEdge < topBoundary) {
-                disc.pos.y = topBoundary - disc.radius;
-                if (disc.speed.y < 0) disc.speed.y *= -0.5;
-            }
-            // Bottom: player's top edge can go down to the bottom line
-            const topEdge = disc.pos.y - disc.radius;
-            if (topEdge > bottomBoundary) {
-                disc.pos.y = bottomBoundary + disc.radius;
-                if (disc.speed.y > 0) disc.speed.y *= -0.5;
-            }
+        const bottomEdge = disc.pos.y + disc.radius;
+        if (bottomEdge < topBoundary) {
+            disc.pos.y = topBoundary - disc.radius;
+            if (disc.speed.y < 0) disc.speed.y *= -0.5;
+        }
+        const topEdge = disc.pos.y - disc.radius;
+        if (topEdge > bottomBoundary) {
+            disc.pos.y = bottomBoundary + disc.radius;
+            if (disc.speed.y > 0) disc.speed.y *= -0.5;
         }
     }
 

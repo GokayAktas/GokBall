@@ -9,6 +9,12 @@ import { PeerLink } from './PeerLink.js';
 const PING_TIMEOUT = 3000;
 // Rolling window (in samples) used for the packet loss percentage.
 const PING_WINDOW = 20;
+const AUTHORITY_METADATA_INTERVAL = 15; // refresh static metadata 4 times per second
+const AUTHORITY_METADATA_FIELDS = [
+    'colors', 'colorAngle', 'avatarColor', 'name', 'avatar',
+    'damping', 'acceleration', 'kickingAcceleration', 'kickingDamping',
+    'kickStrength', 'bCoef', 'invMass', 'cMask', 'cGroup'
+];
 
 export class NetworkManager {
     constructor() {
@@ -42,6 +48,8 @@ export class NetworkManager {
         this._peerPingTimer = null;
         this._peerPingSeq = 0;
         this._peerPingPending = new Map();
+        this._authorityMetadataSignatures = new Map();
+        this._lastAuthorityTick = -1;
     }
 
     /**
@@ -334,11 +342,65 @@ export class NetworkManager {
         this._peerRoomId = null;
         this._peerHostId = null;
         this._isPeerHost = false;
+        this._authorityMetadataSignatures.clear();
+        this._lastAuthorityTick = -1;
     }
 
     /** Broadcast one current authoritative snapshot to connected guests. */
     sendAuthorityState(state) {
-        const payload = JSON.stringify({ type: 'state', state });
+        const tick = Number.isFinite(state?.tick) ? state.tick : 0;
+        if (tick <= this._lastAuthorityTick) {
+            this._authorityMetadataSignatures.clear();
+        }
+        this._lastAuthorityTick = tick;
+
+        const seenMetadataKeys = new Set();
+        const refreshMetadata = tick % AUTHORITY_METADATA_INTERVAL === 1;
+        const discs = state?.physics?.discs || [];
+        const compactDiscs = discs.map((disc, index) => {
+            const compact = {
+                x: disc.x,
+                y: disc.y,
+                sx: disc.sx,
+                sy: disc.sy,
+                isPlayer: !!disc.isPlayer,
+                kicking: !!disc.kicking,
+                radius: disc.radius
+            };
+            if (disc.isPlayer) {
+                compact.id = disc.id;
+                compact.team = disc.team;
+                compact.color = disc.color;
+            } else if (disc.color !== undefined) {
+                compact.color = disc.color;
+            }
+
+            const metadata = {};
+            for (const field of AUTHORITY_METADATA_FIELDS) {
+                if (disc[field] !== undefined) metadata[field] = disc[field];
+            }
+            const metadataKey = disc.isPlayer ? `player:${disc.id}` : `static:${index}`;
+            const signature = JSON.stringify(metadata);
+            seenMetadataKeys.add(metadataKey);
+            if (refreshMetadata || this._authorityMetadataSignatures.get(metadataKey) !== signature) {
+                Object.assign(compact, metadata);
+                this._authorityMetadataSignatures.set(metadataKey, signature);
+            }
+            return compact;
+        });
+        for (const key of this._authorityMetadataSignatures.keys()) {
+            if (!seenMetadataKeys.has(key)) this._authorityMetadataSignatures.delete(key);
+        }
+
+        const compactState = {
+            ...state,
+            physics: {
+                kickOffReset: state?.physics?.kickOffReset,
+                kickOffTeam: state?.physics?.kickOffTeam,
+                discs: compactDiscs
+            }
+        };
+        const payload = JSON.stringify({ type: 'state', state: compactState });
         if (this._peerLinks.size === 0) {
             // A room can be playable while a peer is negotiating or unable to
             // establish WebRTC. Keep snapshots flowing without queuing stale
