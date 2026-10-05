@@ -13,6 +13,7 @@ const PEER_PING_INTERVAL = 500;
 const PEER_PING_TIMEOUT = 1200;
 const PEER_PING_FAILURE_THRESHOLD = 2;
 const AUTHORITY_STATE_TIMEOUT = 1200;
+const SHADOW_INPUT_INTERVAL = 50;
 const AUTHORITY_METADATA_INTERVAL = 15; // refresh static metadata 4 times per second
 const AUTHORITY_METADATA_FIELDS = [
     'colors', 'colorAngle', 'avatarColor', 'name', 'avatar',
@@ -53,6 +54,7 @@ export class NetworkManager {
         this._peerPingSeq = 0;
         this._peerPingPending = new Map();
         this._peerPingFailures = new Map();
+        this._lastInputRelayAt = -Infinity;
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
@@ -311,16 +313,23 @@ export class NetworkManager {
         // Send with sequence number for reconciliation
         const packet = { ...input, _seq: this._inputSeqNum };
 
-        // The host already has its local input. Guests send input directly to
-        // the host when possible, with the server path kept as a fallback.
+        // The host already has its local input. Guests prefer the direct peer
+        // link, but keep a low-rate reliable server copy as a safety net. Input
+        // sequence numbers let the host discard delayed copies after a newer
+        // direct packet has already arrived.
         if (!this._isPeerHost) {
             const link = this._peerHostId && this._peerLinks.get(this._peerHostId);
-            const sent = link?.send({ type: 'input', playerId: this.playerId, input: packet });
-            if (!sent && this.socket?.connected) {
-                this.socket.volatile.emit('input', {
+            const directAvailable = !!link?.connected && !link.relaying &&
+                link.channel?.readyState === 'open' && link.pc?.connectionState === 'connected';
+            const sentDirect = directAvailable && link.send({ type: 'input', playerId: this.playerId, input: packet });
+            const now = performance.now();
+            const relayDue = !sentDirect || now - this._lastInputRelayAt >= SHADOW_INPUT_INTERVAL;
+            if (relayDue && this.socket?.connected) {
+                this.socket.emit('input', {
                     ...serverFallbackInput,
                     _seq: this._inputSeqNum
                 });
+                this._lastInputRelayAt = now;
             }
         }
         return this._inputSeqNum;
@@ -339,6 +348,7 @@ export class NetworkManager {
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
+        this._lastInputRelayAt = -Infinity;
         if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId });
         this._peerPingTimer = setInterval(() => this._sendPeerPings(), PEER_PING_INTERVAL);
     }
@@ -360,6 +370,7 @@ export class NetworkManager {
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
+        this._lastInputRelayAt = -Infinity;
         this._authorityMetadataSignatures.clear();
         this._lastAuthorityTick = -1;
     }

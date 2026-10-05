@@ -300,7 +300,10 @@ io.on('connection', (socket) => {
             const hostSocket = io.sockets.sockets.get(room.hostId);
             if (!hostSocket) return;
 
-            hostSocket.volatile.emit('remoteInput', { playerId: socket.id, input });
+            // Inputs are coalesced by sequence number on the host. Keep this
+            // fallback reliable so a busy WebSocket cannot silently stop a
+            // guest's movement while the direct peer channel is degraded.
+            hostSocket.emit('remoteInput', { playerId: socket.id, input });
             return;
         }
 

@@ -24,6 +24,8 @@ import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 
 const REMOTE_INPUT_TIMEOUT_MS = 1500;
+const MAX_LOCAL_RENDER_CORRECTION = 8;
+const LOCAL_RENDER_SNAP_ERROR = 12;
 
 class GokBallApp {
     constructor() {
@@ -527,6 +529,7 @@ class GokBallApp {
                     const myDisc = this.physics.discs.find(d => d.id === myId);
 
                     if (myDisc && myDisc.isPlayer) {
+                        const predictionLeadTicks = this._snapshotBuffer.getDelay() / stepSize + 1;
                         this._inputHistory.push({
                             seq: inputSeq,
                             input: { ...peerInput },
@@ -546,21 +549,41 @@ class GokBallApp {
                                 myDisc.speed.x = confirmed.sx;
                                 myDisc.speed.y = confirmed.sy;
 
-                                // Replay only this player; full physics replay
-                                // advances the ball and all other players again.
+                                // Replay this player's inputs against the latest
+                                // interpolated world without advancing other discs.
                                 for (const h of this._inputHistory) {
                                     if (h.seq <= this._lastConfirmedServerSeq) continue;
-                                    this.physics.predictPlayerStep(myDisc, h.input);
+                                    this.physics.predictPlayerStep(myDisc, h.input, predictionLeadTicks);
                                 }
-                                this._localRenderCorrection.x += predictedX - myDisc.pos.x;
-                                this._localRenderCorrection.y += predictedY - myDisc.pos.y;
-                                this._localRenderCorrection.updatedAt = performance.now();
+                                const correctionX = this._localRenderCorrection.x + predictedX - myDisc.pos.x;
+                                const correctionY = this._localRenderCorrection.y + predictedY - myDisc.pos.y;
+                                const correctionLength = Math.hypot(correctionX, correctionY);
+                                const now = performance.now();
+                                if (Math.hypot(predictedX - myDisc.pos.x, predictedY - myDisc.pos.y) > LOCAL_RENDER_SNAP_ERROR) {
+                                    // Large corrections usually mean a contact
+                                    // or missed update. Show the host position
+                                    // instead of smoothing through the error.
+                                    this._localRenderCorrection = { x: 0, y: 0, updatedAt: now };
+                                } else if (correctionLength > MAX_LOCAL_RENDER_CORRECTION) {
+                                    const scale = MAX_LOCAL_RENDER_CORRECTION / correctionLength;
+                                    this._localRenderCorrection = {
+                                        x: correctionX * scale,
+                                        y: correctionY * scale,
+                                        updatedAt: now
+                                    };
+                                } else {
+                                    this._localRenderCorrection = {
+                                        x: correctionX,
+                                        y: correctionY,
+                                        updatedAt: now
+                                    };
+                                }
                                 reconciled = true;
                             }
                             this._reconciliationPending = false;
                         }
 
-                        if (!reconciled) this.physics.predictPlayerStep(myDisc, peerInput);
+                        if (!reconciled) this.physics.predictPlayerStep(myDisc, peerInput, predictionLeadTicks);
                         myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
                     }
                 }

@@ -337,7 +337,7 @@ export class Physics {
     }
 
     /** Replay one local player's input without advancing the rest of the pitch. */
-    predictPlayerStep(disc, input = {}) {
+    predictPlayerStep(disc, input = {}, otherDiscLeadTicks = 0) {
         if (!disc?.isPlayer || disc.invMass === 0) return;
 
         let ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -371,6 +371,7 @@ export class Physics {
         disc.pos.y += disc.speed.y;
 
         this._applyPlayerKickOffConstraint(disc);
+        this._resolvePredictedPlayerDiscCollisions(disc, otherDiscLeadTicks);
 
         if (this.stadium && !this.inGoalPause) {
             for (const vertex of this.vertexes) {
@@ -390,6 +391,41 @@ export class Physics {
             }
             this._applyPlayerKickOffConstraint(disc);
             this._enforcePlayerDiscBounds(disc);
+        }
+    }
+
+    /**
+     * Predict this player's collisions against the latest interpolated world.
+     * Remote discs are rendered a few ticks behind the local prediction; move
+     * temporary copies forward before resolving contact, then restore them so
+     * only the locally predicted player is changed.
+     */
+    _resolvePredictedPlayerDiscCollisions(playerDisc, leadTicks = 0) {
+        const playerIndex = this.discs.indexOf(playerDisc);
+        if (playerIndex < 0) return;
+
+        for (let i = 0; i < this.discs.length; i++) {
+            if (i === playerIndex) continue;
+            const other = this.discs[i];
+            if (!other) continue;
+
+            const oldX = other.pos.x;
+            const oldY = other.pos.y;
+            const oldSpeedX = other.speed.x;
+            const oldSpeedY = other.speed.y;
+            if (leadTicks > 0 && other.invMass !== 0) {
+                const movementScale = other === this.ballDisc ? this.ballSpeedMultiplier : 1;
+                other.pos.x += oldSpeedX * leadTicks * movementScale;
+                other.pos.y += oldSpeedY * leadTicks * movementScale;
+            }
+
+            if (i < playerIndex) this._collideDiscs(other, playerDisc);
+            else this._collideDiscs(playerDisc, other);
+
+            other.pos.x = oldX;
+            other.pos.y = oldY;
+            other.speed.x = oldSpeedX;
+            other.speed.y = oldSpeedY;
         }
     }
 
