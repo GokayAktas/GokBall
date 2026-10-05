@@ -308,6 +308,7 @@ class GokBallApp {
             this._currentStadium = stadiumData;
             this._stadiumReady = true;
         }
+        this.physics.ballSpeedMultiplier = roomData?.ballSpeedMultiplier || 1;
 
         // Hide UI, show game
         this.ui.hideAll();
@@ -1208,9 +1209,15 @@ class GokBallApp {
                 existingDisc.cGroup = CollisionFlags[playerData.team] || CollisionFlags.all;
             } else {
                 // Create new disc for player
-                const pp = this._currentStadium?.playerPhysics || {
+                const basePP = this._currentStadium?.playerPhysics || {
                     radius: 15, bCoef: 0.5, invMass: 0.5, damping: 0.96,
                     acceleration: 0.10, kickingAcceleration: 0.065, kickingDamping: 0.96, kickStrength: 5
+                };
+                const speedMultiplier = this.currentRoomData?.playerSpeedMultiplier || 1;
+                const pp = {
+                    ...basePP,
+                    acceleration: (basePP.acceleration || 0.1) * speedMultiplier,
+                    kickingAcceleration: (basePP.kickingAcceleration || 0.065) * speedMultiplier
                 };
                 const spawnDist = this._currentStadium?.spawnDistance || 170;
                 const dir = playerData.team === 'red' ? -1 : 1;
@@ -1586,6 +1593,20 @@ class GokBallApp {
                 if (data.timeLimit !== undefined) this.currentRoomData.game.timeLimit = data.timeLimit;
                 if (data.teamsLocked !== undefined) this.currentRoomData.teamsLocked = data.teamsLocked;
                 if (data.players) this.currentRoomData.players = data.players;
+                if (data.playerSpeedMultiplier !== undefined) {
+                    const previous = this.currentRoomData.playerSpeedMultiplier || 1;
+                    const ratio = data.playerSpeedMultiplier / previous;
+                    this.currentRoomData.playerSpeedMultiplier = data.playerSpeedMultiplier;
+                    for (const disc of this.physics.discs) {
+                        if (!disc.isPlayer) continue;
+                        disc.acceleration *= ratio;
+                        disc.kickingAcceleration *= ratio;
+                    }
+                }
+                if (data.ballSpeedMultiplier !== undefined) {
+                    this.currentRoomData.ballSpeedMultiplier = data.ballSpeedMultiplier;
+                    this.physics.ballSpeedMultiplier = data.ballSpeedMultiplier;
+                }
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             }
         });

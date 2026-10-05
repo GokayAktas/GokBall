@@ -48,7 +48,7 @@ export class MainMenu {
             </svg>
             Hakkında
           </button>
-          <p class="menu-footer-credit">&copy; <span id="footerYear"></span> Gökay &mdash; GokBall</p>
+          <p class="menu-footer-credit">&copy; <span id="footerYear"></span> GokBall</p>
         </footer>
       </div>
     `;
@@ -96,7 +96,7 @@ export class MainMenu {
     document.getElementById('btnAbout')?.addEventListener('click', () => this._showAbout());
   }
 
-  /** Hakkında dialog: what GokBall is and who made it. */
+  /** Hakkında dialog */
   _showAbout() {
     const old = document.getElementById('aboutModal');
     if (old) old.remove();
@@ -105,37 +105,53 @@ export class MainMenu {
     overlay.id = 'aboutModal';
     overlay.className = 'about-overlay';
     overlay.innerHTML = `
-      <div class="about-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
-        <h2 id="aboutTitle" class="about-title">Hakkında</h2>
-        <p class="about-text">
-          <strong>GokBall</strong>, tarayıcıda çalışan ücretsiz ve gerçek zamanlı çok oyunculu
-          bir 2D futbol oyunudur. Kurulum gerekmez: bir oda oluştur, arkadaşlarını davet et,
-          kırmızı ve mavi takımlara ayrıl ve gol atmaya başla.
+      <div class="about-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutDescription">
+        <button class="about-close-icon" id="aboutCloseIcon" aria-label="Hakkında penceresini kapat">×</button>
+        <div class="about-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="21"/><path d="m24 12 7 5-3 8h-8l-3-8 7-5Z"/><path d="m20 25-5 7 4 6m9-13 5 7-4 6m-9-21-7-2m18 2 7-2m-18 17-6 2m18-2 6 2"/></svg>
+        </div>
+        <p class="about-eyebrow">OYUN HAKKINDA</p>
+        <h2 id="aboutTitle" class="about-title">Sahaya çık, maç başlasın.</h2>
+        <p id="aboutDescription" class="about-text">
+          <strong>GokBall</strong>, tarayıcınızda arkadaşlarınızla oynayabileceğiniz gerçek zamanlı,
+          çok oyunculu bir 2D futbol oyunudur. Oda kurun, takımınızı seçin ve maça başlayın.
         </p>
-        <ul class="about-list">
-          <li>Gerçek zamanlı çok oyunculu oda ve maç sistemi</li>
-          <li>Sohbet, takım değiştirme ve skor tablosu</li>
-          <li>Özelleştirilebilir tuş atamaları ve görsel ayarlar</li>
-        </ul>
-        <p class="about-author">
-          GokBall'ı <strong>Gökay</strong> geliştirdi.
-        </p>
-        <button class="btn btn-primary btn-block" id="aboutClose">Kapat</button>
+        <div class="about-features">
+          <div class="about-feature">
+            <span class="about-feature-icon">⚡</span>
+            <span><strong>Canlı maçlar</strong><small>Arkadaşlarınla aynı sahada buluş.</small></span>
+          </div>
+          <div class="about-feature">
+            <span class="about-feature-icon">⚽</span>
+            <span><strong>Takım oyunu</strong><small>Sohbet et, paslaş ve skor yap.</small></span>
+          </div>
+          <div class="about-feature">
+            <span class="about-feature-icon">🎨</span>
+            <span><strong>Sana göre</strong><small>Kontrolleri ve görünümü düzenle.</small></span>
+          </div>
+        </div>
+        <div class="about-bottom">
+          <span>Bir oda oluştur. Takımını kur. Oyuna gir.</span>
+          <button class="btn btn-primary" id="aboutClose">Tamam</button>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
 
-    const close = () => overlay.remove();
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      document.getElementById('btnAbout')?.focus();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') close();
+    }
     overlay.querySelector('#aboutClose')?.addEventListener('click', close);
+    overlay.querySelector('#aboutCloseIcon')?.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
-    document.addEventListener('keydown', function onKey(e) {
-      if (e.key === 'Escape') {
-        close();
-        document.removeEventListener('keydown', onKey);
-      }
-    });
+    document.addEventListener('keydown', onKey);
   }
 
   _saveName() {

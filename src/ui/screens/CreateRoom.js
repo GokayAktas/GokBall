@@ -80,21 +80,6 @@ export class CreateRoom {
           </div>
 
           <div class="input-group">
-            <label for="speedMultiplier">Oyuncu Hızı: <span id="speedMultiplierValue" class="value-highlight">x1.00</span></label>
-            <select id="speedMultiplier" class="input">
-              <option value="0.50">x0.50</option>
-              <option value="0.75">x0.75</option>
-              <option value="1.00" selected>x1.00</option>
-              <option value="1.25">x1.25</option>
-              <option value="1.50">x1.50</option>
-              <option value="1.75">x1.75</option>
-              <option value="2.00">x2.00</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="input-group">
             <label>Saha</label>
             <div style="display:flex; gap: var(--space-sm);">
               <select id="stadiumSelect" class="input" style="flex:1;">
@@ -109,6 +94,33 @@ export class CreateRoom {
                 <input type="file" id="hbsUpload" accept=".hbs" style="display:none;" />
               </label>
             </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group">
+            <label for="ballSpeedMultiplier">Top Hızı: <span id="ballSpeedMultiplierValue" class="value-highlight">x1.00</span></label>
+            <select id="ballSpeedMultiplier" class="input">
+              <option value="0.50">x0.50</option>
+              <option value="0.75">x0.75</option>
+              <option value="1.00" selected>x1.00</option>
+              <option value="1.25">x1.25</option>
+              <option value="1.50">x1.50</option>
+              <option value="1.75">x1.75</option>
+              <option value="2.00">x2.00</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="speedMultiplier">Oyuncu Hızı: <span id="speedMultiplierValue" class="value-highlight">x1.00</span></label>
+            <select id="speedMultiplier" class="input">
+              <option value="0.50">x0.50</option>
+              <option value="0.75">x0.75</option>
+              <option value="1.00" selected>x1.00</option>
+              <option value="1.25">x1.25</option>
+              <option value="1.50">x1.50</option>
+              <option value="1.75">x1.75</option>
+              <option value="2.00">x2.00</option>
+            </select>
           </div>
         </div>
 
@@ -134,6 +146,7 @@ export class CreateRoom {
       { id: 'maxPlayers', display: 'maxPlayersValue' },
       { id: 'scoreLimit', display: 'scoreLimitValue', labels: { '0': 'Limit Yok' } },
       { id: 'timeLimit', display: 'timeLimitValue', labels: { '0': 'Limit Yok' } },
+      { id: 'ballSpeedMultiplier', display: 'ballSpeedMultiplierValue', prefix: 'x' },
       { id: 'speedMultiplier', display: 'speedMultiplierValue', prefix: 'x' }
     ];
 
@@ -223,6 +236,7 @@ export class CreateRoom {
     const timeLimit = (timeLimitVal === '0') ? 0 : (parseInt(timeLimitVal) || 3) * 60;
 
     const speedMultiplier = parseFloat(document.getElementById('speedMultiplier')?.value) || 1.0;
+    const ballSpeedMultiplier = parseFloat(document.getElementById('ballSpeedMultiplier')?.value) || 1.0;
     const stadiumValue = document.getElementById('stadiumSelect')?.value;
     const options = {
       name,
@@ -231,6 +245,7 @@ export class CreateRoom {
       scoreLimit,
       timeLimit,
       playerSpeedMultiplier: speedMultiplier,
+      ballSpeedMultiplier,
       stadium: stadiumValue,
       playerName: this.app.playerName || 'Player'
     };

@@ -149,6 +149,7 @@ io.on('connection', (socket) => {
             scoreLimit: options.scoreLimit !== undefined ? options.scoreLimit : 3,
             timeLimit: options.timeLimit !== undefined ? options.timeLimit : 180,
             playerSpeedMultiplier: options.playerSpeedMultiplier || 1.0,
+            ballSpeedMultiplier: options.ballSpeedMultiplier || 1.0,
             stadium: options.stadium || null,
             roomType: 'host'
         });
@@ -326,7 +327,7 @@ io.on('connection', (socket) => {
         // Only accept from the host
         if (socket.id !== room.hostId) return;
         // Broadcast to everyone EXCEPT the host (includes lastProcessedSeq)
-        socket.to(room.id).emit('gameState', state);
+        socket.to(room.id).volatile.emit('authorityState', state);
     });
 
     // --- Host Pause Event (relay to non-host players) ---
@@ -541,8 +542,29 @@ io.on('connection', (socket) => {
         if (player?.isAdmin) {
             const val = parseFloat(multiplier);
             if (isFinite(val) && val > 0 && val <= 3) {
-                room.playerSpeedMultiplier = Math.round(val * 100) / 100;
+                const normalized = Math.round(val * 100) / 100;
+                const ratio = normalized / (room.playerSpeedMultiplier || 1);
+                room.playerSpeedMultiplier = normalized;
+                for (const disc of room.game.physics.discs) {
+                    if (!disc.isPlayer) continue;
+                    disc.acceleration *= ratio;
+                    disc.kickingAcceleration *= ratio;
+                }
                 room.broadcast('roomUpdate', { playerSpeedMultiplier: room.playerSpeedMultiplier });
+            }
+        }
+    });
+
+    socket.on('setBallSpeedMultiplier', (multiplier) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room) return;
+        const player = room.players.get(socket.id);
+        if (player?.isAdmin) {
+            const val = parseFloat(multiplier);
+            if (isFinite(val) && val > 0 && val <= 3) {
+                room.ballSpeedMultiplier = Math.round(val * 100) / 100;
+                room.game.physics.ballSpeedMultiplier = room.ballSpeedMultiplier;
+                room.broadcast('roomUpdate', { ballSpeedMultiplier: room.ballSpeedMultiplier });
             }
         }
     });

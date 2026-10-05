@@ -54,6 +54,7 @@ export class GamePhysics {
         this.planes = [];
         this.goals = [];
         this.ballDisc = null;
+        this.ballSpeedMultiplier = 1;
     }
 
     loadStadium(stadium) {
@@ -184,8 +185,9 @@ export class GamePhysics {
             const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
             disc.speed.x *= damp;
             disc.speed.y *= damp;
-            disc.pos.x += disc.speed.x;
-            disc.pos.y += disc.speed.y;
+            const movementScale = disc === this.ballDisc ? this.ballSpeedMultiplier : 1;
+            disc.pos.x += disc.speed.x * movementScale;
+            disc.pos.y += disc.speed.y * movementScale;
         }
 
         if (applyConstraints) this._applyKickOffConstraints();

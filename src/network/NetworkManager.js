@@ -112,6 +112,7 @@ export class NetworkManager {
             this.socket.on('teamChanged', (data) => this._trigger('teamChanged', data));
             this.socket.on('teamLockChanged', (data) => this._trigger('teamLockChanged', data));
             this.socket.on('gameState', (state) => this._trigger('serverGameState', state));
+            this.socket.on('authorityState', (state) => this._trigger('gameState', state));
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));
             this.socket.on('roomClosed', (data) => {
@@ -309,7 +310,7 @@ export class NetworkManager {
     /** Join the host's peer mesh after the room has been confirmed by server. */
     connectRoomPeers(roomData) {
         this.disconnectRoomPeers();
-        const roomId = roomData?.id;
+        const roomId = roomData?.roomId || roomData?.id;
         const hostId = roomData?.creatorId || roomData?.adminId;
         if (!roomId || !hostId || !this.socket?.connected) return;
 
@@ -337,8 +338,14 @@ export class NetworkManager {
 
     /** Broadcast one current authoritative snapshot to connected guests. */
     sendAuthorityState(state) {
-        if (this._peerLinks.size === 0) return;
         const payload = JSON.stringify({ type: 'state', state });
+        if (this._peerLinks.size === 0) {
+            // A room can be playable while a peer is negotiating or unable to
+            // establish WebRTC. Keep snapshots flowing without queuing stale
+            // positions; active peer links continue to carry the fast path.
+            this.socket?.volatile.emit('authorityState', state);
+            return;
+        }
         for (const link of this._peerLinks.values()) link.sendSerialized(payload, true);
     }
 
@@ -511,6 +518,10 @@ export class NetworkManager {
 
     setSpeedMultiplier(multiplier) {
         this.socket.emit('setSpeedMultiplier', multiplier);
+    }
+
+    setBallSpeedMultiplier(multiplier) {
+        this.socket.emit('setBallSpeedMultiplier', multiplier);
     }
 
     // === Event system ===

@@ -119,7 +119,11 @@ export class RoomLobby {
             </div>
             <div class="setting-inline">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path></svg>
-              <span>Oyun Hızı: <b>X<span id="speedInfo">${(data?.playerSpeedMultiplier || 1.0).toFixed(2)}</span></b></span>
+              <span>Top Hızı: <b>X<span id="ballSpeedInfo">${(data?.ballSpeedMultiplier || 1.0).toFixed(2)}</span></b></span>
+            </div>
+            <div class="setting-inline">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+              <span>Oyuncu Hızı: <b>X<span id="speedInfo">${(data?.playerSpeedMultiplier || 1.0).toFixed(2)}</span></b></span>
             </div>
             <div class="setting-inline">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
@@ -163,7 +167,19 @@ export class RoomLobby {
                  </select>
               </div>
               <div class="setting-field">
-                 <span class="setting-label">HIZ</span>
+                 <span class="setting-label">TOP HIZI</span>
+                 <select id="lobbyBallSpeedMultiplier" class="input setting-select">
+                   <option value="0.50">x0.50</option>
+                   <option value="0.75">x0.75</option>
+                   <option value="1.00">x1.00</option>
+                   <option value="1.25">x1.25</option>
+                   <option value="1.50">x1.50</option>
+                   <option value="1.75">x1.75</option>
+                   <option value="2.00">x2.00</option>
+                 </select>
+              </div>
+              <div class="setting-field">
+                 <span class="setting-label">OYUNCU HIZI</span>
                  <select id="lobbySpeedMultiplier" class="input setting-select">
                    <option value="0.50">x0.50</option>
                    <option value="0.75">x0.75</option>
@@ -235,11 +251,6 @@ export class RoomLobby {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
         return;
       }
-      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
-      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
-        alert('Maç devam ederken takım değiştirilemez!');
-        return;
-      }
       this.app.network.changeTeam('red');
     });
     document.getElementById('btnJoinBlue')?.addEventListener('click', () => {
@@ -247,21 +258,11 @@ export class RoomLobby {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
         return;
       }
-      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
-      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
-        alert('Maç devam ederken takım değiştirilemez!');
-        return;
-      }
       this.app.network.changeTeam('blue');
     });
     document.getElementById('btnJoinSpectator')?.addEventListener('click', () => {
       if (this.teamsLocked && !this._isCurrentPlayerAdmin()) {
         alert('Takımlar kilitli! Admin kilidi açana kadar bekleyin.');
-        return;
-      }
-      const isGameRunning = this.roomData?.game && (this.roomData.game.state === 'playing' || this.roomData.game.state === 'countdown' || this.roomData.game.state === 'goal');
-      if (isGameRunning && !this._isCurrentPlayerAdmin()) {
-        alert('Maç devam ederken takım değiştirilemez!');
         return;
       }
       this.app.network.changeTeam('spectator');
@@ -321,6 +322,13 @@ export class RoomLobby {
       speedSelect.value = parseFloat(data?.playerSpeedMultiplier || 1.0).toFixed(2);
       speedSelect.addEventListener('change', (e) => {
         this.app.network.socket.emit('setSpeedMultiplier', parseFloat(e.target.value));
+      });
+    }
+    const ballSpeedSelect = document.getElementById('lobbyBallSpeedMultiplier');
+    if (ballSpeedSelect) {
+      ballSpeedSelect.value = parseFloat(data?.ballSpeedMultiplier || 1.0).toFixed(2);
+      ballSpeedSelect.addEventListener('change', (e) => {
+        this.app.network.setBallSpeedMultiplier(parseFloat(e.target.value));
       });
     }
 
@@ -477,6 +485,7 @@ export class RoomLobby {
 
     this._registerHandler('teamLockChanged', (data) => {
       this.teamsLocked = data.locked;
+      this.roomData = { ...this.roomData, teamsLocked: data.locked };
       this._updateLockUI();
       this._addSystemMessage(data.locked ? '🔒 Takımlar kilitlendi' : '🔓 Takım kilidi açıldı');
     });
@@ -506,6 +515,12 @@ export class RoomLobby {
         const info = document.getElementById('speedInfo');
         if (info) info.textContent = parseFloat(data.playerSpeedMultiplier).toFixed(2);
       }
+      if (data.ballSpeedMultiplier !== undefined) {
+        const sel = document.getElementById('lobbyBallSpeedMultiplier');
+        if (sel) sel.value = parseFloat(data.ballSpeedMultiplier).toFixed(2);
+        const info = document.getElementById('ballSpeedInfo');
+        if (info) info.textContent = parseFloat(data.ballSpeedMultiplier).toFixed(2);
+      }
       if (data.players) {
         this._updatePlayers(data.players);
         const countSpan = document.getElementById('playerCount');
@@ -532,7 +547,7 @@ export class RoomLobby {
     if (btnClearBlue) btnClearBlue.style.display = isAdmin ? '' : 'none';
 
     // Room status chip removed from HUD (kept clean like reference design)
-    const canClick = isAdmin || (!data.teamsLocked && !isGameRunning);
+    const canClick = isAdmin || !data?.teamsLocked;
     const btnJoinRed = document.getElementById('btnJoinRed');
     if (btnJoinRed) {
         btnJoinRed.style.display = '';

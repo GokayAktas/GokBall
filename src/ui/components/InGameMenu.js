@@ -24,7 +24,6 @@ export class InGameMenu {
         const blueTeam = players.filter(p => p.team === 'blue');
         const specs = players.filter(p => p.team === 'spectator');
 
-        const isMatchRunning = roomData.game && (roomData.game.state === 'playing' || roomData.game.state === 'countdown' || roomData.game.state === 'goal');
         // Swap ban/kick button order: Kick (remove) first, then Ban
         const adminActions = (p) => isAdmin && p.id !== this.app.network.playerId ? `
             <div style="display:flex; gap:4px;">
@@ -61,7 +60,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamRed">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--red-team); font-weight:bold;">🔴 Kırmızı</span>
-                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
                         </div>
                         <div class="player-list" id="redPlayers" style="min-height:100px;">
                             ${redTeam.map(p => `
@@ -80,7 +79,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamSpectator">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--text-muted); font-weight:bold;">👁️ İzleyiciler</span>
-                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
+                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
                         </div>
                         <div class="player-list" id="spectatorPlayers" style="min-height:100px;">
                             ${specs.map(p => `
@@ -98,7 +97,7 @@ export class InGameMenu {
 
                     <div class="mgmt-column" id="teamBlue">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            ${(isAdmin || (!roomData.teamsLocked && !isMatchRunning)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
                             <span style="color:var(--blue-team); font-weight:bold;">🔵 Mavi</span>
                         </div>
                         <div class="player-list" id="bluePlayers" style="min-height:100px;">

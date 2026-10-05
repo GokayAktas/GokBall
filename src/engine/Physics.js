@@ -112,6 +112,7 @@ export class Physics {
         this.goals = [];
         this.predictionThreshold = 10; // Lower threshold = more frequent but smaller corrections
         this.ballDisc = null;
+        this.ballSpeedMultiplier = 1;
         this.myPlayerId = null; // Local player ID for self-highlighting
         
         // Kickoff state (mirrors server for prediction)
@@ -255,8 +256,9 @@ export class Physics {
         const damp = disc.kicking ? (disc.kickingDamping || 0.96) : (disc.damping || 0.96);
         disc.speed.x *= damp;
         disc.speed.y *= damp;
-        disc.pos.x += disc.speed.x;
-        disc.pos.y += disc.speed.y;
+        const movementScale = disc === this.ballDisc ? this.ballSpeedMultiplier : 1;
+        disc.pos.x += disc.speed.x * movementScale;
+        disc.pos.y += disc.speed.y * movementScale;
     }
 
         // Apply KickOff Constraints (Prediction)

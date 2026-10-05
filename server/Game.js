@@ -123,7 +123,7 @@ export class Game {
         const playerPhysics = {
             ...basePlayerPhysics,
             acceleration: (basePlayerPhysics.acceleration || 0.1) * speedMult,
-            kickingAcceleration: (basePlayerPhysics.kickingAcceleration || 0.07) * speedMult,
+            kickingAcceleration: (basePlayerPhysics.kickingAcceleration || 0.065) * speedMult,
         };
 
         const redPlayers = this.room.getTeamPlayers('red');

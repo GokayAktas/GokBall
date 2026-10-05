@@ -49,8 +49,7 @@ Tüm tuşlar oyun içi **Ayarlar** ekranından yeniden atanabilir.
 Gereksinimler: **Node.js 18+**
 
 ```bash
-# Depoyu klonla
-git clone https://github.com/GokayAktas/GokBall.git
+# Depoyu indirdikten sonra proje klasörüne gir
 cd GokBall
 
 # Bağımlılıkları yükle

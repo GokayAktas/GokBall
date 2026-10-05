@@ -116,6 +116,7 @@ export class Room {
         this.teamsLocked = false;
         this._closing = false; // Flag to prevent recursive cleanup
         this.playerSpeedMultiplier = options.playerSpeedMultiplier || 1.0;
+        this.ballSpeedMultiplier = options.ballSpeedMultiplier || 1.0;
 
         // Map Selection (server-authoritative)
         if (options.stadium && typeof options.stadium === 'string') {
@@ -139,6 +140,7 @@ export class Room {
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);
+        this.game.physics.ballSpeedMultiplier = this.ballSpeedMultiplier;
         this.game.scoreLimit = options.scoreLimit !== undefined ? options.scoreLimit : 3;
         this.game.timeLimit = options.timeLimit !== undefined ? options.timeLimit : 180;
     }
@@ -193,6 +195,7 @@ export class Room {
             stadium: this.stadium,
             teamColors: this.teamColors,
             playerSpeedMultiplier: this.playerSpeedMultiplier,
+            ballSpeedMultiplier: this.ballSpeedMultiplier,
             game: this.game.getInfo(),
             teamsLocked: this.teamsLocked,
             chatHistory: this.chatHistory.slice(),
@@ -282,10 +285,10 @@ export class Room {
 
         if (!['red', 'blue', 'spectator'].includes(team)) return;
 
-        // Check team lock (non-admins can't change if locked OR game is running)
-        const isGameRunning = this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal';
-        if ((this.teamsLocked || isGameRunning) && !player.isAdmin) {
-            player.socket.emit('roomError', { error: 'Oyun devam ederken veya takımlar kilitliyken geçiş yapamazsınız!' });
+        // The lock is the only restriction on voluntary team changes. Players
+        // can move during a match whenever the admin has left teams unlocked.
+        if (this.teamsLocked && !player.isAdmin) {
+            player.socket.emit('roomError', { error: 'Takımlar kilitli; geçiş yapamazsınız.' });
             return;
         }
 
@@ -316,7 +319,14 @@ export class Room {
             // Add new disc if moved to red/blue
             if (team === 'red' || team === 'blue') {
                 const spawnX = (team === 'red' ? -1 : 1) * (this.stadium.spawnDistance || 170);
-                const discIdx = this.game.physics.addPlayerDisc(this.stadium.playerPhysics || {}, team, spawnX, 0, socketId);
+                const basePhysics = this.stadium.playerPhysics || {};
+                const speedMultiplier = this.playerSpeedMultiplier || 1;
+                const playerPhysics = {
+                    ...basePhysics,
+                    acceleration: (basePhysics.acceleration || 0.1) * speedMultiplier,
+                    kickingAcceleration: (basePhysics.kickingAcceleration || 0.065) * speedMultiplier
+                };
+                const discIdx = this.game.physics.addPlayerDisc(playerPhysics, team, spawnX, 0, socketId);
                 const disc = this.game.physics.discs[discIdx];
                 if (disc) {
                     disc._playerName = player.name;
@@ -954,6 +964,7 @@ export class Room {
             teamColors: this.teamColors,
             roomType: this.roomType,
             playerSpeedMultiplier: this.playerSpeedMultiplier,
+            ballSpeedMultiplier: this.ballSpeedMultiplier,
             game: this.game.getInfo(),
             chatHistory: this.chatHistory.slice()
         };

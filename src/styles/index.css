@@ -318,8 +318,8 @@ body::before {
   inset: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(8, 9, 12, 0.78);
-  backdrop-filter: blur(3px);
+  background: rgba(4, 10, 8, 0.82);
+  backdrop-filter: blur(8px);
   z-index: 10000;
   display: flex;
   align-items: center;
@@ -334,14 +334,15 @@ body::before {
 }
 
 .about-box {
-  background: var(--panel);
-  border: 2px solid var(--stroke);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xl);
-  padding: var(--space-lg);
-  max-width: 460px;
+  position: relative;
+  background: linear-gradient(155deg, rgba(27, 42, 35, 0.99), rgba(13, 22, 19, 0.99));
+  border: 1px solid rgba(167, 243, 208, 0.22);
+  border-radius: 24px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.06);
+  padding: 34px;
+  max-width: 520px;
   width: 100%;
-  max-height: 90vh;
+  max-height: min(90vh, 720px);
   overflow-y: auto;
   animation: aboutPop var(--transition-fast) ease-out;
 }
@@ -352,43 +353,137 @@ body::before {
 }
 
 .about-title {
-  margin: 0 0 var(--space-md);
-  font-size: var(--font-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding-bottom: var(--space-sm);
-  border-bottom: 2px solid var(--stroke);
+  margin: 0 0 12px;
+  font-size: clamp(25px, 5vw, 34px);
+  line-height: 1.12;
+  font-weight: 800;
+  color: #f1fff6;
+  letter-spacing: -0.7px;
+}
+
+.about-close-icon {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.about-close-icon:hover,
+.about-close-icon:focus-visible {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.about-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border: 1px solid rgba(134, 239, 172, 0.36);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(34, 197, 94, 0.23), rgba(20, 83, 45, 0.28));
+  color: #9df0b7;
+}
+
+.about-mark svg {
+  width: 34px;
+  height: 34px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.about-eyebrow {
+  margin: 0 0 8px;
+  color: #86efac;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
 }
 
 .about-text {
-  margin: 0 0 var(--space-md);
-  font-size: var(--font-sm);
-  line-height: 1.6;
-  color: var(--text-2);
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(236, 253, 243, 0.72);
 }
 
-.about-list {
-  margin: 0 0 var(--space-md);
-  padding-left: 20px;
-  font-size: var(--font-sm);
-  line-height: 1.8;
-  color: var(--text-2);
+.about-text strong {
+  color: #f1fff6;
 }
 
-.about-list li::marker {
-  color: var(--green);
+.about-features {
+  display: grid;
+  gap: 9px;
 }
 
-.about-author {
-  margin: 0 0 var(--space-lg);
-  font-size: var(--font-sm);
-  color: var(--text-2);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--surface-3);
-  border-left: 3px solid var(--green);
-  border-radius: var(--radius-sm);
+.about-feature {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.about-feature-icon {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(134, 239, 172, 0.11);
+  font-size: 18px;
+}
+
+.about-feature strong,
+.about-feature small {
+  display: block;
+}
+
+.about-feature strong {
+  margin-bottom: 2px;
+  color: #f1fff6;
+  font-size: 13px;
+}
+
+.about-feature small {
+  color: rgba(236, 253, 243, 0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.about-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 23px;
+  color: rgba(236, 253, 243, 0.55);
+  font-size: 11px;
+}
+
+.about-bottom .btn {
+  flex: 0 0 auto;
+  min-width: 94px;
+}
+
+@media (max-width: 520px) {
+  .about-box { padding: 28px 21px 22px; }
+  .about-bottom { align-items: flex-start; flex-direction: column; }
+  .about-bottom .btn { width: 100%; }
 }
 
 /* ============================================================
