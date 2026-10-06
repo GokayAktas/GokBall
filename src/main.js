@@ -24,8 +24,6 @@ import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 
 const REMOTE_INPUT_TIMEOUT_MS = 1500;
-const MAX_LOCAL_RENDER_CORRECTION = 8;
-const LOCAL_RENDER_SNAP_ERROR = 12;
 
 class GokBallApp {
     constructor() {
@@ -281,6 +279,10 @@ class GokBallApp {
     startGame(roomData) {
         if (this.gameRunning) return;
 
+        this._cancelResumeAnimation();
+        this._resumeAnimating = false;
+        this._isPaused = false;
+        this._removePauseOverlay();
         this.gameRunning = true;
         this.currentRoomData = roomData;
         this.network.setAuthorityStreamActive(!this._isHost());
@@ -327,6 +329,8 @@ class GokBallApp {
     stopGame() {
         this.gameRunning = false;
         this.network.setAuthorityStreamActive(false);
+        this._cancelResumeAnimation();
+        this._resumeAnimating = false;
         this._isPaused = false;
         this._removePauseOverlay();
         this.input.disable();
@@ -464,7 +468,12 @@ class GokBallApp {
                     }
 
                     // Update scoreboard
-                    this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+                    this.scoreboard.update(
+                        this._hostScoreRed,
+                        this._hostScoreBlue,
+                        Math.floor(this._hostTimeElapsed / 60),
+                        this._hostTimeLimit
+                    );
 
                     // Send authority state to server (relayed to other players)
                     this._sendAuthorityState();
@@ -557,27 +566,12 @@ class GokBallApp {
                                 }
                                 const correctionX = this._localRenderCorrection.x + predictedX - myDisc.pos.x;
                                 const correctionY = this._localRenderCorrection.y + predictedY - myDisc.pos.y;
-                                const correctionLength = Math.hypot(correctionX, correctionY);
                                 const now = performance.now();
-                                if (Math.hypot(predictedX - myDisc.pos.x, predictedY - myDisc.pos.y) > LOCAL_RENDER_SNAP_ERROR) {
-                                    // Large corrections usually mean a contact
-                                    // or missed update. Show the host position
-                                    // instead of smoothing through the error.
-                                    this._localRenderCorrection = { x: 0, y: 0, updatedAt: now };
-                                } else if (correctionLength > MAX_LOCAL_RENDER_CORRECTION) {
-                                    const scale = MAX_LOCAL_RENDER_CORRECTION / correctionLength;
-                                    this._localRenderCorrection = {
-                                        x: correctionX * scale,
-                                        y: correctionY * scale,
-                                        updatedAt: now
-                                    };
-                                } else {
-                                    this._localRenderCorrection = {
-                                        x: correctionX,
-                                        y: correctionY,
-                                        updatedAt: now
-                                    };
-                                }
+                                this._localRenderCorrection = {
+                                    x: correctionX,
+                                    y: correctionY,
+                                    updatedAt: now
+                                };
                                 reconciled = true;
                             }
                             this._reconciliationPending = false;
@@ -788,7 +782,12 @@ class GokBallApp {
                                     this._hostHandleGoal(result.goalTeam);
                                 }
                                 if (!this.physics.kickOffReset) this._hostTimeElapsed++;
-                                this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+                                this.scoreboard.update(
+                                    this._hostScoreRed,
+                                    this._hostScoreBlue,
+                                    Math.floor(this._hostTimeElapsed / 60),
+                                    this._hostTimeLimit
+                                );
                                 this._sendAuthorityState();
                             } else if (this._hostGameState === 'goal') {
                                 for (const disc of this.physics.discs) {
@@ -841,7 +840,7 @@ class GokBallApp {
         this._hostPhysicsTick = 0;
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
-        this._hostTimeLimit = this.currentRoomData?.game?.timeLimit || 180;
+        this._hostTimeLimit = this.currentRoomData?.game?.timeLimit ?? 180;
         this._hostLastToucher = null;
         this._hostPrevToucher = null;
         this._hostMatchStats = {};
@@ -928,9 +927,7 @@ class GokBallApp {
         // conceded, and deduct the matching three player points.
         const lastTouchPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher);
         const ownGoal = !!lastTouchPlayer && lastTouchPlayer.team === scoredOnTeam;
-        const scorerName = ownGoal
-            ? `${lastTouchPlayer.name} (K.K)`
-            : (this._hostLastToucher ? (lastTouchPlayer?.name || '') : '');
+        const scorerName = this._hostLastToucher ? (lastTouchPlayer?.name || '') : '';
         // Assister: last toucher on same team as scorer, before the scorer
         let assisterName = '';
         if (!ownGoal && this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
@@ -956,14 +953,19 @@ class GokBallApp {
         this._hostPrevToucher = null;
 
         // Update scoreboard locally
-        this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60));
+        this.scoreboard.update(
+            this._hostScoreRed,
+            this._hostScoreBlue,
+            Math.floor(this._hostTimeElapsed / 60),
+            this._hostTimeLimit
+        );
         this.scoreboard.showGoal(scoringTeam);
         this.audio.playGoal();
 
         // Format: 🔴 GOL! PlayerName ⚽ PlayerName 👟
         const teamEmoji = scoringTeam === 'red' ? '🔴' : '🔵';
         let goalMsg = `${teamEmoji} GOL!`;
-        if (ownGoal) goalMsg += ` 😂 ${scorerName} kendi kalesine attı! -3 puan`;
+        if (ownGoal) goalMsg += ` 😂 ${scorerName} kendi kalesine attı!`;
         else if (scorerName) goalMsg += ` ${scorerName} ⚽`;
         if (assisterName) goalMsg += ` ${assisterName} 👟`;
         goalMsg += ` (${this._hostScoreRed} - ${this._hostScoreBlue})`;
@@ -1030,7 +1032,7 @@ class GokBallApp {
                         if (p.goals > 0) stats.push(`⚽${p.goals}`);
                         if (p.assists > 0) stats.push(`👟${p.assists}`);
                         if (p.saves > 0) stats.push(`🧤${p.saves}`);
-                        if (p.ownGoals > 0) stats.push(`K.K ${p.ownGoals}`);
+                        if (p.ownGoals > 0) stats.push(`<span class="ranking-own-goals">-⚽ ${p.ownGoals}</span>`);
                         return `<div class="ranking-row" style="color:${color}">
                             <span class="ranking-medal">${medal}</span>
                             <span class="ranking-name">${p.name}</span>
@@ -1051,7 +1053,7 @@ class GokBallApp {
                 const parts = [];
                 if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
                 if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
-                if (p.ownGoals > 0) parts.push(`K.K ${p.ownGoals}`);
+                if (p.ownGoals > 0) parts.push(`-⚽ ${p.ownGoals}`);
                 statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
             }
             this.chat.addMessage({ message: statsMsg, system: true });
@@ -1450,13 +1452,13 @@ class GokBallApp {
 
         this.network.on('goalScored', (data) => {
             if (this.scoreboard) {
-                this.scoreboard.update(data.scoreRed, data.scoreBlue, 0);
+                this.scoreboard.updateScore(data.scoreRed, data.scoreBlue);
                 this.scoreboard.showGoal(data.team);
             }
             this.audio.playGoal();
             if (data.ownGoal) {
                 this.chat.addMessage({
-                    message: `😂 ${data.scorer || 'Oyuncu (K.K)'} kendi kalesine attı! -3 puan. (${data.scoreRed} - ${data.scoreBlue})`,
+                    message: `😂 ${data.scorer || 'Oyuncu'} kendi kalesine attı! (${data.scoreRed} - ${data.scoreBlue})`,
                     system: true
                 });
                 return;
@@ -1513,7 +1515,7 @@ class GokBallApp {
                             if (p.goals > 0) stats.push(`⚽${p.goals}`);
                             if (p.assists > 0) stats.push(`👟${p.assists}`);
                             if (p.saves > 0) stats.push(`🧤${p.saves}`);
-                            if (p.ownGoals > 0) stats.push(`K.K ${p.ownGoals}`);
+                            if (p.ownGoals > 0) stats.push(`<span class="ranking-own-goals">-⚽ ${p.ownGoals}</span>`);
                             return `<div class="ranking-row" style="color:${color}">
                                 <span class="ranking-medal">${medal}</span>
                                 <span class="ranking-name">${p.name}</span>
@@ -1534,7 +1536,7 @@ class GokBallApp {
                     const parts = [];
                     if (p.goals > 0) parts.push(`⚽${p.goals} Gol`);
                     if (p.assists > 0) parts.push(`👟${p.assists} Asist`);
-                    if (p.ownGoals > 0) parts.push(`K.K ${p.ownGoals}`);
+                    if (p.ownGoals > 0) parts.push(`-⚽ ${p.ownGoals}`);
                     statsMsg += `${p.name}: ${parts.join(' | ')} (${p.points} puan)\n`;
                 }
                 this.chat.addMessage({ message: statsMsg, system: true });
@@ -1617,8 +1619,7 @@ class GokBallApp {
                 this._showPauseOverlay();
             } else {
                 this._isPaused = false;
-                // Keep text visible + show resume rectangle animation
-                this._showPauseOverlay(true);
+                this._removePauseOverlay();
             }
             if (this.inGameMenu.isVisible) {
                 this.inGameMenu.render(this.currentRoomData);
@@ -1834,7 +1835,12 @@ class GokBallApp {
         }
 
         // Update scoreboard
-        this.scoreboard.update(state.scoreRed, state.scoreBlue, state.time);
+        this.scoreboard.update(
+            state.scoreRed,
+            state.scoreBlue,
+            state.time,
+            state.timeLimit ?? this.currentRoomData?.game?.timeLimit ?? 0
+        );
     }
 
     /**

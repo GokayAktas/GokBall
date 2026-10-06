@@ -1943,15 +1943,43 @@ select.input option {
 
 .hud-center {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: var(--panel);
-  padding: 8px 24px;
+  padding: 7px 18px;
   border-radius: var(--radius-sm);
-  height: 48px;
+  min-width: 220px;
   border: 2px solid var(--stroke);
   box-shadow: var(--shadow-md);
-  gap: 20px;
+  gap: 4px;
+}
+
+.hud-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.timer-progress {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+}
+
+.timer-progress[hidden] {
+  display: none;
+}
+
+.timer-progress-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--green);
+  border-radius: inherit;
+  transition: width 180ms linear;
 }
 
 .hud-right {
@@ -2707,6 +2735,10 @@ select.input option {
   font-size: 13px;
   opacity: 0.85;
   flex-shrink: 0;
+}
+
+.ranking-own-goals {
+  color: #ef4444;
 }
 
 .ranking-points {

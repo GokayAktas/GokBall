@@ -18,14 +18,19 @@ export class Scoreboard {
                     <!-- Room name removed -->
                 </div>
                 <div class="hud-center">
-                    <div class="score-display">
-                        <div class="score-box red"></div>
-                        <span class="score-text" id="hud-score-red">0</span>
-                        <span style="color: var(--text-muted)">-</span>
-                        <span class="score-text" id="hud-score-blue">0</span>
-                        <div class="score-box blue"></div>
+                    <div class="hud-main-row">
+                        <div class="score-display">
+                            <div class="score-box red"></div>
+                            <span class="score-text" id="hud-score-red">0</span>
+                            <span style="color: var(--text-muted)">-</span>
+                            <span class="score-text" id="hud-score-blue">0</span>
+                            <div class="score-box blue"></div>
+                        </div>
+                        <div class="timer-text" id="hud-timer">00:00</div>
                     </div>
-                    <div class="timer-text" id="hud-timer">00:00</div>
+                    <div class="timer-progress" id="hud-timer-progress" hidden>
+                        <div class="timer-progress-fill" id="hud-timer-progress-fill"></div>
+                    </div>
                 </div>
                 <div class="hud-right">
                     <div class="hud-action-group">
@@ -95,18 +100,34 @@ export class Scoreboard {
     if (el) el.textContent = name;
   }
 
-  update(scoreRed, scoreBlue, timeSeconds) {
+  update(scoreRed, scoreBlue, timeSeconds, timeLimitSeconds = 0) {
+    this.updateScore(scoreRed, scoreBlue);
+
+    const elapsedSeconds = Math.max(0, Number.isFinite(timeSeconds) ? timeSeconds : 0);
+    const timeLimit = Math.max(0, Number.isFinite(timeLimitSeconds) ? timeLimitSeconds : 0);
+    const isLimited = timeLimit > 0;
+    const displayedSeconds = isLimited ? Math.max(0, timeLimit - elapsedSeconds) : elapsedSeconds;
+    const progress = isLimited ? (displayedSeconds / timeLimit) * 100 : 100;
+
+    const timerEl = document.getElementById('hud-timer');
+    if (timerEl) {
+      const mins = Math.floor(displayedSeconds / 60);
+      const secs = Math.floor(displayedSeconds % 60);
+      timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    const progressEl = document.getElementById('hud-timer-progress');
+    const progressFillEl = document.getElementById('hud-timer-progress-fill');
+    if (progressEl) progressEl.hidden = !isLimited;
+    if (progressFillEl) progressFillEl.style.width = `${progress}%`;
+  }
+
+  updateScore(scoreRed, scoreBlue) {
     const redEl = document.getElementById('hud-score-red');
     const blueEl = document.getElementById('hud-score-blue');
-    const timerEl = document.getElementById('hud-timer');
 
     if (redEl) redEl.textContent = scoreRed;
     if (blueEl) blueEl.textContent = scoreBlue;
-    if (timerEl) {
-      const mins = Math.floor(timeSeconds / 60);
-      const secs = timeSeconds % 60;
-      timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
   }
 
   showGoal(team) {

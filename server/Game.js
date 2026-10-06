@@ -484,9 +484,7 @@ export class Game {
         }
 
         // Broadcast goal with scorer/assist info
-        const scorerName = ownGoal
-            ? `${lastTouchPlayer.name} (K.K)`
-            : (this._lastToucher ? (lastTouchPlayer?.name || '') : '');
+        const scorerName = this._lastToucher ? (lastTouchPlayer?.name || '') : '';
         const assisterName = !ownGoal && this._prevToucher && this._prevToucher !== this._lastToucher
             ? (this.room.players.get(this._prevToucher)?.name || '')
             : '';
