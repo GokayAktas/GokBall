@@ -4,13 +4,20 @@ import { FixedStepClock } from '../src/network/FixedStepClock.js';
 import { InputHistory } from '../src/network/InputHistory.js';
 import { SnapshotBuffer } from '../src/network/SnapshotBuffer.js';
 import { isValidFullGameState } from '../src/network/AuthorityProtocol.js';
+import { limitRenderPosition } from '../src/network/RenderSmoothing.js';
 
 test('fixed clock runs all due 60 Hz simulation steps without dropping elapsed time', () => {
     const clock = new FixedStepClock();
     clock.reset(0);
     let count = 0;
-    assert.equal(clock.advance(1000, () => count++), 60);
+    const batchSizes = new Set();
+    assert.equal(clock.advance(1000, (stepIndex, dueSteps) => {
+        count++;
+        assert.equal(stepIndex, count - 1);
+        batchSizes.add(dueSteps);
+    }), 60);
     assert.equal(count, 60);
+    assert.deepEqual([...batchSizes], [60]);
 });
 
 test('input ACK removes confirmed inputs and leaves only replayable inputs', () => {
@@ -51,6 +58,12 @@ test('snapshot buffer extrapolates briefly during packet loss and clamps the pre
 
 test('snapshot buffer starts with a low two-tick render delay', () => {
     assert.ok(new SnapshotBuffer().getDelay() <= 1000 / 30 + 1e-9);
+});
+
+test('local rendering bounds large network corrections without changing small steps', () => {
+    assert.deepEqual(limitRenderPosition({ x: 0, y: 0 }, { x: 6, y: 8 }, 5), { x: 3, y: 4 });
+    assert.deepEqual(limitRenderPosition({ x: 1, y: -1 }, { x: 2, y: 3 }, 5), { x: 2, y: 3 });
+    assert.deepEqual(limitRenderPosition(null, { x: 6, y: 8 }, 1), { x: 6, y: 8 });
 });
 
 test('full state validation requires match identity, tick, scores and finite disc physics', () => {

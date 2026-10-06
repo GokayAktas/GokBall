@@ -23,8 +23,17 @@ import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
 import { FixedStepClock } from './network/FixedStepClock.js';
 import { InputHistory } from './network/InputHistory.js';
+import { limitRenderPosition } from './network/RenderSmoothing.js';
 import { NetworkDebugPanel } from './ui/components/NetworkDebugPanel.js';
 import { pingLevel } from './ui/components/PingBadge.js';
+
+const MAX_LOCAL_RENDER_CORRECTION = 4;
+const MAX_LOCAL_RENDER_FRAME_MS = 33;
+const LOCAL_RENDER_SPEED_FACTOR = 1.2;
+
+function clampRenderCorrection(value) {
+    return Math.max(-MAX_LOCAL_RENDER_CORRECTION, Math.min(MAX_LOCAL_RENDER_CORRECTION, value));
+}
 
 const REMOTE_INPUT_TIMEOUT_MS = 1500;
 
@@ -67,6 +76,7 @@ class GokBallApp {
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+        this._localRenderPosition = null;
         this._lastServerBallState = null; // {x, y, sx, sy} for collision reconciliation
 
         // Host-authority mode (room creator runs physics)
@@ -273,6 +283,7 @@ class GokBallApp {
         this._cancelResumeAnimation();
         this._resumeAnimating = false;
         this._isPaused = false;
+        this._localRenderPosition = null;
         this._removePauseOverlay();
         this.gameRunning = true;
         this.currentRoomData = roomData;
@@ -289,6 +300,7 @@ class GokBallApp {
         this._fullStateReady = this._isHost() && this._isHostAuthority;
         this._lastAuthorityReceivedAt = 0;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+        this._localRenderPosition = null;
 
         // Load stadium immediately so render loop can draw the field
         const stadiumData = this.stadiumData || roomData?.stadium;
@@ -370,17 +382,17 @@ class GokBallApp {
     _physicsLoop() {
         if (!this.gameRunning || !this._physicsClock) return;
         const now = performance.now();
-        this._physicsClock.advance(now, () => {
+        this._physicsClock.advance(now, (stepIndex, dueSteps) => {
             if (!this.gameRunning) return;
             const inputState = this.input.getInput();
             if (this.network.socket?.id) this.physics.myPlayerId = this.network.socket.id;
             if (!this._fullStateReady && !(this._isHost() && this._isHostAuthority)) return;
             const inputSeq = this.network.sendInput(inputState, inputState);
-            this._physicsTick(inputState, inputSeq);
+            this._physicsTick(inputState, inputSeq, stepIndex, dueSteps);
         });
     }
 
-    _physicsTick(inputState, inputSeq) {
+    _physicsTick(inputState, inputSeq, stepIndex = 0, dueSteps = 1) {
         this._physicsTickCount = (this._physicsTickCount || 0) + 1;
         const peerInput = inputState;
         const stepSize = 1000 / 60;
@@ -543,7 +555,10 @@ class GokBallApp {
                         this._inputHistory.push(inputSeq, peerInput);
 
                         let reconciled = false;
-                        if (this._reconciliationPending && this._lastConfirmedServerState) {
+                        // Apply reconciliation at the end of a catch-up batch,
+                        // so all inputs from this local simulation interval can
+                        // be replayed before selecting the render correction.
+                        if (this._reconciliationPending && this._lastConfirmedServerState && stepIndex === dueSteps - 1) {
                             const confirmed = this._lastConfirmedServerState.discs.find(d => d.id === myId);
                             if (confirmed) {
                                 const predictedX = myDisc.pos.x;
@@ -558,6 +573,10 @@ class GokBallApp {
                                 for (const h of this._inputHistory.unconfirmed()) {
                                     this.physics.predictPlayerStep(myDisc, h.input, predictionLeadTicks);
                                 }
+                                // Keep the correction in simulation space. The
+                                // sub-tick render fraction is added separately
+                                // on every animation frame and must not feed
+                                // back into this offset.
                                 const correctionX = this._localRenderCorrection.x + predictedX - myDisc.pos.x;
                                 const correctionY = this._localRenderCorrection.y + predictedY - myDisc.pos.y;
                                 const now = performance.now();
@@ -584,7 +603,7 @@ class GokBallApp {
         const now = performance.now();
         // Rendering follows the display refresh rate; simulation has its own 60 Hz clock.
         this._applyInterpolatedSnapshots(now);
-        this._interpolateLocallySimulatedDiscs();
+        this._interpolateLocallySimulatedDiscs(now);
 
         // Render remote discs and the ball at every display frame. The
         // snapshot buffer already interpolates positions between host ticks.
@@ -615,7 +634,7 @@ class GokBallApp {
     }
 
     /** Render locally simulated discs between fixed ticks without altering physics state. */
-    _interpolateLocallySimulatedDiscs() {
+    _interpolateLocallySimulatedDiscs(localTime = performance.now()) {
         const clock = this._physicsClock;
         if (!clock) return;
         const localId = this.network.socket?.id;
@@ -623,17 +642,43 @@ class GokBallApp {
         const canAdvance = !this._isPaused && (host
             ? this._hostGameState === 'playing' || this._hostGameState === 'goal'
             : this._firstStateReceived && this._serverGameState === 'playing');
-        if (!canAdvance) return;
+        if (!canAdvance) {
+            if (!host) this._localRenderPosition = null;
+            return;
+        }
 
         const alpha = Math.max(0, Math.min(1, clock.accumulator / clock.stepMs));
         for (const disc of this.physics.discs) {
             if (!host && (!disc.isPlayer || disc.id !== localId)) continue;
-            const correctionX = disc._renderPosition ? disc._renderPosition.x - disc.pos.x : 0;
-            const correctionY = disc._renderPosition ? disc._renderPosition.y - disc.pos.y : 0;
-            disc._renderPosition = {
+            // Host reconciliation can leave a large temporary offset when
+            // packets arrive in bursts. Keep that correction bounded so it
+            // cannot drag the locally predicted player away from the current
+            // simulation or create a catch-up burst on the player's screen.
+            const correctionX = !host && disc.id === localId
+                ? clampRenderCorrection(this._localRenderCorrection?.x || 0)
+                : 0;
+            const correctionY = !host && disc.id === localId
+                ? clampRenderCorrection(this._localRenderCorrection?.y || 0)
+                : 0;
+            const targetPosition = {
                 x: disc.pos.x + disc.speed.x * alpha + correctionX,
                 y: disc.pos.y + disc.speed.y * alpha + correctionY
             };
+            if (!host && disc.id === localId) {
+                const previous = this._localRenderPosition;
+                const elapsed = previous
+                    ? Math.max(0, Math.min(MAX_LOCAL_RENDER_FRAME_MS, localTime - previous.updatedAt))
+                    : 0;
+                const maxDistance = Math.max(
+                    0.75,
+                    Math.hypot(disc.speed.x, disc.speed.y) * elapsed / clock.stepMs * LOCAL_RENDER_SPEED_FACTOR + 0.15
+                );
+                const rendered = limitRenderPosition(previous, targetPosition, maxDistance);
+                this._localRenderPosition = { ...rendered, updatedAt: localTime };
+                disc._renderPosition = rendered;
+            } else {
+                disc._renderPosition = targetPosition;
+            }
         }
     }
 
@@ -1878,6 +1923,7 @@ class GokBallApp {
                     existing._spawnPos = { x: sd.x, y: sd.y };
                     if (sd.id === this.network.socket?.id) {
                         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+                        this._localRenderPosition = null;
                     }
                 }
                 return existing;
@@ -1892,6 +1938,7 @@ class GokBallApp {
             if (sd.id === this.network.socket?.id) {
                 this._inputHistory.reset(this._lastConfirmedServerSeq);
                 this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+                this._localRenderPosition = null;
             }
             return disc;
         });

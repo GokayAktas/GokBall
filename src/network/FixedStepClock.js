@@ -18,9 +18,10 @@ export class FixedStepClock {
         }
         this.accumulator += Math.max(0, now - this.lastTime);
         this.lastTime = now;
+        const dueSteps = Math.floor((this.accumulator + 1e-7) / this.stepMs);
         let steps = 0;
         while (this.accumulator + 1e-7 >= this.stepMs) {
-            onStep(steps);
+            onStep(steps, dueSteps);
             this.accumulator -= this.stepMs;
             steps++;
         }
