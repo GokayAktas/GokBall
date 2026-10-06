@@ -4,7 +4,7 @@
  */
 
 const FIXED_STEP_MS = 1000 / 60;
-const MAX_EXTRAPOLATION_MS = 80;
+const MAX_EXTRAPOLATION_MS = 250;
 const MIN_INTERPOLATION_DELAY_MS = 50;
 const MAX_INTERPOLATION_DELAY_MS = 180;
 
@@ -15,11 +15,15 @@ export class SnapshotBuffer {
         this.interpolationDelay = this.initialInterpolationDelay;
         this.maxBufferSize = 20;
         this._arrivalJitter = 0;
+        this._matchEpoch = null;
     }
 
     /** Add a newer host snapshot; stale unordered packets are ignored. */
     addSnapshot(receivedAt, state) {
         if (!state?.physics?.discs) return false;
+
+        if (this._matchEpoch !== null && state.matchEpoch !== this._matchEpoch) return false;
+        this._matchEpoch = state.matchEpoch ?? this._matchEpoch;
 
         const tick = Number.isFinite(state.tick) ? state.tick : null;
         const timelineTick = Number.isFinite(state.physicsTick) ? state.physicsTick : tick;
@@ -30,9 +34,12 @@ export class SnapshotBuffer {
             this.clear();
             latest = null;
         }
-        if (tick !== null && latest?.tick !== null && latest?.tick !== undefined && tick <= latest.tick) {
+        const seq = Number.isFinite(state.snapshotSeq) ? state.snapshotSeq : tick;
+        const latestSeq = latest && (Number.isFinite(latest.state.snapshotSeq) ? latest.state.snapshotSeq : latest.tick);
+        if (seq !== null && Number.isFinite(latestSeq) && seq <= latestSeq) {
             return false;
         }
+        if (latest && timelineTick !== null && latest.timelineTick !== null && timelineTick < latest.timelineTick) return false;
 
         const time = timelineTick !== null ? timelineTick * FIXED_STEP_MS : receivedAt;
         if (latest) {
@@ -102,6 +109,10 @@ export class SnapshotBuffer {
         return this.interpolationDelay;
     }
 
+    getSize() { return this.buffer.length; }
+
+    getJitter() { return this._arrivalJitter; }
+
     adjustDelay(jitter) {
         this.interpolationDelay = Math.max(
             MIN_INTERPOLATION_DELAY_MS,
@@ -166,6 +177,7 @@ export class SnapshotBuffer {
     clear() {
         this.buffer = [];
         this._arrivalJitter = 0;
+        this._matchEpoch = null;
         this.interpolationDelay = this.initialInterpolationDelay;
     }
 }

@@ -58,6 +58,7 @@ export class NetworkManager {
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
+        this._peerAuthorityEpoch = null;
         this._authorityMetadataSignatures = new Map();
         this._lastAuthorityTick = -1;
     }
@@ -133,6 +134,11 @@ export class NetworkManager {
             this.socket.on('authorityState', (state) => {
                 this._noteAuthorityState(state);
                 this._trigger('gameState', state);
+            });
+            this.socket.on('fullStateRequest', (data) => this._trigger('fullStateRequest', data));
+            this.socket.on('fullGameState', (state) => {
+                this._noteAuthorityState(state);
+                this._trigger('fullGameState', state);
             });
             this.socket.on('gameStarted', (data) => this._trigger('gameStarted', data));
             this.socket.on('gameStopped', (data) => this._trigger('gameStopped', data));
@@ -335,6 +341,23 @@ export class NetworkManager {
         return this._inputSeqNum;
     }
 
+    requestFullState(matchEpoch = null) {
+        this.socket?.emit('requestFullState', { matchEpoch });
+    }
+
+    sendFullGameState(playerId, state) {
+        this.socket?.emit('fullGameState', { playerId, state });
+    }
+
+    setNetworkSimulation(config = {}) {
+        this._networkSimulation = {
+            latencyMs: Math.max(0, Number(config.latencyMs) || 0),
+            jitterMs: Math.max(0, Number(config.jitterMs) || 0),
+            packetLoss: Math.max(0, Math.min(1, Number(config.packetLoss) || 0))
+        };
+        for (const link of this._peerLinks.values()) link.setNetworkSimulation(this._networkSimulation);
+    }
+
     /** Join the host's peer mesh after the room has been confirmed by server. */
     connectRoomPeers(roomData) {
         this.disconnectRoomPeers();
@@ -348,6 +371,7 @@ export class NetworkManager {
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
+        this._peerAuthorityEpoch = null;
         this._lastInputRelayAt = -Infinity;
         if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId });
         this._peerPingTimer = setInterval(() => this._sendPeerPings(), PEER_PING_INTERVAL);
@@ -370,6 +394,7 @@ export class NetworkManager {
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
+        this._peerAuthorityEpoch = null;
         this._lastInputRelayAt = -Infinity;
         this._authorityMetadataSignatures.clear();
         this._lastAuthorityTick = -1;
@@ -382,15 +407,25 @@ export class NetworkManager {
     }
 
     _noteAuthorityState(state) {
-        if (Number.isFinite(state?.tick)) {
-            if (state.tick <= this._lastPeerAuthorityTick) return;
-            this._lastPeerAuthorityTick = state.tick;
+        if (state?.matchEpoch && state.matchEpoch !== this._peerAuthorityEpoch) {
+            this._peerAuthorityEpoch = state.matchEpoch;
+            this._lastPeerAuthorityTick = -1;
+        }
+        const seq = Number.isFinite(state?.snapshotSeq) ? state.snapshotSeq : state?.tick;
+        if (Number.isFinite(seq)) {
+            if (seq <= this._lastPeerAuthorityTick) return;
+            this._lastPeerAuthorityTick = seq;
         }
         this._authorityStateAt = performance.now();
     }
 
     /** Broadcast one current authoritative snapshot to connected guests. */
     sendAuthorityState(state) {
+        if (state?.matchEpoch && this._lastAuthorityEpoch !== state.matchEpoch) {
+            this._lastAuthorityEpoch = state.matchEpoch;
+            this._lastAuthorityTick = -1;
+            this._authorityMetadataSignatures.clear();
+        }
         const tick = Number.isFinite(state?.tick) ? state.tick : 0;
         if (tick <= this._lastAuthorityTick) {
             this._authorityMetadataSignatures.clear();
@@ -398,7 +433,7 @@ export class NetworkManager {
         this._lastAuthorityTick = tick;
 
         const seenMetadataKeys = new Set();
-        const refreshMetadata = tick % AUTHORITY_METADATA_INTERVAL === 1;
+        const refreshMetadata = state?.fullState || tick % AUTHORITY_METADATA_INTERVAL === 1;
         const discs = state?.physics?.discs || [];
         const compactDiscs = discs.map((disc, index) => {
             const compact = {
@@ -483,6 +518,7 @@ export class NetworkManager {
             onMessage: (message) => this._onPeerMessage(peerId, message),
             onState: (state) => this._trigger('peerState', state)
         });
+        link.setNetworkSimulation(this._networkSimulation || {});
         this._peerLinks.set(peerId, link);
         return link;
     }

@@ -26,6 +26,16 @@ export class PeerLink {
 
         this.connected = false;
         this.relaying = false;
+        this._networkSimulation = { latencyMs: 0, jitterMs: 0, packetLoss: 0 };
+        this._delayedSnapshotTimers = new Set();
+    }
+
+    setNetworkSimulation(config = {}) {
+        this._networkSimulation = {
+            latencyMs: Math.max(0, Number(config.latencyMs) || 0),
+            jitterMs: Math.max(0, Number(config.jitterMs) || 0),
+            packetLoss: Math.max(0, Math.min(1, Number(config.packetLoss) || 0))
+        };
     }
 
     /** The guest creates the offer after p2pReady identifies its host. */
@@ -230,6 +240,24 @@ export class PeerLink {
     sendSerialized(payload, isSnapshot = false, isInput = false) {
         if (this._closed || !this.peerId) return false;
 
+        const simulation = this._networkSimulation;
+        if ((isSnapshot || isInput) && simulation.packetLoss > 0 && Math.random() < simulation.packetLoss) return true;
+        if ((isSnapshot || isInput) && (simulation.latencyMs > 0 || simulation.jitterMs > 0)) {
+            if (isSnapshot && this._delayedSnapshotTimers.size >= 20) return true;
+            const jitter = (Math.random() * 2 - 1) * simulation.jitterMs;
+            const timer = setTimeout(() => {
+                this._delayedSnapshotTimers.delete(timer);
+                this._sendSerializedNow(payload, isSnapshot, isInput);
+            }, Math.max(0, simulation.latencyMs + jitter));
+            this._delayedSnapshotTimers.add(timer);
+            return true;
+        }
+        return this._sendSerializedNow(payload, isSnapshot, isInput);
+    }
+
+    _sendSerializedNow(payload, isSnapshot = false, isInput = false) {
+        if (this._closed || !this.peerId) return false;
+
         if (this.connected && !this.relaying && this.channel?.readyState === 'open' &&
             this.pc?.connectionState !== 'failed' && this.pc?.connectionState !== 'closed') {
             if (isSnapshot && this.channel.bufferedAmount > MAX_BUFFERED_SNAPSHOT_BYTES) {
@@ -266,6 +294,8 @@ export class PeerLink {
     close() {
         this._closed = true;
         clearTimeout(this._connectTimer);
+        for (const timer of this._delayedSnapshotTimers) clearTimeout(timer);
+        this._delayedSnapshotTimers.clear();
         if (this.channel) {
             this.channel.onopen = null;
             this.channel.onclose = null;

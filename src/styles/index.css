@@ -2824,3 +2824,21 @@ select.input option {
     min-width: 45%;
   }
 }
+.network-debug-panel {
+    position: fixed;
+    z-index: 100000;
+    right: 10px;
+    bottom: 10px;
+    width: min(460px, calc(100vw - 20px));
+    padding: 10px;
+    color: #e7f3ff;
+    background: rgba(5, 12, 22, .94);
+    border: 1px solid #4c789c;
+    border-radius: 7px;
+    font: 11px/1.4 ui-monospace, Consolas, monospace;
+}
+.network-debug-panel strong { display: block; margin-bottom: 5px; }
+.network-debug-panel pre { margin: 0 0 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.network-debug-panel label { display: grid; grid-template-columns: 76px 1fr 45px; gap: 6px; align-items: center; }
+.network-debug-panel input { width: 100%; }
+.network-debug-panel output { text-align: right; }

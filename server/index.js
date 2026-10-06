@@ -5,6 +5,7 @@ import { Room } from './Room.js';
 import { MapManager } from './MapManager.js';
 import { normalizeHex, normalizeAngle } from './utils/colors.js';
 import { attachSignaling, getIceServers } from './signaling.js';
+import { isValidFullGameState } from '../src/network/AuthorityProtocol.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -326,6 +327,29 @@ io.on('connection', (socket) => {
         if (socket.id !== room.hostId) return;
         // Broadcast to everyone EXCEPT the host (includes lastProcessedSeq)
         socket.to(room.id).volatile.emit('authorityState', state);
+    });
+
+    // Full-state transfer is reliable and unicast. Only room members may ask,
+    // and only the current room host may answer for a joined target player.
+    socket.on('requestFullState', ({ matchEpoch } = {}) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room || room.hostId === socket.id || !room.players.has(socket.id)) return;
+        if (!['playing', 'goal', 'countdown'].includes(room.game?.state)) return;
+        const now = Date.now();
+        if (socket._lastFullStateRequestAt && now - socket._lastFullStateRequestAt < 900) return;
+        socket._lastFullStateRequestAt = now;
+        room.players.get(room.hostId)?.socket?.emit('fullStateRequest', {
+            playerId: socket.id,
+            matchEpoch: typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null
+        });
+    });
+
+    socket.on('fullGameState', ({ playerId, state } = {}) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room || socket.id !== room.hostId || !playerId || playerId === socket.id) return;
+        if (!room.players.has(playerId) || !isValidFullGameState(state)) return;
+        const target = room.players.get(playerId)?.socket;
+        if (target) target.emit('fullGameState', state);
     });
 
     // --- Host Pause Event (relay to non-host players) ---

@@ -21,6 +21,9 @@ import { InGameMenu } from './ui/components/InGameMenu.js';
 import { SettingsModal } from './ui/components/SettingsModal.js';
 import { AudioManager } from './engine/AudioManager.js';
 import { SnapshotBuffer } from './network/SnapshotBuffer.js';
+import { FixedStepClock } from './network/FixedStepClock.js';
+import { InputHistory } from './network/InputHistory.js';
+import { NetworkDebugPanel } from './ui/components/NetworkDebugPanel.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 
 const REMOTE_INPUT_TIMEOUT_MS = 1500;
@@ -60,7 +63,7 @@ class GokBallApp {
 
         // Client-side prediction infrastructure
         this._inputSequence = 0;
-        this._inputHistory = []; // [{seq, input, time}]
+        this._inputHistory = new InputHistory();
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
@@ -122,18 +125,6 @@ class GokBallApp {
         this.lastFpsTime = performance.now();
         this.currentFps = 0;
 
-        // Fix: When tab becomes visible again, reset physTime to avoid huge dt spike
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && this.gameRunning) {
-                this.lastPhysTime = performance.now();
-                this.accumulator = 0;
-            }
-            // Host: when tab is hidden, start a setInterval fallback so physics keeps running
-            // When tab is visible again, clear the fallback (rAF takes over)
-            if (this._isHost() && this._isHostAuthority) {
-                this._toggleHostBackgroundLoop();
-            }
-        });
     }
 
     async init() {
@@ -290,10 +281,13 @@ class GokBallApp {
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
         this._snapshotBuffer.clear();
         this._lastAuthorityTick = -1;
+        this._lastAuthoritySnapshotSeq = -1;
         this._lastConfirmedServerState = null;
-        this._inputHistory = [];
+        this._inputHistory.reset();
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
+        this._fullStateReady = this._isHost() && this._isHostAuthority;
+        this._lastAuthorityReceivedAt = 0;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
 
         // Load stadium immediately so render loop can draw the field
@@ -322,12 +316,33 @@ class GokBallApp {
         // Enable input
         this.input.enable();
 
+        this._physicsClock = new FixedStepClock();
+        this._physicsClock.reset(performance.now());
+        clearInterval(this._physicsTimer);
+        this._physicsTimer = setInterval(() => this._physicsLoop(), 1000 / 60);
+        clearInterval(this._resyncTimer);
+        if (!this._fullStateReady) {
+            this.network.requestFullState();
+            this._resyncTimer = setInterval(() => {
+                if (!this.gameRunning || this._isHost()) return;
+                if (!this._fullStateReady || performance.now() - this._lastAuthorityReceivedAt > 1200) {
+                    this._fullStateReady = false;
+                    this.network.requestFullState(this._matchEpoch || null);
+                }
+            }, 500);
+        }
+
         // Start render loop
         this._gameLoop();
     }
 
     stopGame() {
         this.gameRunning = false;
+        clearInterval(this._physicsTimer);
+        clearInterval(this._resyncTimer);
+        this._physicsTimer = null;
+        this._resyncTimer = null;
+        this._physicsClock = null;
         this.network.setAuthorityStreamActive(false);
         this._cancelResumeAnimation();
         this._resumeAnimating = false;
@@ -349,39 +364,27 @@ class GokBallApp {
             this._animFrame = null;
         }
 
-        // Clean up host background loop
-        if (this._hostBgInterval) {
-            clearInterval(this._hostBgInterval);
-            this._hostBgInterval = null;
-        }
     }
 
 
-    _gameLoop() {
-        if (!this.gameRunning) return;
-
-        // Get local input
-        const inputState = this.input.getInput();
-        if (this.network.socket?.id) {
-            this.physics.myPlayerId = this.network.socket.id;
-        }
-
-        const peerInput = inputState;
-        this.network.sendInput(peerInput, inputState);
-        const inputSeq = this.network._inputSeqNum;
-
-        // Fixed Timestep Physics (60Hz)
+    _physicsLoop() {
+        if (!this.gameRunning || !this._physicsClock) return;
         const now = performance.now();
-        const dt = now - (this.lastPhysTime || now);
-        this.lastPhysTime = now;
-        this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
+        this._physicsClock.advance(now, () => {
+            if (!this.gameRunning) return;
+            const inputState = this.input.getInput();
+            if (this.network.socket?.id) this.physics.myPlayerId = this.network.socket.id;
+            if (!this._fullStateReady && !(this._isHost() && this._isHostAuthority)) return;
+            const inputSeq = this.network.sendInput(inputState, inputState);
+            this._physicsTick(inputState, inputSeq);
+        });
+    }
 
-        // Cap accumulator to max 3 steps to prevent freeze on tab refocus
+    _physicsTick(inputState, inputSeq) {
+        this._physicsTickCount = (this._physicsTickCount || 0) + 1;
+        const peerInput = inputState;
         const stepSize = 1000 / 60;
-        const maxAccum = stepSize * 3;
-        if (this.accumulator > maxAccum) this.accumulator = maxAccum;
-
-        while (this.accumulator >= stepSize) {                // --- HOST MODE: Full authority game loop ---
+        // --- HOST MODE: Full authority game loop ---
             if (this._isHost() && this._isHostAuthority) {
 
                 // Skip physics when paused
@@ -391,8 +394,7 @@ class GokBallApp {
                     if (this._hostAuthoritySendCounter % 30 === 0) {
                         this._sendAuthorityState();
                     }
-                    this.accumulator -= stepSize;
-                    continue;
+                    return;
                 }
 
                 if (this._hostGameState === 'playing') {
@@ -418,6 +420,7 @@ class GokBallApp {
                     }
 
                     // Step physics
+                    if (this.network.socket?.id) this._lastRemoteInputSeq.set(this.network.socket.id, inputSeq);
                     const result = this.physics.step();
                     this._hostPhysicsTick++;
                     this._releaseConsumedKickInputs();
@@ -509,8 +512,7 @@ class GokBallApp {
                         if (this._hostScoreLimit > 0 &&
                             (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
                             this._hostGameOver();
-                            this.accumulator -= stepSize;
-                            continue;
+                            return;
                         }
 
                         // Reset for next kickoff (use resetPositions to keep disc IDs intact)
@@ -530,8 +532,7 @@ class GokBallApp {
                 // --- CLIENT MODE: Local physics + server reconciliation ---
                 // Wait for first server state before running client prediction
                 if (!this._firstStateReceived) {
-                    this.accumulator -= stepSize;
-                    continue;
+                    return;
                 }
                 if (this._serverGameState === 'playing' && !this._isPaused) {
                     const myId = this.network.socket?.id;
@@ -539,13 +540,7 @@ class GokBallApp {
 
                     if (myDisc && myDisc.isPlayer) {
                         const predictionLeadTicks = this._snapshotBuffer.getDelay() / stepSize + 1;
-                        this._inputHistory.push({
-                            seq: inputSeq,
-                            input: { ...peerInput },
-                            time: Date.now()
-                        });
-                        // Keep only last 60 inputs (~1 second)
-                        if (this._inputHistory.length > 60) this._inputHistory.shift();
+                        this._inputHistory.push(inputSeq, peerInput);
 
                         let reconciled = false;
                         if (this._reconciliationPending && this._lastConfirmedServerState) {
@@ -560,8 +555,7 @@ class GokBallApp {
 
                                 // Replay this player's inputs against the latest
                                 // interpolated world without advancing other discs.
-                                for (const h of this._inputHistory) {
-                                    if (h.seq <= this._lastConfirmedServerSeq) continue;
+                                for (const h of this._inputHistory.unconfirmed()) {
                                     this.physics.predictPlayerStep(myDisc, h.input, predictionLeadTicks);
                                 }
                                 const correctionX = this._localRenderCorrection.x + predictedX - myDisc.pos.x;
@@ -583,13 +577,16 @@ class GokBallApp {
                 }
             }
 
-            this.accumulator -= stepSize;
-        }
+    }
+
+    _gameLoop() {
+        if (!this.gameRunning) return;
+        const now = performance.now();
+        // Rendering follows the display refresh rate; simulation has its own 60 Hz clock.
+        this._applyInterpolatedSnapshots(now);
 
         // Render remote discs and the ball at every display frame. The
         // snapshot buffer already interpolates positions between host ticks.
-        this._applyInterpolatedSnapshots(performance.now());
-
         // Update camera
         this.camera.targetX = 0;
         this.camera.targetY = 0;
@@ -736,100 +733,6 @@ class GokBallApp {
         if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
     }
 
-    /**
-     * When the host's tab is hidden, browsers throttle requestAnimationFrame.
-     * This backup interval keeps the physics game loop running even when rAF is paused.
-     */
-    _toggleHostBackgroundLoop() {
-        if (document.hidden && this.gameRunning && this._isHost() && this._isHostAuthority) {
-            // Start backup interval if not already running
-            if (!this._hostBgInterval) {
-                this._hostBgInterval = setInterval(() => {
-                    if (!this.gameRunning) {
-                        clearInterval(this._hostBgInterval);
-                        this._hostBgInterval = null;
-                        return;
-                    }
-                    // Run a mini game loop tick (same as _gameLoop but without rAF)
-                    const now = performance.now();
-                    const dt = now - (this.lastPhysTime || now);
-                    this.lastPhysTime = now;
-                    this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
-                    const stepSize = 1000 / 60;
-                    while (this.accumulator >= stepSize) {
-                        // Only run host physics steps (simplified)
-                        if (this._isHost() && this._isHostAuthority && !this._isPaused) {
-                            if (this._hostGameState === 'playing') {
-                                for (const disc of this.physics.discs) {
-                                    if (!disc.isPlayer) continue;
-                                    disc.input = disc.input || { up: false, down: false, left: false, right: false, kick: false };
-                                }
-                                // Apply remote inputs
-                                for (const [playerId, remoteInput] of this._remoteInputs) {
-                                    const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
-                                    if (remoteDisc) {
-                                        remoteDisc.input = performance.now() - remoteInput.receivedAt > REMOTE_INPUT_TIMEOUT_MS
-                                            ? { up: false, down: false, left: false, right: false, kick: false }
-                                            : remoteInput.input;
-                                        this._lastRemoteInputSeq.set(playerId, remoteInput.seq);
-                                    }
-                                }
-                                const result = this.physics.step();
-                                this._hostPhysicsTick++;
-                                this._releaseConsumedKickInputs();
-                                if (result.kickHappened) this.audio.playKick();
-                                if (result.goalTeam && this._hostGameState === 'playing') {
-                                    this._hostHandleGoal(result.goalTeam);
-                                }
-                                if (!this.physics.kickOffReset) this._hostTimeElapsed++;
-                                this.scoreboard.update(
-                                    this._hostScoreRed,
-                                    this._hostScoreBlue,
-                                    Math.floor(this._hostTimeElapsed / 60),
-                                    this._hostTimeLimit
-                                );
-                                this._sendAuthorityState();
-                            } else if (this._hostGameState === 'goal') {
-                                for (const disc of this.physics.discs) {
-                                    if (disc.isPlayer) { disc.input = { up: false, down: false, left: false, right: false, kick: false }; disc.kicking = false; }
-                                }
-                                this.physics.step();
-                                this._hostPhysicsTick++;
-                                this._hostGoalPauseTicks--;
-                                this._sendAuthorityState();
-                                if (this._hostGoalPauseTicks <= 0) {
-                                    if (this.physics.ballDisc) {
-                                        this.physics.ballDisc.pos.x = 0; this.physics.ballDisc.pos.y = 0;
-                                        this.physics.ballDisc.speed.x = 0; this.physics.ballDisc.speed.y = 0;
-                                        this.physics.ballDisc.color = 'FFB82E';
-                                    }
-                                    if (this._hostScoreLimit > 0 && (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
-                                        this._hostGameOver();
-                                        this.accumulator -= stepSize; continue;
-                                    }
-                                    this.physics.kickOffReset = true;
-                                    this.physics.kickOffTeam = this._hostKickOffTeam;
-                                    this.physics.inGoalPause = false;
-                                    this.physics.resetPositions();
-                                    this._hostGameState = 'playing';
-                                    this._serverGameState = 'playing';
-                                    this._sendAuthorityState();
-                                }
-                            }
-                        }
-                        this.accumulator -= stepSize;
-                    }
-                }, 1000 / 60); // ~60fps
-                console.log('[GokBall] Host background loop started (tab hidden)');
-            }
-        } else if (!document.hidden && this._hostBgInterval) {
-            // Tab is visible again, rAF takes over — clear the interval
-            clearInterval(this._hostBgInterval);
-            this._hostBgInterval = null;
-            console.log('[GokBall] Host background loop stopped (tab visible)');
-        }
-    }
-
     /** Initialize host-authority game mode (state only, spawning happens after startGame) */
     _initHostGame() {
         this._hostScoreRed = 0;
@@ -838,6 +741,7 @@ class GokBallApp {
         this._hostGoalPauseTicks = 0;
         this._hostGameState = 'playing';
         this._hostPhysicsTick = 0;
+        this._matchEpoch = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
         this._hostTimeLimit = this.currentRoomData?.game?.timeLimit ?? 180;
@@ -996,7 +900,7 @@ class GokBallApp {
             .map(([id, s]) => ({
                 id, name: s.name, team: s.team,
                 goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
-                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
+                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
             }))
             .sort((a, b) => b.points - a.points);
 
@@ -1258,7 +1162,7 @@ class GokBallApp {
     }
 
     /** Send authoritative state directly to guests through the peer mesh. */
-    _sendAuthorityState() {
+    _sendAuthorityState(targetPlayerId = null) {
         this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
         // Collect last processed input seq for client reconciliation
         const lastProcessedSeq = {};
@@ -1266,8 +1170,10 @@ class GokBallApp {
             lastProcessedSeq[pid] = seq;
         }
 
-        this.network.sendAuthorityState({
-            tick: this._hostAuthoritySendCounter,
+        const state = {
+            matchEpoch: this._matchEpoch,
+            tick: this._hostPhysicsTick,
+            snapshotSeq: this._hostAuthoritySendCounter,
             physicsTick: this._hostPhysicsTick,
             paused: this._isPaused,
             state: this._hostGameState,
@@ -1279,7 +1185,13 @@ class GokBallApp {
             timeLimit: this._hostTimeLimit,
             kickOffTeam: this._hostKickOffTeam,
             lastProcessedSeq
-        });
+        };
+        if (targetPlayerId) {
+            state.fullState = true;
+            this.network.sendFullGameState(targetPlayerId, state);
+        } else {
+            this.network.sendAuthorityState(state);
+        }
     }
 
     _releaseConsumedKickInputs() {
@@ -1414,6 +1326,11 @@ class GokBallApp {
         });
 
         // Remote inputs from other players (relayed by server)
+        this.network.on('fullStateRequest', ({ playerId } = {}) => {
+            if (!this._isHost() || !this._isHostAuthority || !this.gameRunning || !playerId) return;
+            this._sendAuthorityState(playerId);
+        });
+
         this.network.on('remoteInput', (data) => {
             if (this._isHost() && this._isHostAuthority && data?.playerId && data?.input) {
                 const seq = data.input._seq || 0;
@@ -1431,6 +1348,11 @@ class GokBallApp {
         this.network.on('gameState', (state) => {
             if (this._isHost() && this._isHostAuthority) return;
             if (this.gameRunning) this._handleGameState(state);
+        });
+
+        this.network.on('fullGameState', (state) => {
+            if (this._isHost() && this._isHostAuthority) return;
+            if (this.gameRunning) this._handleGameState(state, true);
         });
 
         this.network.on('kickReleased', () => {
@@ -1484,7 +1406,7 @@ class GokBallApp {
                         ranked.push({
                             id, name: s.name, team: s.team,
                             goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
-                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
+                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
                         });
                     }
                 }
@@ -1765,16 +1687,39 @@ class GokBallApp {
         }
     }
 
-    _handleGameState(state) {
+    _handleGameState(state, isFullState = false) {
         // Skip if stadium hasn't loaded yet (race condition guard)
         if (this.gameRunning && !this._stadiumReady) return;
 
+        if (!state?.matchEpoch) return; // Untrusted server placeholders cannot seed host-authority simulation.
+        if (isFullState) {
+            if (this._matchEpoch !== state.matchEpoch) {
+                this._snapshotBuffer.clear();
+                this._lastAuthoritySnapshotSeq = -1;
+                this._lastAuthorityTick = -1;
+                this._inputHistory.reset();
+            }
+            this._matchEpoch = state.matchEpoch;
+            this._fullStateReady = true;
+        } else {
+            if (!this._fullStateReady) return;
+            if (state.matchEpoch !== this._matchEpoch) {
+                this._fullStateReady = false;
+                this.network.requestFullState(this._matchEpoch || null);
+                return;
+            }
+        }
+
         // The WebRTC channel is unordered and may lose packets. Ignore an old
         // snapshot that arrives after a newer one so it cannot rewind a client.
-        if (Number.isFinite(state?.tick)) {
-            if (state.tick <= this._lastAuthorityTick) return;
-            this._lastAuthorityTick = state.tick;
+        const snapshotSeq = Number.isFinite(state.snapshotSeq) ? state.snapshotSeq : state.tick;
+        if (Number.isFinite(snapshotSeq) && snapshotSeq <= this._lastAuthoritySnapshotSeq) return;
+        if (Number.isFinite(snapshotSeq)) this._lastAuthoritySnapshotSeq = snapshotSeq;
+        if (Number.isFinite(state.physicsTick)) {
+            if (!isFullState && state.physicsTick < this._lastAuthorityTick) return;
+            this._lastAuthorityTick = Math.max(this._lastAuthorityTick, state.physicsTick);
         }
+        this._lastAuthorityReceivedAt = performance.now();
 
         // Mark first state received for client prediction guard
         if (!this._firstStateReceived) this._firstStateReceived = true;
@@ -1785,10 +1730,15 @@ class GokBallApp {
             const mySeq = state.lastProcessedSeq[myId] || 0;
             this._lastConfirmedServerState = state.physics;
             this._lastConfirmedServerSeq = mySeq;
+            this._inputHistory.acknowledge(mySeq);
             this._reconciliationPending = true;
-            // Trim old input history
-            this._inputHistory = this._inputHistory.filter(h => h.seq > mySeq);
         }
+
+        // Pause/restart state travels with snapshots so a stale overlay cannot
+        // remain visible when a new match starts.
+        this._isPaused = !!state.paused;
+        if (this._isPaused) this._showPauseOverlay();
+        else this._removePauseOverlay();
 
         // Clear interpolation buffer on state transitions to prevent stale data
         if (this._serverGameState !== state.state) {
@@ -1894,9 +1844,7 @@ class GokBallApp {
             disc.speed.y = sd.sy;
             disc._spawnPos = { x: sd.x, y: sd.y };
             if (sd.id === this.network.socket?.id) {
-                this._inputHistory = [];
-                this._lastConfirmedServerSeq = 0;
-                this._reconciliationPending = false;
+                this._inputHistory.reset(this._lastConfirmedServerSeq);
                 this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
             }
             return disc;
@@ -1950,6 +1898,9 @@ class GokBallApp {
 // ============================================
 window.addEventListener('DOMContentLoaded', () => {
     const app = new GokBallApp();
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('netdebug') === '1') {
+        app.networkDebugPanel = new NetworkDebugPanel(app);
+    }
     app.init();
     window.gokball = app; // Dev access
 });
