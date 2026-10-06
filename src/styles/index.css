@@ -1962,26 +1962,6 @@ select.input option {
   gap: 18px;
 }
 
-.timer-progress {
-  width: 100%;
-  height: 3px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 2px;
-}
-
-.timer-progress[hidden] {
-  display: none;
-}
-
-.timer-progress-fill {
-  width: 100%;
-  height: 100%;
-  background: var(--green);
-  border-radius: inherit;
-  transition: width 180ms linear;
-}
-
 .hud-right {
   display: flex;
   align-items: center;
@@ -2574,23 +2554,29 @@ select.input option {
 }
 
 /* Resume animation */
-.resume-rect {
-  width: 175px;
-  height: 40px;
-  background: var(--green);
-  border: 2px solid var(--stroke);
-  border-radius: var(--radius-sm);
+.resume-progress {
+  width: 240px;
+  height: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
   margin: 20px auto 0;
-  transition: none;
 }
 
-.resume-rect.animating {
-  animation: resumeShrink 3s linear forwards;
+.resume-progress-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--green);
+  border-radius: inherit;
+  transform-origin: left center;
 }
 
-@keyframes resumeShrink {
-  0%   { width: 175px; height: 40px; opacity: 1; }
-  100% { width: 0px;   height: 40px; opacity: 0; }
+.resume-progress-fill.animating {
+  animation: resumeProgress 3.2s linear forwards;
+}
+
+@keyframes resumeProgress {
+  to { transform: scaleX(0); }
 }
 
 /* ============================================================

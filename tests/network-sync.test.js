@@ -49,6 +49,10 @@ test('snapshot buffer extrapolates briefly during packet loss and clamps the pre
     assert.ok(Math.abs(extrapolated.x - 30) < 1e-9); // 250 ms / 60 Hz * 2 units per tick
 });
 
+test('snapshot buffer starts with a low two-tick render delay', () => {
+    assert.ok(new SnapshotBuffer().getDelay() <= 1000 / 30 + 1e-9);
+});
+
 test('full state validation requires match identity, tick, scores and finite disc physics', () => {
     const valid = {
         fullState: true, matchEpoch: 'match-a', snapshotSeq: 10, physicsTick: 9,

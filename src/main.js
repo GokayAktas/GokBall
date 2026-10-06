@@ -57,7 +57,7 @@ class GokBallApp {
         this._serverGameState = 'stopped';
 
         // Snapshot interpolation buffer for non-host clients
-        this._snapshotBuffer = new SnapshotBuffer(50); // Buffer three host ticks to absorb packet jitter
+        this._snapshotBuffer = new SnapshotBuffer(1000 / 30); // Two host ticks, with adaptive delay for measured jitter
         this._lastSnapshotTime = 0;
         this._lastAuthorityTick = -1;
 
@@ -584,6 +584,7 @@ class GokBallApp {
         const now = performance.now();
         // Rendering follows the display refresh rate; simulation has its own 60 Hz clock.
         this._applyInterpolatedSnapshots(now);
+        this._interpolateLocallySimulatedDiscs();
 
         // Render remote discs and the ball at every display frame. The
         // snapshot buffer already interpolates positions between host ticks.
@@ -611,6 +612,29 @@ class GokBallApp {
         }
 
         this._animFrame = requestAnimationFrame(() => this._gameLoop());
+    }
+
+    /** Render locally simulated discs between fixed ticks without altering physics state. */
+    _interpolateLocallySimulatedDiscs() {
+        const clock = this._physicsClock;
+        if (!clock) return;
+        const localId = this.network.socket?.id;
+        const host = this._isHost() && this._isHostAuthority;
+        const canAdvance = !this._isPaused && (host
+            ? this._hostGameState === 'playing' || this._hostGameState === 'goal'
+            : this._firstStateReceived && this._serverGameState === 'playing');
+        if (!canAdvance) return;
+
+        const alpha = Math.max(0, Math.min(1, clock.accumulator / clock.stepMs));
+        for (const disc of this.physics.discs) {
+            if (!host && (!disc.isPlayer || disc.id !== localId)) continue;
+            const correctionX = disc._renderPosition ? disc._renderPosition.x - disc.pos.x : 0;
+            const correctionY = disc._renderPosition ? disc._renderPosition.y - disc.pos.y : 0;
+            disc._renderPosition = {
+                x: disc.pos.x + disc.speed.x * alpha + correctionX,
+                y: disc.pos.y + disc.speed.y * alpha + correctionY
+            };
+        }
     }
 
     _applyInterpolatedSnapshots(localTime) {
@@ -1009,10 +1033,10 @@ class GokBallApp {
     }
 
     _showPauseOverlay() {
-        document.getElementById('gameCanvas')?.classList.add('paused');
-        
+        this._cancelResumeAnimation();
         // Remove existing overlay
         this._removePauseOverlay();
+        document.getElementById('gameCanvas')?.classList.add('paused');
         
         const overlay = document.createElement('div');
         overlay.id = 'pauseOverlay';
@@ -1027,10 +1051,12 @@ class GokBallApp {
         document.body.appendChild(overlay);
     }
 
-    _showResumeAnimation() {
+    _showResumeAnimation({ remote = false, durationMs = 3200 } = {}) {
+        if (this._resumeAnimating) return;
         this._resumeAnimating = true;
-        document.getElementById('gameCanvas')?.classList.add('paused');
+        if (remote) this._isPaused = true;
         this._removePauseOverlay();
+        document.getElementById('gameCanvas')?.classList.add('paused');
         
         const overlay = document.createElement('div');
         overlay.id = 'pauseOverlay';
@@ -1041,25 +1067,32 @@ class GokBallApp {
                 <span class="pause-subtitle">DURDURULDU</span>
             </div>
             <div class="pause-hint">Devam etmek için P tuşuna basın</div>
-            <div class="resume-rect" id="resumeRect"></div>
+            <div class="resume-progress" role="progressbar" aria-label="Oyunun devam etmesine kalan süre">
+                <div class="resume-progress-fill" id="resumeProgressFill"></div>
+            </div>
         `;
         document.body.appendChild(overlay);
         
-        const rect = document.getElementById('resumeRect');
-        if (rect) {
-            void rect.offsetWidth;
-            rect.classList.add('animating');
-            
-            // After animation completes, THEN resume the game
-            this._resumeTimeout = setTimeout(() => {
-                this._resumeAnimating = false;
-                this._isPaused = false;
-                this._removePauseOverlay();
-                document.getElementById('gameCanvas')?.classList.remove('paused');
-                this.network.socket?.emit('pauseGame', { paused: false });
-                this._sendAuthorityState();
-            }, 3200);
+        const progress = document.getElementById('resumeProgressFill');
+        if (progress) {
+            progress.style.animationDuration = `${Math.max(250, durationMs) / 1000}s`;
+            void progress.offsetWidth;
+            progress.classList.add('animating');
         }
+
+        if (remote) return;
+        this.network.socket?.emit('pauseGame', { paused: true, resuming: true, durationMs });
+
+        // The host remains authoritative; guests only render this countdown.
+        this._resumeTimeout = setTimeout(() => {
+            this._resumeTimeout = null;
+            this._resumeAnimating = false;
+            this._isPaused = false;
+            this._removePauseOverlay();
+            document.getElementById('gameCanvas')?.classList.remove('paused');
+            this.network.socket?.emit('pauseGame', { paused: false });
+            this._sendAuthorityState();
+        }, durationMs);
     }
 
     _cancelResumeAnimation() {
@@ -1176,6 +1209,8 @@ class GokBallApp {
             snapshotSeq: this._hostAuthoritySendCounter,
             physicsTick: this._hostPhysicsTick,
             paused: this._isPaused,
+            resuming: this._resumeAnimating,
+            resumeDurationMs: 3200,
             state: this._hostGameState,
             physics: this.physics.getState(),
             scoreRed: this._hostScoreRed,
@@ -1536,10 +1571,15 @@ class GokBallApp {
         // Pause state for non-host players
         this.network.on('gamePaused', (data) => {
             if (this._isHost()) return; // Host handles pause locally
+            if (data.resuming) {
+                this._showResumeAnimation({ remote: true, durationMs: data.durationMs || 3200 });
+                return;
+            }
             if (data.paused) {
                 this._isPaused = true;
                 this._showPauseOverlay();
             } else {
+                this._cancelResumeAnimation();
                 this._isPaused = false;
                 this._removePauseOverlay();
             }
@@ -1737,8 +1777,14 @@ class GokBallApp {
         // Pause/restart state travels with snapshots so a stale overlay cannot
         // remain visible when a new match starts.
         this._isPaused = !!state.paused;
-        if (this._isPaused) this._showPauseOverlay();
-        else this._removePauseOverlay();
+        if (this._isPaused && state.resuming) {
+            this._showResumeAnimation({ remote: true, durationMs: state.resumeDurationMs || 3200 });
+        } else if (this._isPaused) {
+            this._showPauseOverlay();
+        } else {
+            this._cancelResumeAnimation();
+            this._removePauseOverlay();
+        }
 
         // Clear interpolation buffer on state transitions to prevent stale data
         if (this._serverGameState !== state.state) {

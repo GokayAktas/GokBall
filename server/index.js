@@ -357,7 +357,13 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
-        socket.to(room.id).emit('gamePaused', { paused: data.paused });
+        socket.to(room.id).emit('gamePaused', {
+            paused: !!data?.paused,
+            resuming: !!data?.resuming,
+            durationMs: Number.isFinite(data?.durationMs)
+                ? Math.max(1000, Math.min(5000, data.durationMs))
+                : 3200
+        });
     });
 
     // --- Host Goal Event (relay to non-host players) ---

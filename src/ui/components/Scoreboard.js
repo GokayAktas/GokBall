@@ -28,9 +28,6 @@ export class Scoreboard {
                         </div>
                         <div class="timer-text" id="hud-timer">00:00</div>
                     </div>
-                    <div class="timer-progress" id="hud-timer-progress" hidden>
-                        <div class="timer-progress-fill" id="hud-timer-progress-fill"></div>
-                    </div>
                 </div>
                 <div class="hud-right">
                     <div class="hud-action-group">
@@ -107,7 +104,6 @@ export class Scoreboard {
     const timeLimit = Math.max(0, Number.isFinite(timeLimitSeconds) ? timeLimitSeconds : 0);
     const isLimited = timeLimit > 0;
     const displayedSeconds = isLimited ? Math.max(0, timeLimit - elapsedSeconds) : elapsedSeconds;
-    const progress = isLimited ? (displayedSeconds / timeLimit) * 100 : 100;
 
     const timerEl = document.getElementById('hud-timer');
     if (timerEl) {
@@ -116,10 +112,6 @@ export class Scoreboard {
       timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    const progressEl = document.getElementById('hud-timer-progress');
-    const progressFillEl = document.getElementById('hud-timer-progress-fill');
-    if (progressEl) progressEl.hidden = !isLimited;
-    if (progressFillEl) progressFillEl.style.width = `${progress}%`;
   }
 
   updateScore(scoreRed, scoreBlue) {

@@ -5,7 +5,7 @@
 
 const FIXED_STEP_MS = 1000 / 60;
 const MAX_EXTRAPOLATION_MS = 250;
-const MIN_INTERPOLATION_DELAY_MS = 50;
+const MIN_INTERPOLATION_DELAY_MS = FIXED_STEP_MS * 2;
 const MAX_INTERPOLATION_DELAY_MS = 180;
 
 export class SnapshotBuffer {
@@ -55,7 +55,7 @@ export class SnapshotBuffer {
                 this._arrivalJitter += (deviation - this._arrivalJitter) / 8;
                 this.interpolationDelay = Math.max(
                     MIN_INTERPOLATION_DELAY_MS,
-                    Math.min(MAX_INTERPOLATION_DELAY_MS, FIXED_STEP_MS * 3 + this._arrivalJitter * 2)
+                    Math.min(MAX_INTERPOLATION_DELAY_MS, FIXED_STEP_MS * 2 + this._arrivalJitter * 2)
                 );
             }
         }
