@@ -14,6 +14,8 @@ const PEER_PING_INTERVAL = 500;
 const PEER_PING_TIMEOUT = 1200;
 const PEER_PING_FAILURE_THRESHOLD = 2;
 const AUTHORITY_STATE_TIMEOUT = 1200;
+const FALLBACK_SNAPSHOT_INTERVAL_MS = 50;
+const FALLBACK_INPUT_INTERVAL_MS = 1000 / 30;
 const AUTHORITY_METADATA_INTERVAL = 15; // refresh static metadata 4 times per second
 const AUTHORITY_METADATA_FIELDS = [
     'colors', 'colorAngle', 'avatarColor', 'name', 'avatar',
@@ -58,6 +60,8 @@ export class NetworkManager {
         this._peerPingPending = new Map();
         this._peerPingFailures = new Map();
         this._lastInputRelayAt = -Infinity;
+        this._lastFallbackInputAt = -Infinity;
+        this._lastFallbackSnapshotAt = new Map();
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
@@ -337,6 +341,10 @@ export class NetworkManager {
         const packet = { v: NETWORK_PROTOCOL_VERSION, type: 'input', epoch: this._peerAuthorityEpoch, seq: this._inputSeqNum, input };
         if (!this._isPeerHost && this._peerHostId) {
             const link = this._peerLinks.get(this._peerHostId);
+            const relayPath = !link || !link.connected || link.relaying;
+            const now = performance.now();
+            if (relayPath && now - this._lastFallbackInputAt < FALLBACK_INPUT_INTERVAL_MS) return this._inputSeqNum;
+            if (relayPath) this._lastFallbackInputAt = now;
             if (!link) {
                 this.socket?.volatile.emit('p2pRelay', { to: this._peerHostId, payload: encodeProtocolPacket(packet) });
             } else if (!link.send(packet)) {
@@ -380,6 +388,8 @@ export class NetworkManager {
         this._lastPeerAuthorityTick = -1;
         this._peerAuthorityEpoch = null;
         this._lastInputRelayAt = -Infinity;
+        this._lastFallbackInputAt = -Infinity;
+        this._lastFallbackSnapshotAt.clear();
         if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId, protocolVersion: NETWORK_PROTOCOL_VERSION });
         this._peerPingTimer = setInterval(() => this._sendPeerPings(), PEER_PING_INTERVAL);
     }
@@ -403,6 +413,8 @@ export class NetworkManager {
         this._lastPeerAuthorityTick = -1;
         this._peerAuthorityEpoch = null;
         this._lastInputRelayAt = -Infinity;
+        this._lastFallbackInputAt = -Infinity;
+        this._lastFallbackSnapshotAt.clear();
         this._authorityMetadataSignatures.clear();
         this._lastAuthorityTick = -1;
     }
@@ -496,6 +508,10 @@ export class NetworkManager {
         }
         for (const peerId of targets) {
             const link = this._peerLinks.get(peerId);
+            const relayPath = !link || !link.connected || link.relaying;
+            const now = performance.now();
+            if (relayPath && now - (this._lastFallbackSnapshotAt.get(peerId) ?? -Infinity) < FALLBACK_SNAPSHOT_INTERVAL_MS) continue;
+            if (relayPath) this._lastFallbackSnapshotAt.set(peerId, now);
             if (link) {
                 if (link.sendSerialized(payload, true)) continue;
             }

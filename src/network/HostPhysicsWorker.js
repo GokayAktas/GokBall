@@ -2,7 +2,9 @@ import { Physics } from '../engine/Physics.js';
 import { NETWORK_PROTOCOL_VERSION } from './Protocol.js';
 
 const STEP_MS = 1000 / 60;
-const SNAPSHOT_EVERY_TICKS = 1;
+// Physics still advances at 60 Hz. 30 Hz snapshots are enough for the
+// interpolation buffer and avoid flooding Socket.IO fallback connections.
+const SNAPSHOT_EVERY_TICKS = 2;
 const INPUT_TIMEOUT_MS = 250;
 const GOAL_PAUSE_TICKS = 180;
 const EMPTY_INPUT = Object.freeze({ up: false, down: false, left: false, right: false, kick: false });
