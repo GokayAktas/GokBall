@@ -32,6 +32,7 @@ import { NETWORK_PROTOCOL_VERSION } from './network/Protocol.js';
 const MAX_LOCAL_RENDER_CORRECTION = 4;
 const MAX_LOCAL_RENDER_FRAME_MS = 33;
 const LOCAL_RENDER_SPEED_FACTOR = 1.2;
+const MAX_CLIENT_CATCHUP_STEPS = 4;
 
 function clampRenderCorrection(value) {
     return Math.max(-MAX_LOCAL_RENDER_CORRECTION, Math.min(MAX_LOCAL_RENDER_CORRECTION, value));
@@ -413,7 +414,7 @@ class GokBallApp {
                     v: NETWORK_PROTOCOL_VERSION, type: 'input', matchEpoch: this._matchEpoch,
                     playerId, seq, input
                 });
-            });
+            }, MAX_CLIENT_CATCHUP_STEPS);
             return;
         }
         this._physicsClock.advance(now, (stepIndex, dueSteps) => {
@@ -423,7 +424,7 @@ class GokBallApp {
             if (!this._fullStateReady) return;
             const inputSeq = this.network.sendInput(inputState, inputState);
             this._physicsTick(inputState, inputSeq, stepIndex, dueSteps);
-        });
+        }, MAX_CLIENT_CATCHUP_STEPS);
     }
 
     _physicsTick(inputState, inputSeq, stepIndex = 0, dueSteps = 1) {
@@ -447,7 +448,7 @@ class GokBallApp {
                 myDisc.speed.x = confirmed.sx;
                 myDisc.speed.y = confirmed.sy;
                 for (const entry of this._inputHistory.unconfirmed()) {
-                    this.physics.predictPlayerStep(myDisc, entry.input, predictionLeadTicks);
+                    this.physics.predictPlayerStep(myDisc, entry.input, predictionLeadTicks, false);
                 }
                 this._localRenderCorrection = {
                     x: this._localRenderCorrection.x + predictedX - myDisc.pos.x,
@@ -458,7 +459,7 @@ class GokBallApp {
             }
             this._reconciliationPending = false;
         }
-        if (!reconciled) this.physics.predictPlayerStep(myDisc, inputState, predictionLeadTicks);
+        if (!reconciled) this.physics.predictPlayerStep(myDisc, inputState, predictionLeadTicks, false);
         myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
     }
     _gameLoop() {

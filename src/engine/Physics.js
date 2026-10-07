@@ -337,7 +337,7 @@ export class Physics {
     }
 
     /** Replay one local player's input without advancing the rest of the pitch. */
-    predictPlayerStep(disc, input = {}, otherDiscLeadTicks = 0) {
+    predictPlayerStep(disc, input = {}, otherDiscLeadTicks = 0, simulateCollisions = true) {
         if (!disc?.isPlayer || disc.invMass === 0) return;
 
         let ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -370,10 +370,12 @@ export class Physics {
         disc.pos.x += disc.speed.x;
         disc.pos.y += disc.speed.y;
 
-        this._applyPlayerKickOffConstraint(disc);
-        this._resolvePredictedPlayerDiscCollisions(disc, otherDiscLeadTicks);
+        if (simulateCollisions) {
+            this._applyPlayerKickOffConstraint(disc);
+            this._resolvePredictedPlayerDiscCollisions(disc, otherDiscLeadTicks);
+        }
 
-        if (this.stadium && !this.inGoalPause) {
+        if (simulateCollisions && this.stadium && !this.inGoalPause) {
             for (const vertex of this.vertexes) {
                 if ((disc.cMask & vertex.cGroup) && (vertex.cMask & disc.cGroup)) {
                     this._collideDiscVertex(disc, vertex);
