@@ -1,29 +1,27 @@
 # Online networking
 
-## Authority and traffic
+## Authority and match timeline
 
-The room creator's browser owns the match simulation. A Dedicated Worker runs the shared `Physics` engine with a fixed 60 Hz accumulator. The main page renders worker snapshots and handles UI, audio, scoring display, and room controls. Guests predict their own disc locally and reconcile against host snapshots.
+The room host's browser owns the match. Its Dedicated Worker is the only place that advances physics, match time, score, goals, kickoff resets, and match statistics. The main thread captures the host's input and renders the worker's snapshots; guest windows predict only their own disc and reconcile it with host acknowledgements.
 
-Each guest opens one unordered WebRTC DataChannel to the room host with `maxRetransmits: 0`. Inputs carry the protocol version, match epoch, and monotonically increasing sequence. Host snapshots carry the epoch and simulation tick plus per-player processed-input acknowledgements. Guests discard old epochs and snapshots. A reliable Socket.IO request/response supplies a full host snapshot for initial join and resync.
+Host and guests use the same epoch and physics-tick snapshots. A monotonically increasing snapshot sequence distinguishes repeated control states at a frozen physics tick, such as pause and full-state responses. Guests interpolate remote discs on that tick timeline and discard old epochs, ticks, and snapshot sequences.
 
-Socket.IO owns room membership, chat, moderation, signaling, and temporary resume tickets. When a WebRTC channel is unavailable or falls back, the server relays only versioned input/state/ping packets between the room host and a member of the same room. Relay packets are volatile so stale positions do not queue behind current traffic. A short room-scoped resume token keeps a disconnected player's membership for 20 seconds; an unrecovered host closes the room after that window.
+## Transport and protocol
 
-## TURN
+Protocol version 2 is used by room signaling, real-time packets, and full-state transfers. Inputs include a match epoch and increasing per-player sequence. Snapshots include the match epoch, physics tick, snapshot sequence, scores, elapsed match time, pause/state flags, physics, and last-processed input acknowledgements.
 
-STUN is configured by default. An operator can add TURN with deployment environment variables:
+Each guest connects directly to the room host over one unordered WebRTC DataChannel configured with no retransmissions. Socket.IO manages rooms, chat, moderation, WebRTC signaling, full-state requests, and reliable unicast full-state replies. While a peer connection is unavailable or under relay fallback, the server forwards validated volatile input and snapshot packets only between the host and a member of that room. Direct and relayed traffic use the same versioned packet validator.
 
-```text
-TURN_URLS=turn:turn.example.com:3478,turns:turn.example.com:5349
-TURN_USERNAME=...
-TURN_CREDENTIAL=...
-```
+TURN is optional and configured with `TURN_URLS`, `TURN_USERNAME`, and `TURN_CREDENTIAL`. TURN credentials are delivered to clients through ICE configuration; use short-lived credentials in production. Without TURN or a direct path, Socket.IO relay remains available.
 
-The TURN credentials are sent to clients as part of WebRTC ICE configuration, so deploy short-lived credentials from a TURN provider where possible. Do not store production credentials in this repository.
+## Join, recovery, and authority loss
 
-## Background tabs
+A guest does not begin prediction until it receives a valid full host state. It requests another full state when its stream stalls or its epoch becomes inconsistent. The host answers with a new snapshot sequence over the reliable Socket.IO unicast path. Reconnect tickets preserve room membership for 20 seconds; if the host does not return, the room closes.
 
-Moving host physics to a Worker avoids contention with rendering, but browsers still throttle or freeze background pages and worker timers. A hidden host page can therefore fall behind and catch up in batches; this architecture cannot promise continuous 60 Hz while the browser freezes the page. A guarantee across a frozen host page requires a separate always-on server authority.
+The server validates room membership, host identity, peer pairing, protocol version, packet size, and full-state destination. It does not simulate physics or decide match outcomes.
 
-## Verification
+## Browser limitations and checks
 
-Run `npm test` for protocol, relay authorization, room lifecycle, snapshot, input-history, and sync checks. Run `npm run build` to validate Vite's module-worker output. Direct peer, TURN, fallback, reconnect, and background-tab behavior still requires a multi-browser network test; the Node suite cannot model browser ICE/NAT or throttling behavior.
+Worker timers reduce main-thread contention but cannot prevent a browser from throttling or freezing a hidden tab. The host must remain available for this browser-host topology. A guarantee while the host browser is frozen requires moving authority to an always-on server.
+
+Run `npm test` for protocol, signaling authorization, room lifecycle, fixed-step, input history, snapshot buffering, full-state validation, and sync checks. Run `npm run build` to validate the production Worker bundle. Direct WebRTC, TURN, relay transitions, reconnects, and browser tab throttling need multi-browser testing; Node tests cannot model ICE/NAT behavior or browser scheduling.

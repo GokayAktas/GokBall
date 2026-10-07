@@ -8,7 +8,7 @@ const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 const CONNECT_TIMEOUT = 15000;
 const MAX_BUFFERED_SNAPSHOT_BYTES = 32 * 1024;
 const MAX_BUFFERED_INPUT_BYTES = 4 * 1024;
-import { isProtocolPacket, encodeProtocolPacket, MAX_NETWORK_PACKET_BYTES } from './Protocol.js';
+import { isProtocolPacket, encodeProtocolPacket, MAX_NETWORK_PACKET_BYTES, NETWORK_PROTOCOL_VERSION } from './Protocol.js';
 
 export class PeerLink {
     constructor({ socket, peerId = null, onMessage, onState }) {
@@ -133,7 +133,7 @@ export class PeerLink {
 
     _signal(type, payload) {
         if (!this.peerId || !this.socket?.connected) return;
-        this.socket.emit('p2pSignal', { to: this.peerId, type, payload });
+        this.socket.emit('p2pSignal', { protocolVersion: NETWORK_PROTOCOL_VERSION, to: this.peerId, type, payload });
     }
 
     _ensureConnection() {

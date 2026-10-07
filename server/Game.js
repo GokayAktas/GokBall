@@ -1,3 +1,5 @@
+import { NETWORK_PROTOCOL_VERSION } from '../src/network/Protocol.js';
+
 /**
  * Room-side match lifecycle and settings. Physics is owned by the room host's
  * Dedicated Worker; this class never advances a match simulation.
@@ -38,7 +40,7 @@ export class Game {
             scoreBlue: 0,
             roomData: this.room.getRoomData(),
             hostId: this.room.hostId,
-            protocolVersion: 1
+            protocolVersion: NETWORK_PROTOCOL_VERSION
         });
         return { scoreRed: 0, scoreBlue: 0 };
     }

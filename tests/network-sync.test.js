@@ -8,6 +8,7 @@ import { limitRenderPosition } from '../src/network/RenderSmoothing.js';
 import { pingLevel } from '../src/ui/components/PingBadge.js';
 import { JERSEY_PRESETS, pickRandomJersey } from '../src/ui/screens/JerseyPresets.js';
 import { Room } from '../server/Room.js';
+import { NETWORK_PROTOCOL_VERSION } from '../src/network/Protocol.js';
 
 test('fixed clock runs all due 60 Hz simulation steps without dropping elapsed time', () => {
     const clock = new FixedStepClock();
@@ -48,6 +49,17 @@ test('snapshot buffer rejects duplicate and reordered packets while continuing a
     assert.equal(buffer.getInterpolatedState(110).physics.discs[0].x >= 2, true);
 });
 
+test('snapshot buffer rejects states from a different match epoch', () => {
+    const buffer = new SnapshotBuffer();
+    const snapshot = (matchEpoch, seq) => ({
+        matchEpoch, snapshotSeq: seq, tick: seq, physicsTick: seq,
+        physics: { discs: [{ id: 'player', isPlayer: true, x: seq, y: 0, sx: 0, sy: 0 }] }
+    });
+    assert.equal(buffer.addSnapshot(0, snapshot('epoch-a', 1)), true);
+    assert.equal(buffer.addSnapshot(20, snapshot('epoch-b', 2)), false);
+    assert.equal(buffer.getSize(), 1);
+});
+
 test('snapshot buffer only extrapolates a few ticks during packet loss', () => {
     const buffer = new SnapshotBuffer(50);
     const state = {
@@ -71,12 +83,15 @@ test('local rendering bounds large network corrections without changing small st
 
 test('full state validation requires match identity, tick, scores and finite disc physics', () => {
     const valid = {
-        protocolVersion: 1, fullState: true, state: 'playing', matchEpoch: 'match-a', snapshotSeq: 10, physicsTick: 9,
+        protocolVersion: NETWORK_PROTOCOL_VERSION, fullState: true, state: 'playing', matchEpoch: 'match-a', snapshotSeq: 10, tick: 9, physicsTick: 9,
+        paused: false, lastProcessedSeq: { player: 3 },
         scoreRed: 1, scoreBlue: 0, time: 12, scoreLimit: 3, timeLimit: 180,
         physics: { discs: [{ x: 1, y: 2, sx: 0, sy: 0 }] }
     };
     assert.equal(isValidFullGameState(valid), true);
     assert.equal(isValidFullGameState({ ...valid, matchEpoch: undefined }), false);
+    assert.equal(isValidFullGameState({ ...valid, protocolVersion: NETWORK_PROTOCOL_VERSION - 1 }), false);
+    assert.equal(isValidFullGameState({ ...valid, lastProcessedSeq: { player: -1 } }), false);
     assert.equal(isValidFullGameState({ ...valid, physics: { discs: [{ x: NaN, y: 2, sx: 0, sy: 0 }] } }), false);
 });
 

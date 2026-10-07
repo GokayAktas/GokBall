@@ -9,6 +9,7 @@ import { isValidFullGameState } from '../src/network/AuthorityProtocol.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
+import { NETWORK_PROTOCOL_VERSION } from '../src/network/Protocol.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -215,7 +216,7 @@ io.on('connection', (socket) => {
                 scoreRed: room.game.scoreRed,
                 scoreBlue: room.game.scoreBlue,
                 roomData: room.getRoomData(),
-                protocolVersion: 1,
+                protocolVersion: NETWORK_PROTOCOL_VERSION,
                 hostId: room.hostId
             });
         }
@@ -263,7 +264,7 @@ io.on('connection', (socket) => {
             creatorId: room.creatorId
         }, socket.id);
         if (room.game.state === 'playing' || room.game.state === 'goal' || room.game.state === 'countdown') {
-            socket.emit('gameStarted', { roomData: payload, protocolVersion: 1, hostId: room.hostId });
+            socket.emit('gameStarted', { roomData: payload, protocolVersion: NETWORK_PROTOCOL_VERSION, hostId: room.hostId });
         }
     });
 
@@ -344,8 +345,8 @@ io.on('connection', (socket) => {
         const { matchEpoch, protocolVersion } = data || {};
         const room = getPlayerRoom(socket.id);
         if (!room || !room.players.has(socket.id)) return;
-        if (protocolVersion !== 1) {
-            socket.emit('protocolMismatch', { expected: 1, received: protocolVersion });
+        if (protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+            socket.emit('protocolMismatch', { expected: NETWORK_PROTOCOL_VERSION, received: protocolVersion });
             return;
         }
         if (!['playing', 'goal', 'countdown'].includes(room.game?.state)) return;
@@ -356,7 +357,7 @@ io.on('connection', (socket) => {
         if (!host || host.id === socket.id) return;
         host.emit('fullStateRequest', {
             playerId: socket.id,
-            protocolVersion: 1,
+            protocolVersion: NETWORK_PROTOCOL_VERSION,
             matchEpoch: typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null
         });
     });
@@ -365,7 +366,7 @@ io.on('connection', (socket) => {
         const { playerId, state } = data || {};
         const room = getPlayerRoom(socket.id);
         if (!room || socket.id !== room.hostId || !playerId || playerId === socket.id) return;
-        if (state?.protocolVersion !== 1) return;
+        if (state?.protocolVersion !== NETWORK_PROTOCOL_VERSION) return;
         if (!room.game.matchEpoch && typeof state.matchEpoch === 'string') room.game.matchEpoch = state.matchEpoch;
         if (state.matchEpoch !== room.game.matchEpoch) return;
         if (!room.players.has(playerId) || !isValidFullGameState(state)) return;
@@ -402,7 +403,7 @@ io.on('connection', (socket) => {
     // --- Host Goal Event (relay to non-host players) ---
     socket.on('hostMatchStarted', (data = {}) => {
         const room = getPlayerRoom(socket.id);
-        if (!room || socket.id !== room.hostId || data?.protocolVersion !== 1 || typeof data.matchEpoch !== 'string' || data.matchEpoch.length > 100) return;
+        if (!room || socket.id !== room.hostId || data?.protocolVersion !== NETWORK_PROTOCOL_VERSION || typeof data.matchEpoch !== 'string' || data.matchEpoch.length > 100) return;
         room.game.matchEpoch = data.matchEpoch;
     });
 
@@ -410,7 +411,7 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
-        if (data?.protocolVersion !== 1 || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue) || !['red', 'blue'].includes(data?.team)) return;
+        if (data?.protocolVersion !== NETWORK_PROTOCOL_VERSION || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue) || !['red', 'blue'].includes(data?.team)) return;
         room.game.scoreRed = data.scoreRed;
         room.game.scoreBlue = data.scoreBlue;
         room.game.state = 'goal';
@@ -427,7 +428,7 @@ io.on('connection', (socket) => {
     socket.on('hostMatchState', (data = {}) => {
         const room = getPlayerRoom(socket.id);
         if (!room || socket.id !== room.hostId) return;
-        if (data?.protocolVersion !== 1 || data.state !== 'playing' || data.matchEpoch !== room.game.matchEpoch) return;
+        if (data?.protocolVersion !== NETWORK_PROTOCOL_VERSION || data.state !== 'playing' || data.matchEpoch !== room.game.matchEpoch) return;
         if (room.game.state === 'goal') room.game.state = 'playing';
     });
 
@@ -436,7 +437,7 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
-        if (data?.protocolVersion !== 1 || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue)) return;
+        if (data?.protocolVersion !== NETWORK_PROTOCOL_VERSION || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue)) return;
         room.game.scoreRed = data.scoreRed;
         room.game.scoreBlue = data.scoreBlue;
         room.game.state = 'ended';

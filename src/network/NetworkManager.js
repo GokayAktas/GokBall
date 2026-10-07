@@ -539,6 +539,10 @@ export class NetworkManager {
     }
 
     _onPeerSignal(data = {}) {
+        if (data.protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+            this._trigger('protocolMismatch', { expected: NETWORK_PROTOCOL_VERSION, received: data.protocolVersion });
+            return;
+        }
         const peerId = data.from;
         if (!peerId) return;
         const link = this._peerLinks.get(peerId);

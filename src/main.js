@@ -37,8 +37,6 @@ function clampRenderCorrection(value) {
     return Math.max(-MAX_LOCAL_RENDER_CORRECTION, Math.min(MAX_LOCAL_RENDER_CORRECTION, value));
 }
 
-const REMOTE_INPUT_TIMEOUT_MS = 250;
-
 class GokBallApp {
     constructor() {
         this.network = new NetworkManager();
@@ -84,8 +82,7 @@ class GokBallApp {
 
         // Host-authority mode (room creator runs physics)
         this._isHostAuthority = false;
-        this._remoteInputs = new Map(); // playerId -> {input, seq}
-        this._lastRemoteInputSeq = new Map(); // playerId -> last processed seq
+        this._lastReceivedInputSeq = new Map();
         this._hostScoreRed = 0;
         this._hostScoreBlue = 0;
         this._hostTimeElapsed = 0;
@@ -96,7 +93,6 @@ class GokBallApp {
         this._hostScoreLimit = 3;
         this._hostTimeLimit = 180;
         this._hostKickOffTeam = 'red';
-        this._hostAuthoritySendCounter = 0;
         this._hostPhysicsWorker = null;
         this._hostWorkerTick = 0;
 
@@ -415,230 +411,51 @@ class GokBallApp {
             });
             return;
         }
-        this._authorityStateDirty = false;
         this._physicsClock.advance(now, (stepIndex, dueSteps) => {
             if (!this.gameRunning) return;
             const inputState = this.input.getInput();
             if (this.network.socket?.id) this.physics.myPlayerId = this.network.socket.id;
-            if (!this._fullStateReady && !(this._isHost() && this._isHostAuthority)) return;
+            if (!this._fullStateReady) return;
             const inputSeq = this.network.sendInput(inputState, inputState);
             this._physicsTick(inputState, inputSeq, stepIndex, dueSteps);
         });
-        // Do not queue intermediate states when a delayed frame catches up.
-        // The newest state is what guests need to render and predict from.
-        if (this._authorityStateDirty && this._isHost() && this._isHostAuthority) {
-            this._authorityStateDirty = false;
-            this._sendAuthorityState();
-        }
     }
 
     _physicsTick(inputState, inputSeq, stepIndex = 0, dueSteps = 1) {
         this._physicsTickCount = (this._physicsTickCount || 0) + 1;
-        const peerInput = inputState;
-        const stepSize = 1000 / 60;
-        // --- HOST MODE: Full authority game loop ---
-            if (this._isHost() && this._isHostAuthority) {
+        if (!this._firstStateReceived || this._serverGameState !== 'playing' || this._isPaused) return;
 
-                // Skip physics when paused
-                if (this._isPaused) {
-                    // Still send occasional authority state so non-host clients sync
-                    this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
-                    if (this._hostAuthoritySendCounter % 30 === 0) {
-                        this._authorityStateDirty = true;
-                    }
-                    return;
+        const myId = this.network.socket?.id;
+        const myDisc = this.physics.discs.find(disc => disc.id === myId);
+        if (!myDisc?.isPlayer) return;
+
+        const predictionLeadTicks = this._snapshotBuffer.getDelay() / (1000 / 60) + 1;
+        this._inputHistory.push(inputSeq, inputState);
+        let reconciled = false;
+        if (this._reconciliationPending && this._lastConfirmedServerState && stepIndex === dueSteps - 1) {
+            const confirmed = this._lastConfirmedServerState.discs.find(disc => disc.id === myId);
+            if (confirmed) {
+                const predictedX = myDisc.pos.x;
+                const predictedY = myDisc.pos.y;
+                myDisc.pos.x = confirmed.x;
+                myDisc.pos.y = confirmed.y;
+                myDisc.speed.x = confirmed.sx;
+                myDisc.speed.y = confirmed.sy;
+                for (const entry of this._inputHistory.unconfirmed()) {
+                    this.physics.predictPlayerStep(myDisc, entry.input, predictionLeadTicks);
                 }
-
-                if (this._hostGameState === 'playing') {
-                    // Apply inputs to ALL player discs
-                    for (const disc of this.physics.discs) {
-                        if (!disc.isPlayer) continue;
-                        disc.input = { up: false, down: false, left: false, right: false, kick: false };
-                    }
-
-                    // Local player input
-                    const myDisc = this.physics.discs.find(d => d.id === this.network.socket?.id);
-                    if (myDisc) myDisc.input = inputState;
-
-                    // Remote player inputs
-                    for (const [playerId, ri] of this._remoteInputs) {
-                        const remoteDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
-                        if (remoteDisc) {
-                            remoteDisc.input = performance.now() - ri.receivedAt > REMOTE_INPUT_TIMEOUT_MS
-                                ? { up: false, down: false, left: false, right: false, kick: false }
-                                : ri.input;
-                            this._lastRemoteInputSeq.set(playerId, ri.seq);
-                        }
-                    }
-
-                    // Step physics
-                    if (this.network.socket?.id) this._lastRemoteInputSeq.set(this.network.socket.id, inputSeq);
-                    const result = this.physics.step();
-                    this._hostPhysicsTick++;
-                    this._releaseConsumedKickInputs();
-
-                    // Track ball touches for goal attribution (host mode)
-                    if (this.physics.ballDisc) {
-                        const toucher = this.physics.ballDisc.lastTouchedBy;
-                        if (toucher && toucher !== this._hostLastToucher) {
-                            this._hostPrevToucher = this._hostLastToucher;
-                            this._hostLastToucher = toucher;
-                        }
-                    }
-
-                    // Play kick sound for host (clients get it via goalScored/authorityState)
-                    if (result.kickHappened) {
-                        const now = Date.now();
-                        if (!this._lastKickSound || now - this._lastKickSound > 150) {
-                            this.audio.playKick();
-                            this._lastKickSound = now;
-                        }
-                    }
-
-                    // Track saves (kick near own goal line)
-                    if (result.saveDetected) {
-                        const savePlayer = this.currentRoomData?.players?.find(p => p.id === result.saveDetected);
-                        const saveName = savePlayer?.name || '';
-                        if (!this._hostMatchStats[result.saveDetected]) {
-                            this._hostMatchStats[result.saveDetected] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: saveName, team: savePlayer?.team };
-                        }
-                        this._hostMatchStats[result.saveDetected].saves++;
-                    }
-
-                    // Check for goals
-                    if (result.goalTeam && this._hostGameState === 'playing') {
-                        this._hostHandleGoal(result.goalTeam);
-                    }
-
-                    // Advance time
-                    if (!this.physics.kickOffReset) {
-                        this._hostTimeElapsed++;
-                    }
-
-                    // Check time limit
-                    if (this._hostTimeLimit > 0 && this._hostTimeElapsed / 60 >= this._hostTimeLimit) {
-                        if (this._hostScoreRed !== this._hostScoreBlue) {
-                            this._hostGameOver();
-                        }
-                    }
-
-                    // Update scoreboard
-                    this.scoreboard.update(
-                        this._hostScoreRed,
-                        this._hostScoreBlue,
-                        Math.floor(this._hostTimeElapsed / 60),
-                        this._hostTimeLimit
-                    );
-
-                    // Send authority state to server (relayed to other players)
-                    this._authorityStateDirty = true;
-                }
-
-                else if (this._hostGameState === 'goal') {
-                    // Goal pause: clear all player inputs so they don't keep moving
-                    for (const disc of this.physics.discs) {
-                        if (disc.isPlayer) {
-                            disc.input = { up: false, down: false, left: false, right: false, kick: false };
-                            disc.kicking = false;
-                        }
-                    }
-                    // Physics still runs (for ball momentum), but players don't move
-                    this.physics.step();
-                    this._hostPhysicsTick++;
-                    this._hostGoalPauseTicks--;
-
-                    // Send authority state during goal pause so non-host clients see the ball
-                    this._authorityStateDirty = true;
-
-                    if (this._hostGoalPauseTicks <= 0) {
-                        // Reset ball to center
-                        if (this.physics.ballDisc) {
-                            this.physics.ballDisc.pos.x = 0;
-                            this.physics.ballDisc.pos.y = 0;
-                            this.physics.ballDisc.speed.x = 0;
-                            this.physics.ballDisc.speed.y = 0;
-                            this.physics.ballDisc.color = 'FFB82E';
-                        }
-
-                        // Check score limit
-                        if (this._hostScoreLimit > 0 &&
-                            (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
-                            this._hostGameOver();
-                            return;
-                        }
-
-                        // Reset for next kickoff (use resetPositions to keep disc IDs intact)
-                        this.physics.kickOffReset = true;
-                        this.physics.kickOffTeam = this._hostKickOffTeam;
-                        this.physics.inGoalPause = false;
-                        this.physics.resetPositions();
-                        this._hostPositionResetId++;
-                        this._hostGameState = 'playing';
-                        this._serverGameState = 'playing';
-                        
-                        // Send authority state immediately so non-host clients see the reset
-                        this._authorityStateDirty = true;
-                    }
-                }
-
-            } else {
-                // --- CLIENT MODE: Local physics + server reconciliation ---
-                // Wait for first server state before running client prediction
-                if (!this._firstStateReceived) {
-                    return;
-                }
-                if (this._serverGameState === 'playing' && !this._isPaused) {
-                    const myId = this.network.socket?.id;
-                    const myDisc = this.physics.discs.find(d => d.id === myId);
-
-                    if (myDisc && myDisc.isPlayer) {
-                        const predictionLeadTicks = this._snapshotBuffer.getDelay() / stepSize + 1;
-                        this._inputHistory.push(inputSeq, peerInput);
-
-                        let reconciled = false;
-                        // Apply reconciliation at the end of a catch-up batch,
-                        // so all inputs from this local simulation interval can
-                        // be replayed before selecting the render correction.
-                        if (this._reconciliationPending && this._lastConfirmedServerState && stepIndex === dueSteps - 1) {
-                            const confirmed = this._lastConfirmedServerState.discs.find(d => d.id === myId);
-                            if (confirmed) {
-                                const predictedX = myDisc.pos.x;
-                                const predictedY = myDisc.pos.y;
-                                myDisc.pos.x = confirmed.x;
-                                myDisc.pos.y = confirmed.y;
-                                myDisc.speed.x = confirmed.sx;
-                                myDisc.speed.y = confirmed.sy;
-
-                                // Replay this player's inputs against the latest
-                                // interpolated world without advancing other discs.
-                                for (const h of this._inputHistory.unconfirmed()) {
-                                    this.physics.predictPlayerStep(myDisc, h.input, predictionLeadTicks);
-                                }
-                                // Keep the correction in simulation space. The
-                                // sub-tick render fraction is added separately
-                                // on every animation frame and must not feed
-                                // back into this offset.
-                                const correctionX = this._localRenderCorrection.x + predictedX - myDisc.pos.x;
-                                const correctionY = this._localRenderCorrection.y + predictedY - myDisc.pos.y;
-                                const now = performance.now();
-                                this._localRenderCorrection = {
-                                    x: correctionX,
-                                    y: correctionY,
-                                    updatedAt: now
-                                };
-                                reconciled = true;
-                            }
-                            this._reconciliationPending = false;
-                        }
-
-                        if (!reconciled) this.physics.predictPlayerStep(myDisc, peerInput, predictionLeadTicks);
-                        myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
-                    }
-                }
+                this._localRenderCorrection = {
+                    x: this._localRenderCorrection.x + predictedX - myDisc.pos.x,
+                    y: this._localRenderCorrection.y + predictedY - myDisc.pos.y,
+                    updatedAt: performance.now()
+                };
+                reconciled = true;
             }
-
+            this._reconciliationPending = false;
+        }
+        if (!reconciled) this.physics.predictPlayerStep(myDisc, inputState, predictionLeadTicks);
+        myDisc.input = { up: false, down: false, left: false, right: false, kick: false };
     }
-
     _gameLoop() {
         if (!this.gameRunning) return;
         const now = performance.now();
@@ -680,14 +497,11 @@ class GokBallApp {
     /** Render locally simulated discs between fixed ticks without altering physics state. */
     _interpolateLocallySimulatedDiscs(localTime = performance.now()) {
         const clock = this._physicsClock;
-        if (!clock) return;
+        if (!clock || (this._isHost() && this._isHostAuthority)) return;
         const localId = this.network.socket?.id;
-        const host = this._isHost() && this._isHostAuthority;
-        const canAdvance = !this._isPaused && (host
-            ? this._hostGameState === 'playing' || this._hostGameState === 'goal'
-            : this._firstStateReceived && this._serverGameState === 'playing');
+        const canAdvance = !this._isPaused && this._firstStateReceived && this._serverGameState === 'playing';
         if (!canAdvance) {
-            if (!host) this._localRenderPosition = null;
+            this._localRenderPosition = null;
             return;
         }
 
@@ -698,17 +512,17 @@ class GokBallApp {
             // packets arrive in bursts. Keep that correction bounded so it
             // cannot drag the locally predicted player away from the current
             // simulation or create a catch-up burst on the player's screen.
-            const correctionX = !host && disc.id === localId
+            const correctionX = disc.id === localId
                 ? clampRenderCorrection(this._localRenderCorrection?.x || 0)
                 : 0;
-            const correctionY = !host && disc.id === localId
+            const correctionY = disc.id === localId
                 ? clampRenderCorrection(this._localRenderCorrection?.y || 0)
                 : 0;
             const targetPosition = {
                 x: disc.pos.x + disc.speed.x * alpha + correctionX,
                 y: disc.pos.y + disc.speed.y * alpha + correctionY
             };
-            if (!host && disc.id === localId) {
+            if (disc.id === localId) {
                 const previous = this._localRenderPosition;
                 const elapsed = previous
                     ? Math.max(0, Math.min(MAX_LOCAL_RENDER_FRAME_MS, localTime - previous.updatedAt))
@@ -740,7 +554,8 @@ class GokBallApp {
 
         for (let i = 0; i < snapshots.length; i++) {
             const snapshot = snapshots[i];
-            if (snapshot.isPlayer && snapshot.id === myId && this._serverGameState === 'playing' && !this._isPaused) continue;
+            const hostAuthority = this._isHost() && this._isHostAuthority;
+            if (!hostAuthority && snapshot.isPlayer && snapshot.id === myId && this._serverGameState === 'playing' && !this._isPaused) continue;
 
             const disc = snapshot.isPlayer
                 ? localById.get(snapshot.id)
@@ -840,12 +655,8 @@ class GokBallApp {
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
         this._hostTimeLimit = this.currentRoomData?.game?.timeLimit ?? 180;
-        this._hostLastToucher = null;
-        this._hostPrevToucher = null;
         this._hostMatchStats = {};
-        this._remoteInputs.clear();
-        this._lastRemoteInputSeq.clear();
-        this._hostAuthoritySendCounter = 0;
+        this._lastReceivedInputSeq.clear();
         console.log('[GokBall] Host game state initialized');
     }
 
@@ -854,6 +665,7 @@ class GokBallApp {
         const worker = new Worker(new URL('./network/HostPhysicsWorker.js', import.meta.url), { type: 'module' });
         this._hostPhysicsWorker = worker;
         this._hostWorkerTick = 0;
+        this._latestHostSnapshot = null;
         worker.onmessage = ({ data }) => this._handleHostWorkerMessage(data);
         worker.onerror = (error) => {
             console.error('[Network] Host physics worker failed:', error.message || error);
@@ -867,65 +679,70 @@ class GokBallApp {
             players: this.currentRoomData?.players || [],
             teamColors: this.currentRoomData?.teamColors || {},
             playerSpeedMultiplier: this.currentRoomData?.playerSpeedMultiplier || 1,
-            ballSpeedMultiplier: this.currentRoomData?.ballSpeedMultiplier || 1
+            ballSpeedMultiplier: this.currentRoomData?.ballSpeedMultiplier || 1,
+            scoreLimit: this._hostScoreLimit,
+            timeLimit: this._hostTimeLimit
         });
         this.network.socket?.emit('hostMatchStarted', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch });
     }
 
     _handleHostWorkerMessage(message) {
         if (!this.gameRunning || message?.v !== NETWORK_PROTOCOL_VERSION || message.matchEpoch !== this._matchEpoch) return;
-        if (this._hostGameState === 'ended') return;
         if (message.type === 'goal') {
             this._hostPhysicsTick = message.tick;
-            this._hostLastToucher = message.lastTouchedBy;
-            this._hostHandleGoal(message.team);
+            this._hostScoreRed = message.scoreRed;
+            this._hostScoreBlue = message.scoreBlue;
+            this._hostTimeElapsed = message.time * 60;
+            this._hostMatchStats = message.matchStats || {};
+            this._hostHandleGoal(message);
             return;
         }
         if (message.type === 'goalPauseEnded') {
             this._hostGameState = 'playing';
             this._hostGoalPauseTicks = 0;
-            this._hostPositionResetId++;
-            if (this._hostScoreLimit > 0 && (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
-                this._hostGameOver();
-            } else {
-                this.network.socket?.emit('hostMatchState', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch, state: 'playing' });
+            this._hostPositionResetId = message.positionResetId;
+            this.network.socket?.emit('hostMatchState', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch, state: 'playing' });
+            return;
+        }
+        if (message.type === 'gameOver') {
+            this._hostScoreRed = message.scoreRed;
+            this._hostScoreBlue = message.scoreBlue;
+            this._hostTimeElapsed = message.time * 60;
+            this._hostMatchStats = message.matchStats || {};
+            this._hostGameOver(message);
+            return;
+        }
+        if (message.type === 'kickReleased') {
+            for (const playerId of message.playerIds || []) {
+                if (playerId === this.network.socket?.id) this.input.suppressKickUntilKeyUp();
+                else this.network.releasePlayerKick(playerId);
             }
             return;
         }
         if (message.type !== 'snapshot' || !message.state) return;
+        if (message.state.fullState && this._pendingFullStateTargets?.size) {
+            this._latestHostSnapshot = message.state;
+            for (const targetId of this._pendingFullStateTargets) this._sendAuthorityState(targetId, message.state);
+            this._pendingFullStateTargets.clear();
+            return;
+        }
         if (message.kickHappened) this.audio.playKick();
-        if (message.saveDetected) {
-            const player = this.currentRoomData?.players?.find(item => item.id === message.saveDetected);
-            const oldStats = this._hostMatchStats[message.saveDetected] || { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: player?.name || '', team: player?.team };
-            oldStats.saves++;
-            this._hostMatchStats[message.saveDetected] = oldStats;
-        }
-
-        const previousTick = this._hostWorkerTick;
-        this._hostWorkerTick = Math.max(previousTick, message.tick);
+        this._hostWorkerTick = Math.max(this._hostWorkerTick, message.tick);
         this._hostPhysicsTick = message.tick;
-        this.physics.applyState(message.state);
-        // The authority renders the worker's exact positions. Smoothing is
-        // reserved for remote replicas; feeding it back into host physics made
-        // the host view lag behind the worker's collision timeline.
-        message.state.discs.forEach((snapshot, index) => {
-            const disc = this.physics.discs[index];
-            if (!disc) return;
-            disc.pos.x = snapshot.x; disc.pos.y = snapshot.y;
-            disc.speed.x = snapshot.sx; disc.speed.y = snapshot.sy;
-        });
-        this._lastRemoteInputSeq = new Map(Object.entries(message.lastProcessedSeq || {}).map(([id, seq]) => [id, Number(seq) || 0]));
-        if (message.lastTouchedBy && message.lastTouchedBy !== this._hostLastToucher) {
-            this._hostPrevToucher = this._hostLastToucher;
-            this._hostLastToucher = message.lastTouchedBy;
-        }
-        this._hostGameState = message.goalPauseTicks > 0 ? 'goal' : 'playing';
+        this._hostGameState = message.state.state;
+        this._hostScoreRed = message.state.scoreRed;
+        this._hostScoreBlue = message.state.scoreBlue;
+        this._hostTimeElapsed = message.state.time * 60;
+        this._hostMatchStats = message.state.matchStats || this._hostMatchStats;
         this._hostGoalPauseTicks = message.goalPauseTicks || 0;
-        this._isPaused = !!message.paused;
-        if (!this.physics.kickOffReset && this._hostGameState === 'playing') this._hostTimeElapsed += Math.max(0, message.tick - previousTick);
-        if (this._hostTimeLimit > 0 && this._hostTimeElapsed / 60 >= this._hostTimeLimit && this._hostScoreRed !== this._hostScoreBlue) this._hostGameOver();
-        this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60), this._hostTimeLimit);
-        this._sendAuthorityState();
+        const state = message.state;
+        this._latestHostSnapshot = state;
+        if (state.fullState) {
+            this._fullStateReady = true;
+            this._firstStateReceived = true;
+        }
+        this._handleGameState(state, !!state.fullState);
+        this._sendAuthorityState(null, state);
     }
 
     /** Spawn discs for ALL players in host mode */
@@ -987,48 +804,18 @@ class GokBallApp {
     }
 
     /** Handle goal in host mode */
-    _hostHandleGoal(scoredOnTeam) {
-        const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';
-
-        if (scoringTeam === 'red') this._hostScoreRed++;
-        else this._hostScoreBlue++;
-
+    _hostHandleGoal(result) {
+        const scoringTeam = result.team;
+        this._hostScoreRed = result.scoreRed;
+        this._hostScoreBlue = result.scoreBlue;
+        this._hostTimeElapsed = result.time * 60;
         this._hostGameState = 'goal';
-        this._hostGoalPauseTicks = 3 * 60; // 3 seconds at 60Hz
-        this._hostKickOffTeam = scoredOnTeam; // conceded team gets kickoff
-
-        this.physics.kickOffReset = true;
-        this.physics.kickOffTeam = scoredOnTeam;
-        this.physics.inGoalPause = true;
-
-        // Attribute an own goal to the last toucher from the team that
-        // conceded, and deduct the matching three player points.
-        const lastTouchPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostLastToucher);
-        const ownGoal = !!lastTouchPlayer && lastTouchPlayer.team === scoredOnTeam;
-        const scorerName = this._hostLastToucher ? (lastTouchPlayer?.name || '') : '';
-        // Assister: last toucher on same team as scorer, before the scorer
-        let assisterName = '';
-        if (!ownGoal && this._hostPrevToucher && this._hostPrevToucher !== this._hostLastToucher) {
-            const prevPlayer = this.currentRoomData?.players?.find(p => p.id === this._hostPrevToucher);
-            if (prevPlayer && prevPlayer.team === scoringTeam) {
-                assisterName = prevPlayer.name || '';
-            }
-        }
-
-        // Track match stats locally
-        if (this._hostLastToucher && (ownGoal || lastTouchPlayer?.team === scoringTeam)) {
-            if (!this._hostMatchStats[this._hostLastToucher]) this._hostMatchStats[this._hostLastToucher] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: lastTouchPlayer.name, team: lastTouchPlayer.team };
-            if (ownGoal) this._hostMatchStats[this._hostLastToucher].ownGoals++;
-            else this._hostMatchStats[this._hostLastToucher].goals++;
-        }
-        if (assisterName) {
-            if (!this._hostMatchStats[this._hostPrevToucher]) this._hostMatchStats[this._hostPrevToucher] = { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: assisterName, team: scoringTeam };
-            this._hostMatchStats[this._hostPrevToucher].assists++;
-        }
-
-        // Reset touch tracking for next goal
-        this._hostLastToucher = null;
-        this._hostPrevToucher = null;
+        this._hostGoalPauseTicks = 180;
+        this._hostKickOffTeam = result.concededTeam;
+        this._hostMatchStats = result.matchStats || this._hostMatchStats;
+        const ownGoal = !!result.ownGoal;
+        const scorerName = result.scorer || '';
+        const assisterName = result.assister || '';
 
         // Update scoreboard locally
         this.scoreboard.update(
@@ -1058,16 +845,20 @@ class GokBallApp {
             scoreBlue: this._hostScoreBlue,
             scorer: scorerName,
             assister: assisterName,
-            ownGoal
+            ownGoal,
+            matchStats: this._hostMatchStats
         });
     }
 
     /** Handle game over in host mode */
-    _hostGameOver() {
+    _hostGameOver(result = {}) {
         if (this._hostGameState === 'ended') return;
-        const winner = this._hostScoreRed > this._hostScoreBlue ? 'red' : 'blue';
+        if (Number.isFinite(result.scoreRed)) this._hostScoreRed = result.scoreRed;
+        if (Number.isFinite(result.scoreBlue)) this._hostScoreBlue = result.scoreBlue;
+        if (Number.isFinite(result.time)) this._hostTimeElapsed = result.time * 60;
+        if (result.matchStats) this._hostMatchStats = result.matchStats;
+        const winner = result.winner || (this._hostScoreRed > this._hostScoreBlue ? 'red' : 'blue');
         this._hostGameState = 'ended';
-        this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'pause', matchEpoch: this._matchEpoch, paused: true });
         this._randomizeTeamJerseys();
 
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
@@ -1372,51 +1163,24 @@ class GokBallApp {
     }
 
     /** Send authoritative state directly to guests through the peer mesh. */
-    _sendAuthorityState(targetPlayerId = null) {
-        this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
-        // Collect last processed input seq for client reconciliation
-        const lastProcessedSeq = {};
-        for (const [pid, seq] of this._lastRemoteInputSeq) {
-            lastProcessedSeq[pid] = seq;
-        }
-
+    _sendAuthorityState(targetPlayerId = null, workerState = this._latestHostSnapshot) {
+        if (!workerState?.physics || !workerState.matchEpoch) return;
         const state = {
+            ...workerState,
             protocolVersion: NETWORK_PROTOCOL_VERSION,
             matchEpoch: this._matchEpoch,
-            tick: this._hostPhysicsTick,
-            snapshotSeq: this._hostAuthoritySendCounter,
-            physicsTick: this._hostPhysicsTick,
-            positionResetId: this._hostPositionResetId,
-            paused: this._isPaused,
+            tick: workerState.physicsTick,
+            physicsTick: workerState.physicsTick,
+            snapshotSeq: workerState.snapshotSeq,
             resuming: this._resumeAnimating,
             resumeDurationMs: 3200,
-            state: this._hostGameState,
-            physics: this.physics.getState(),
-            scoreRed: this._hostScoreRed,
-            scoreBlue: this._hostScoreBlue,
-            time: Math.floor(this._hostTimeElapsed / 60),
-            scoreLimit: this._hostScoreLimit,
-            timeLimit: this._hostTimeLimit,
-            kickOffTeam: this._hostKickOffTeam,
-            lastProcessedSeq
+            fullState: !!targetPlayerId
         };
         if (targetPlayerId) {
             state.fullState = true;
             this.network.sendFullGameState(targetPlayerId, state);
         } else {
             this.network.sendAuthorityState(state);
-        }
-    }
-
-    _releaseConsumedKickInputs() {
-        for (const disc of this.physics.discs) {
-            if (!disc.isPlayer || !disc._autoKickReleased) continue;
-            disc._autoKickReleased = false;
-            if (disc.id === this.network.socket?.id) {
-                this.input.suppressKickUntilKeyUp();
-            } else if (disc.id) {
-                this.network.releasePlayerKick(disc.id);
-            }
         }
     }
 
@@ -1484,14 +1248,15 @@ class GokBallApp {
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             }
             if (this._isHost() && data?.playerId) {
-                this._remoteInputs.delete(data.playerId);
-                this._lastRemoteInputSeq.delete(data.playerId);
+                this._lastReceivedInputSeq.delete(data.playerId);
                 this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'removePlayer', matchEpoch: this._matchEpoch, playerId: data.playerId });
             }
         });
 
         this.network.on('playerReconnected', (data) => {
             if (!this.currentRoomData) return;
+            this._lastReceivedInputSeq.delete(data.previousId);
+            this._lastReceivedInputSeq.set(data.playerId, 0);
             const hostChanged = !!data.hostId && data.hostId !== this.currentRoomData.creatorId;
             if (data.players) this.currentRoomData.players = data.players;
             if (data.creatorId) this.currentRoomData.creatorId = data.creatorId;
@@ -1510,6 +1275,8 @@ class GokBallApp {
             this.network.connectRoomPeers(data);
             this._isHostAuthority = this._isHost();
             if (this.gameRunning && this._isHostAuthority) {
+                this._lastReceivedInputSeq.delete(data.previousId);
+                this._lastReceivedInputSeq.set(data.playerId, 0);
                 this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'rekeyPlayer', matchEpoch: this._matchEpoch, previousId: data.previousId, playerId: data.playerId, players: data.players });
             } else if (this.gameRunning) {
                 this._fullStateReady = false;
@@ -1569,20 +1336,17 @@ class GokBallApp {
         // Remote inputs from other players (relayed by server)
         this.network.on('fullStateRequest', ({ playerId } = {}) => {
             if (!this._isHost() || !this._isHostAuthority || !this.gameRunning || !playerId) return;
-            this._sendAuthorityState(playerId);
+            if (!this._pendingFullStateTargets) this._pendingFullStateTargets = new Set();
+            this._pendingFullStateTargets.add(playerId);
+            this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'fullState', matchEpoch: this._matchEpoch });
         });
 
         this.network.on('remoteInput', (data) => {
-            if (this._isHost() && this._isHostAuthority && data?.playerId && data?.input) {
+            const player = this.currentRoomData?.players?.find(item => item.id === data?.playerId);
+            if (this._isHost() && this._isHostAuthority && player && ['red', 'blue'].includes(player.team) && data?.input) {
                 const seq = data.input._seq || 0;
-                const current = this._remoteInputs.get(data.playerId);
-                const confirmedSeq = this._lastRemoteInputSeq.get(data.playerId) || 0;
-                if (seq <= Math.max(current?.seq || 0, confirmedSeq)) return;
-                this._remoteInputs.set(data.playerId, {
-                    input: data.input,
-                    seq,
-                    receivedAt: performance.now()
-                });
+                if (!Number.isSafeInteger(seq) || seq <= (this._lastReceivedInputSeq.get(data.playerId) || 0)) return;
+                this._lastReceivedInputSeq.set(data.playerId, seq);
                 this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'input', matchEpoch: this._matchEpoch, playerId: data.playerId, seq, input: data.input });
             }
         });
@@ -2027,10 +1791,15 @@ class GokBallApp {
         // Set goal pause flag
         this.physics.inGoalPause = (state.state === 'goal');
 
-        // Add to interpolation buffer for non-host clients
-        if (!this._isHost() || !this._isHostAuthority) {
-            this._snapshotBuffer.addSnapshot(performance.now(), state);
+        // The host's main thread is a render replica too. Applying the snapshot
+        // here creates/removes player discs from the same worker-owned roster
+        // and never advances match physics.
+        if (this._isHost() && this._isHostAuthority && state.physics) {
+            this.physics.applyState(state.physics);
         }
+
+        // Host and guests render from the same tick-based snapshot buffer.
+        this._snapshotBuffer.addSnapshot(performance.now(), state);
 
         // Detect kicks for sound effects
         if (state.physics && state.physics.discs) {

@@ -38,9 +38,16 @@ function makeSignalingHarness(roomFor) {
 }
 
 test('protocol packets require the current explicit version and stay under the wire limit', () => {
-    const encoded = encodeProtocolPacket({ type: 'input', seq: 4 });
+    const encoded = encodeProtocolPacket({ type: 'input', epoch: 'match-a', seq: 4, input: { left: true } });
     assert.equal(isProtocolPacket(JSON.parse(encoded)), true);
-    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION + 1, type: 'input' }), false);
+    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION - 1, type: 'input', epoch: 'match-a', seq: 1, input: {} }), false);
+    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION, type: 'input', seq: 1, input: {} }), false);
+    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION, type: 'input', epoch: 'match-a', seq: 0, input: {} }), false);
+    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION, type: 'state', epoch: 'match-a', tick: 1, seq: 1, state: {} }), false);
+    const state = {
+        protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: 'match-a', physicsTick: 6, snapshotSeq: 9
+    };
+    assert.equal(isProtocolPacket({ v: NETWORK_PROTOCOL_VERSION, type: 'state', epoch: 'match-a', tick: 6, seq: 9, state }), true);
     assert.throws(() => encodeProtocolPacket({ type: 'state', value: 'x'.repeat(70_000) }), RangeError);
 });
 
@@ -52,21 +59,27 @@ test('signaling rejects guests signaling to one another and relays only versione
     const guest = harness.add('guest');
     const other = harness.add('other');
 
-    guest.trigger('p2pJoin', { roomId: 'r1', protocolVersion: 1 });
-    assert.equal(guest.sent.some(item => item.event === 'p2pReady' && item.payload.protocolVersion === 1), true);
+    guest.trigger('p2pJoin', { roomId: 'r1', protocolVersion: NETWORK_PROTOCOL_VERSION });
+    assert.equal(guest.sent.some(item => item.event === 'p2pReady' && item.payload.protocolVersion === NETWORK_PROTOCOL_VERSION), true);
     assert.equal(host.sent.some(item => item.event === 'p2pPeerJoined' && item.payload.peerId === 'guest'), true);
 
-    guest.trigger('p2pRelay', { to: 'other', payload: JSON.stringify({ v: 1, type: 'input', seq: 1 }) });
+    guest.trigger('p2pRelay', { to: 'other', payload: JSON.stringify({ v: NETWORK_PROTOCOL_VERSION, type: 'input', epoch: 'match-a', seq: 1, input: {} }) });
     assert.equal(other.sent.some(item => item.event === 'p2pRelay'), false);
 
-    guest.trigger('p2pRelay', { to: 'host', payload: JSON.stringify({ v: 1, type: 'input', seq: 1 }) });
+    guest.trigger('p2pRelay', { to: 'host', payload: JSON.stringify({ v: NETWORK_PROTOCOL_VERSION, type: 'input', epoch: 'match-a', seq: 1, input: {} }) });
     assert.equal(host.sent.some(item => item.event === 'p2pRelay' && item.volatile), true);
 
-    guest.trigger('p2pRelay', { to: 'host', payload: JSON.stringify({ v: 0, type: 'input', seq: 2 }) });
+    guest.trigger('p2pRelay', { to: 'host', payload: JSON.stringify({ v: NETWORK_PROTOCOL_VERSION - 1, type: 'input', epoch: 'match-a', seq: 2, input: {} }) });
+    assert.equal(host.sent.filter(item => item.event === 'p2pRelay').length, 1);
+    guest.trigger('p2pRelay', { to: 'host', payload: JSON.stringify({ v: NETWORK_PROTOCOL_VERSION, type: 'input', seq: 3, input: {} }) });
     assert.equal(host.sent.filter(item => item.event === 'p2pRelay').length, 1);
 
-    guest.trigger('p2pSignal', { to: 'other', type: 'offer', payload: { type: 'offer', sdp: 'x' } });
+    guest.trigger('p2pSignal', { protocolVersion: NETWORK_PROTOCOL_VERSION, to: 'other', type: 'offer', payload: { type: 'offer', sdp: 'x' } });
     assert.equal(other.sent.some(item => item.event === 'p2pSignal'), false);
+    guest.trigger('p2pSignal', { protocolVersion: NETWORK_PROTOCOL_VERSION, to: 'host', type: 'offer', payload: { type: 'offer', sdp: 'x' } });
+    assert.equal(host.sent.some(item => item.event === 'p2pSignal' && item.payload.from === 'guest'), true);
+    guest.trigger('p2pSignal', { protocolVersion: NETWORK_PROTOCOL_VERSION - 1, to: 'host', type: 'offer', payload: { type: 'offer', sdp: 'x' } });
+    assert.equal(guest.sent.some(item => item.event === 'p2pError' && item.payload.expected === NETWORK_PROTOCOL_VERSION), true);
 });
 
 test('room Game lifecycle publishes metadata without constructing a physics simulation', () => {
@@ -82,7 +95,7 @@ test('room Game lifecycle publishes metadata without constructing a physics simu
     assert.equal(game.state, 'playing');
     assert.equal(game.physics, undefined);
     assert.equal(broadcasts[0].event, 'gameStarted');
-    assert.equal(broadcasts[0].data.protocolVersion, 1);
+    assert.equal(broadcasts[0].data.protocolVersion, NETWORK_PROTOCOL_VERSION);
     game.stop();
     assert.equal(game.state, 'stopped');
 });

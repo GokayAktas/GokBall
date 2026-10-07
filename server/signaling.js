@@ -1,3 +1,5 @@
+import { isProtocolPacket } from '../src/network/Protocol.js';
+
 /**
  * WebRTC signaling and real-time relay fallback for a match.
  *
@@ -30,11 +32,11 @@ if (TURN_URLS.length && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL
 }
 const MAX_SIGNAL_BYTES = 64 * 1024;
 const MAX_RELAY_BYTES = 64 * 1024;
+const NETWORK_PROTOCOL_VERSION = 2;
 
 function packetSize(value) {
     try { return Buffer.byteLength(JSON.stringify(value), 'utf8'); } catch { return Infinity; }
 }
-
 function isPeerPair(room, firstId, secondId) {
     return !!room && room.players.has(firstId) && room.players.has(secondId) &&
         (firstId === room.hostId || secondId === room.hostId);
@@ -55,8 +57,8 @@ export function attachSignaling(io, ctx) {
         // --- Ask to be connected to the room host ---
         socket.on('p2pJoin', (data = {}) => {
             const { roomId, protocolVersion } = data || {};
-            if (protocolVersion !== 1) {
-                socket.emit('p2pError', { error: 'Uyumsuz ağ protokolü', expected: 1, received: protocolVersion });
+            if (protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+                socket.emit('p2pError', { error: 'Uyumsuz ağ protokolü', expected: NETWORK_PROTOCOL_VERSION, received: protocolVersion });
                 return;
             }
             const room = ctx.getPlayerRoom(socket.id);
@@ -69,7 +71,7 @@ export function attachSignaling(io, ctx) {
             const hostSocket = io.sockets.sockets.get(room.hostId);
             if (!hostSocket || room.hostId === socket.id) {
                 // Nobody to connect to: a solo host does not need a peer link
-                socket.emit('p2pReady', { initiator: false, solo: true, protocolVersion: 1 });
+                socket.emit('p2pReady', { initiator: false, solo: true, protocolVersion: NETWORK_PROTOCOL_VERSION });
                 return;
             }
 
@@ -79,7 +81,7 @@ export function attachSignaling(io, ctx) {
                 initiator: true,
                 hostId: room.hostId,
                 iceServers: ICE_SERVERS,
-                protocolVersion: 1
+                protocolVersion: NETWORK_PROTOCOL_VERSION
             });
 
             // Tell the host a peer is waiting so it can answer later
@@ -87,14 +89,18 @@ export function attachSignaling(io, ctx) {
                 peerId: socket.id,
                 name: room.players.get(socket.id)?.name || 'Oyuncu',
                 iceServers: ICE_SERVERS,
-                protocolVersion: 1
+                protocolVersion: NETWORK_PROTOCOL_VERSION
             });
         });
 
         // --- Relay offer / answer / ICE between two peers ---
         // The server forwards the payload untouched and never inspects it.
         socket.on('p2pSignal', (data = {}) => {
-            const { to, type, payload } = data || {};
+            const { to, type, payload, protocolVersion } = data || {};
+            if (protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+                socket.emit('p2pError', { error: 'Uyumsuz ağ protokolü', expected: NETWORK_PROTOCOL_VERSION, received: protocolVersion });
+                return;
+            }
             if (!to || !['offer', 'answer', 'ice'].includes(type) || typeof payload === 'undefined' || packetSize(payload) > MAX_SIGNAL_BYTES) return;
 
             // Only relay inside the same room, so a peer cannot use the
@@ -106,7 +112,7 @@ export function attachSignaling(io, ctx) {
             const target = io.sockets.sockets.get(to);
             if (!target) return;
 
-            target.emit('p2pSignal', { from: socket.id, type, payload });
+            target.emit('p2pSignal', { from: socket.id, protocolVersion: NETWORK_PROTOCOL_VERSION, type, payload });
         });
 
         // --- Either side reports the direct channel is usable ---
@@ -115,7 +121,7 @@ export function attachSignaling(io, ctx) {
             const room = ctx.getPlayerRoom(socket.id);
             if (!isPeerPair(room, socket.id, to)) return;
             const target = to && io.sockets.sockets.get(to);
-            if (target) target.emit('p2pPeerReady', { peerId: socket.id, protocolVersion: 1 });
+            if (target) target.emit('p2pPeerReady', { peerId: socket.id, protocolVersion: NETWORK_PROTOCOL_VERSION });
         });
 
         // --- Reverse connection / relay fallback ---
@@ -127,7 +133,7 @@ export function attachSignaling(io, ctx) {
             if (!to || typeof payload !== 'string' || Buffer.byteLength(payload, 'utf8') > MAX_RELAY_BYTES) return;
             let packet;
             try { packet = JSON.parse(payload); } catch { return; }
-            if (packet?.v !== 1 || !['input', 'state', 'ping', 'pong'].includes(packet.type)) return;
+            if (!isProtocolPacket(packet)) return;
 
             const senderRoom = ctx.getPlayerRoom(socket.id);
             const targetRoom = ctx.getPlayerRoom(to);
