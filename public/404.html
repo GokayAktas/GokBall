@@ -3,30 +3,193 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#071411">
+  <meta name="theme-color" content="#101318">
   <title>404 | GokBall</title>
   <style>
-    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#071411;color:#f0f5ef;font-synthesis:none}
-    *{box-sizing:border-box}body{min-height:100svh;margin:0;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 112%,#1f4b31 0,transparent 52%),linear-gradient(145deg,#0d2119,#071411 62%)}
-    body:before,body:after{content:"";position:fixed;inset:0;pointer-events:none}body:before{opacity:.13;background:repeating-linear-gradient(90deg,transparent 0 9.7%,#b8d7b1 9.8% 10%,transparent 10.1% 20%);mask-image:linear-gradient(transparent 8%,#000 100%)}body:after{border:1px solid #71977435;inset:20px;border-radius:24px}
-    main{position:relative;width:min(680px,calc(100% - 40px));padding:clamp(30px,7vw,68px);border:1px solid #aec7a52a;border-radius:28px;background:linear-gradient(145deg,#152a20e8,#0c1b15ed);box-shadow:0 32px 100px #0008;text-align:center}
-    .brand{display:inline-flex;align-items:center;gap:10px;margin-bottom:54px;color:#aac2a9;font-size:12px;font-weight:800;letter-spacing:.24em;text-transform:uppercase}.ball{width:25px;height:25px;border:2px solid #c8f07b;border-radius:50%;display:grid;place-items:center;color:#c8f07b;font-size:12px;box-shadow:0 0 24px #bdf56855}
-    .score{display:flex;align-items:center;justify-content:center;gap:clamp(18px,5vw,48px);margin:0 auto 16px}.digit{font-size:clamp(92px,22vw,174px);font-weight:950;line-height:.85;letter-spacing:-.095em;color:#f5f8ed;text-shadow:0 10px 40px #0005}.divider{height:92px;width:1px;background:linear-gradient(transparent,#b4c8a777,transparent);transform:rotate(18deg)}
-    .error{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #dd756045;border-radius:999px;background:#dc5b3512;color:#ff9b7e;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.error i{width:6px;height:6px;border-radius:50%;background:#ff8065;box-shadow:0 0 12px #ff8065}
-    h1{margin:24px 0 10px;font-size:clamp(25px,5vw,38px);letter-spacing:-.045em}p{max-width:400px;margin:0 auto;color:#a8b9ad;font-size:15px;line-height:1.7}.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:34px}a{min-height:48px;padding:0 20px;display:inline-flex;align-items:center;justify-content:center;border-radius:13px;color:#f4f7ef;font-size:13px;font-weight:800;text-decoration:none;transition:transform .18s,background .18s}a:hover{transform:translateY(-2px)}.primary{background:#c8f07b;color:#172416;box-shadow:0 10px 30px #b8eb6b24}.primary:hover{background:#d5ff8b}.secondary{border:1px solid #aec7a52c;background:#ffffff07}.secondary:hover{background:#ffffff12}
-    .field{position:absolute;left:50%;bottom:-180px;width:440px;height:290px;border:1px solid #c4e6a51c;border-radius:50%;transform:translateX(-50%);pointer-events:none}.field:before{content:"";position:absolute;inset:34px 82px;border:1px solid #c4e6a516;border-radius:50%}.field:after{content:"";position:absolute;top:50%;left:50%;width:9px;height:9px;border-radius:50%;background:#c8f07b;box-shadow:0 0 28px 9px #c8f07b55;transform:translate(-50%,-50%)}
-    @media(max-width:480px){.brand{margin-bottom:40px}main{padding:34px 22px}.field{width:320px}}
+    :root {
+      color-scheme: dark;
+      --ink: #101318;
+      --panel: #191b22;
+      --blue: #448aff;
+      --green: #00e676;
+      --paper: #fff;
+      --muted: #aeb4c0;
+      --stroke: #08090c;
+      font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+      background: var(--ink);
+      color: var(--paper);
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100svh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      padding: 28px;
+      background-color: var(--ink);
+      background-image: radial-gradient(#448aff38 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      content: "";
+      pointer-events: none;
+      background: linear-gradient(135deg, #101318e8 15%, #101318b5 60%, #101318ef);
+    }
+    main {
+      position: relative;
+      width: min(760px, 100%);
+      padding: clamp(26px, 6vw, 58px);
+      border: 4px solid var(--stroke);
+      background: var(--panel);
+      box-shadow: 12px 12px 0 var(--blue), 16px 16px 0 var(--stroke);
+      text-align: left;
+      animation: arrive 420ms cubic-bezier(.2,.8,.2,1) both;
+    }
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: clamp(38px, 8vw, 68px);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+    .brand { display: inline-flex; align-items: center; gap: 10px; }
+    .brand-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 3px solid var(--stroke);
+      background: var(--green);
+      color: var(--ink);
+      font-size: 19px;
+      line-height: 1;
+      box-shadow: 3px 3px 0 var(--stroke);
+    }
+    .tag {
+      padding: 8px 10px;
+      border: 2px solid var(--stroke);
+      background: var(--blue);
+      box-shadow: 3px 3px 0 var(--stroke);
+      white-space: nowrap;
+    }
+    .hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 22px; }
+    .code {
+      margin: 0 0 10px -8px;
+      color: var(--blue);
+      font-size: clamp(112px, 27vw, 224px);
+      font-weight: 900;
+      letter-spacing: -.105em;
+      line-height: .76;
+      text-shadow: 6px 6px 0 var(--stroke), 10px 10px 0 #00e676;
+    }
+    .ball-wrap {
+      display: grid;
+      width: clamp(66px, 13vw, 110px);
+      aspect-ratio: 1;
+      place-items: center;
+      margin-bottom: 8px;
+      border: 4px solid var(--stroke);
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 6px 6px 0 var(--stroke);
+      transform: rotate(-13deg);
+    }
+    .ball { width: 60%; height: 60%; color: var(--ink); }
+    .eyebrow {
+      display: inline-block;
+      margin: 34px 0 14px;
+      padding: 8px 12px;
+      border: 3px solid var(--stroke);
+      background: var(--green);
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      box-shadow: 4px 4px 0 var(--stroke);
+    }
+    h1 { max-width: 570px; margin: 0 0 12px; font-size: clamp(28px, 5vw, 44px); font-weight: 900; letter-spacing: -.055em; line-height: 1.05; }
+    p { max-width: 500px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
+    .actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+    a {
+      min-height: 50px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 18px;
+      border: 3px solid var(--stroke);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 900;
+      text-decoration: none;
+      transition: transform 140ms ease, box-shadow 140ms ease;
+      box-shadow: 5px 5px 0 var(--stroke);
+    }
+    a:hover { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--stroke); }
+    a:focus-visible { outline: 3px dashed var(--green); outline-offset: 5px; }
+    .primary { background: var(--blue); }
+    .secondary { background: #242832; }
+    .field-mark {
+      position: absolute;
+      right: 28px;
+      bottom: 20px;
+      width: 96px;
+      height: 38px;
+      border: 2px solid #aeb4c044;
+      border-radius: 50%;
+      opacity: .6;
+    }
+    .field-mark::before { position: absolute; inset: 7px 31px; content: ""; border: 2px solid #aeb4c044; border-radius: 50%; }
+    .field-mark::after { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; content: ""; border-radius: 50%; background: var(--blue); transform: translate(-50%, -50%); }
+    @keyframes arrive { from { opacity: 0; transform: translateY(14px) rotate(-.5deg); } to { opacity: 1; transform: translateY(0) rotate(0); } }
+    @media (max-width: 520px) {
+      body { padding: 20px; }
+      main { padding: 25px 22px 34px; box-shadow: 8px 8px 0 var(--blue), 11px 11px 0 var(--stroke); }
+      .topline { align-items: flex-start; margin-bottom: 50px; font-size: 10px; }
+      .hero { grid-template-columns: 1fr; }
+      .ball-wrap { position: absolute; top: 104px; right: 24px; width: 66px; }
+      .code { font-size: clamp(112px, 36vw, 170px); }
+      .eyebrow { margin-top: 28px; }
+      .field-mark { right: 15px; bottom: 12px; transform: scale(.75); transform-origin: bottom right; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <main>
-    <div class="brand"><span class="ball">✦</span> GokBall · Maç alanı</div>
-    <div class="score" aria-label="Hata kodu 404"><span class="digit">4</span><span class="divider"></span><span class="digit">04</span></div>
-    <span class="error"><i></i> Sayfa bulunamadı</span>
+    <div class="topline">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">G</span> GokBall</div>
+      <span class="tag">Maç alanı / 404</span>
+    </div>
+    <section class="hero" aria-label="Hata kodu 404">
+      <div class="code">404</div>
+      <div class="ball-wrap" aria-hidden="true">
+        <svg class="ball" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="3"/>
+          <path d="m32 19 9 6-3 11H26l-3-11 9-6Zm0 0v-9m9 15 9-4m-12 16 5 9m-17-9-5 9m-3-21-9-4" stroke="currentColor" stroke-width="3" stroke-linecap="square"/>
+        </svg>
+      </div>
+    </section>
+    <span class="eyebrow">Sayfa bulunamadı</span>
     <h1>Bu maç burada oynanmıyor.</h1>
-    <p>Aradığın sayfa sahadan çıkmış olabilir. Ana menüye dönüp maça yeniden katılabilirsin.</p>
-    <div class="actions"><a class="primary" href="/">Ana menüye dön <span aria-hidden="true">&nbsp;↗</span></a><a class="secondary" href="javascript:history.back()">Önceki sayfa</a></div>
-    <div class="field" aria-hidden="true"></div>
+    <p>Aradığın sayfa sahanın dışına çıkmış olabilir. Ana menüye dönüp oyuna kaldığın yerden devam edebilirsin.</p>
+    <div class="actions">
+      <a class="primary" href="/">Ana menüye dön <span aria-hidden="true">↗</span></a>
+      <a class="secondary" href="javascript:history.back()">Önceki sayfa</a>
+    </div>
+    <div class="field-mark" aria-hidden="true"></div>
   </main>
 </body>
 </html>

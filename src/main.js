@@ -318,10 +318,15 @@ class GokBallApp {
         }
         this.physics.ballSpeedMultiplier = roomData?.ballSpeedMultiplier || 1;
 
-        if (this._isHostAuthority && this._stadiumReady) {
-            this._initHostGame();
-            this._hostSpawnAllPlayers();
-            this._startHostPhysicsWorker();
+        if (this._stadiumReady) {
+            // Seed every client from the room roster before the first host
+            // snapshot arrives. Guests can otherwise briefly render an empty
+            // field while the reliable full-state request is in flight.
+            this._spawnRoomPlayers();
+            if (this._isHostAuthority) {
+                this._initHostGame();
+                this._startHostPhysicsWorker();
+            }
         }
 
         // Hide UI, show game
@@ -745,8 +750,8 @@ class GokBallApp {
         this._sendAuthorityState(null, state);
     }
 
-    /** Spawn discs for ALL players in host mode */
-    _hostSpawnAllPlayers() {
+    /** Seed visible player discs from the room roster on every client. */
+    _spawnRoomPlayers() {
         // Remove existing player discs
         const toRemove = [];
         for (let i = 0; i < this.physics.discs.length; i++) {
@@ -1702,7 +1707,15 @@ class GokBallApp {
             this.physics.loadStadium(stadium);
             this._networkStaticDiscCount = this.physics.discs.length;
             this._currentStadium = stadium;
+            this._stadiumReady = true;
             this.renderer._stadiumDirty = true;
+            if (!this._fullStateReady) {
+                this._spawnRoomPlayers();
+                if (this._isHostAuthority && !this._hostPhysicsWorker) {
+                    this._initHostGame();
+                    this._startHostPhysicsWorker();
+                }
+            }
         }
     }
 
