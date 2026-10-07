@@ -71,7 +71,7 @@ test('local rendering bounds large network corrections without changing small st
 
 test('full state validation requires match identity, tick, scores and finite disc physics', () => {
     const valid = {
-        fullState: true, matchEpoch: 'match-a', snapshotSeq: 10, physicsTick: 9,
+        protocolVersion: 1, fullState: true, state: 'playing', matchEpoch: 'match-a', snapshotSeq: 10, physicsTick: 9,
         scoreRed: 1, scoreBlue: 0, time: 12, scoreLimit: 3, timeLimit: 180,
         physics: { discs: [{ x: 1, y: 2, sx: 0, sy: 0 }] }
     };

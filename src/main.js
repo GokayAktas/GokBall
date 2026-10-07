@@ -27,6 +27,7 @@ import { limitRenderPosition } from './network/RenderSmoothing.js';
 import { NetworkDebugPanel } from './ui/components/NetworkDebugPanel.js';
 import { pingLevel } from './ui/components/PingBadge.js';
 import { pickRandomJersey } from './ui/screens/JerseyPresets.js';
+import { NETWORK_PROTOCOL_VERSION } from './network/Protocol.js';
 
 const MAX_LOCAL_RENDER_CORRECTION = 4;
 const MAX_LOCAL_RENDER_FRAME_MS = 33;
@@ -96,6 +97,8 @@ class GokBallApp {
         this._hostTimeLimit = 180;
         this._hostKickOffTeam = 'red';
         this._hostAuthoritySendCounter = 0;
+        this._hostPhysicsWorker = null;
+        this._hostWorkerTick = 0;
 
         // Latency data published by the server (every 2s)
         this._peerHostRtt = null; // measured host RTT over the active WebRTC route
@@ -292,7 +295,8 @@ class GokBallApp {
         this.gameRunning = true;
         this.currentRoomData = roomData;
         this.network.setAuthorityStreamActive(false);
-        this._firstStateReceived = false; // Wait for initial server state before client prediction
+        this._isHostAuthority = this._isHost();
+        this._firstStateReceived = this._isHostAuthority;
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
         this._snapshotBuffer.clear();
         this._remoteRenderPositions.clear();
@@ -318,6 +322,12 @@ class GokBallApp {
         }
         this.physics.ballSpeedMultiplier = roomData?.ballSpeedMultiplier || 1;
 
+        if (this._isHostAuthority && this._stadiumReady) {
+            this._initHostGame();
+            this._hostSpawnAllPlayers();
+            this._startHostPhysicsWorker();
+        }
+
         // Hide UI, show game
         this.ui.hideAll();
         this.renderer.show();
@@ -339,7 +349,7 @@ class GokBallApp {
         clearInterval(this._physicsTimer);
         this._physicsTimer = null;
         clearInterval(this._resyncTimer);
-        if (!this._fullStateReady) {
+        if (!this._isHostAuthority && !this._fullStateReady) {
             this.network.requestFullState();
             this._resyncTimer = setInterval(() => {
                 if (!this.gameRunning) return;
@@ -356,6 +366,11 @@ class GokBallApp {
 
     stopGame() {
         this.gameRunning = false;
+        if (this._hostPhysicsWorker) {
+            this._hostPhysicsWorker.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'stop' });
+            this._hostPhysicsWorker.terminate();
+            this._hostPhysicsWorker = null;
+        }
         clearInterval(this._physicsTimer);
         clearInterval(this._resyncTimer);
         this._physicsTimer = null;
@@ -387,6 +402,19 @@ class GokBallApp {
 
     _physicsLoop(now = performance.now()) {
         if (!this.gameRunning || !this._physicsClock) return;
+        if (this._isHostAuthority) {
+            this._physicsClock.advance(now, () => {
+                const playerId = this.network.socket?.id;
+                if (!playerId || !this._hostPhysicsWorker || this._isPaused) return;
+                const input = this.input.getInput();
+                const seq = this.network.sendInput(input);
+                this._hostPhysicsWorker.postMessage({
+                    v: NETWORK_PROTOCOL_VERSION, type: 'input', matchEpoch: this._matchEpoch,
+                    playerId, seq, input
+                });
+            });
+            return;
+        }
         this._authorityStateDirty = false;
         this._physicsClock.advance(now, (stepIndex, dueSteps) => {
             if (!this.gameRunning) return;
@@ -821,6 +849,85 @@ class GokBallApp {
         console.log('[GokBall] Host game state initialized');
     }
 
+    _startHostPhysicsWorker() {
+        if (this._hostPhysicsWorker) this._hostPhysicsWorker.terminate();
+        const worker = new Worker(new URL('./network/HostPhysicsWorker.js', import.meta.url), { type: 'module' });
+        this._hostPhysicsWorker = worker;
+        this._hostWorkerTick = 0;
+        worker.onmessage = ({ data }) => this._handleHostWorkerMessage(data);
+        worker.onerror = (error) => {
+            console.error('[Network] Host physics worker failed:', error.message || error);
+            this.chat.addMessage({ message: 'Host fizik simülasyonu durdu. Maçı yeniden başlatın.', system: true });
+        };
+        worker.postMessage({
+            v: NETWORK_PROTOCOL_VERSION,
+            type: 'init',
+            matchEpoch: this._matchEpoch,
+            stadium: this._currentStadium,
+            players: this.currentRoomData?.players || [],
+            teamColors: this.currentRoomData?.teamColors || {},
+            playerSpeedMultiplier: this.currentRoomData?.playerSpeedMultiplier || 1,
+            ballSpeedMultiplier: this.currentRoomData?.ballSpeedMultiplier || 1
+        });
+        this.network.socket?.emit('hostMatchStarted', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch });
+    }
+
+    _handleHostWorkerMessage(message) {
+        if (!this.gameRunning || message?.v !== NETWORK_PROTOCOL_VERSION || message.matchEpoch !== this._matchEpoch) return;
+        if (this._hostGameState === 'ended') return;
+        if (message.type === 'goal') {
+            this._hostPhysicsTick = message.tick;
+            this._hostLastToucher = message.lastTouchedBy;
+            this._hostHandleGoal(message.team);
+            return;
+        }
+        if (message.type === 'goalPauseEnded') {
+            this._hostGameState = 'playing';
+            this._hostGoalPauseTicks = 0;
+            this._hostPositionResetId++;
+            if (this._hostScoreLimit > 0 && (this._hostScoreRed >= this._hostScoreLimit || this._hostScoreBlue >= this._hostScoreLimit)) {
+                this._hostGameOver();
+            } else {
+                this.network.socket?.emit('hostMatchState', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch, state: 'playing' });
+            }
+            return;
+        }
+        if (message.type !== 'snapshot' || !message.state) return;
+        if (message.kickHappened) this.audio.playKick();
+        if (message.saveDetected) {
+            const player = this.currentRoomData?.players?.find(item => item.id === message.saveDetected);
+            const oldStats = this._hostMatchStats[message.saveDetected] || { goals: 0, assists: 0, saves: 0, ownGoals: 0, name: player?.name || '', team: player?.team };
+            oldStats.saves++;
+            this._hostMatchStats[message.saveDetected] = oldStats;
+        }
+
+        const previousTick = this._hostWorkerTick;
+        this._hostWorkerTick = Math.max(previousTick, message.tick);
+        this._hostPhysicsTick = message.tick;
+        this.physics.applyState(message.state);
+        // The authority renders the worker's exact positions. Smoothing is
+        // reserved for remote replicas; feeding it back into host physics made
+        // the host view lag behind the worker's collision timeline.
+        message.state.discs.forEach((snapshot, index) => {
+            const disc = this.physics.discs[index];
+            if (!disc) return;
+            disc.pos.x = snapshot.x; disc.pos.y = snapshot.y;
+            disc.speed.x = snapshot.sx; disc.speed.y = snapshot.sy;
+        });
+        this._lastRemoteInputSeq = new Map(Object.entries(message.lastProcessedSeq || {}).map(([id, seq]) => [id, Number(seq) || 0]));
+        if (message.lastTouchedBy && message.lastTouchedBy !== this._hostLastToucher) {
+            this._hostPrevToucher = this._hostLastToucher;
+            this._hostLastToucher = message.lastTouchedBy;
+        }
+        this._hostGameState = message.goalPauseTicks > 0 ? 'goal' : 'playing';
+        this._hostGoalPauseTicks = message.goalPauseTicks || 0;
+        this._isPaused = !!message.paused;
+        if (!this.physics.kickOffReset && this._hostGameState === 'playing') this._hostTimeElapsed += Math.max(0, message.tick - previousTick);
+        if (this._hostTimeLimit > 0 && this._hostTimeElapsed / 60 >= this._hostTimeLimit && this._hostScoreRed !== this._hostScoreBlue) this._hostGameOver();
+        this.scoreboard.update(this._hostScoreRed, this._hostScoreBlue, Math.floor(this._hostTimeElapsed / 60), this._hostTimeLimit);
+        this._sendAuthorityState();
+    }
+
     /** Spawn discs for ALL players in host mode */
     _hostSpawnAllPlayers() {
         // Remove existing player discs
@@ -944,6 +1051,8 @@ class GokBallApp {
 
         // Send goalScored event to server for relay to other players
         this.network.socket?.emit('hostGoalEvent', {
+            protocolVersion: NETWORK_PROTOCOL_VERSION,
+            matchEpoch: this._matchEpoch,
             team: scoringTeam,
             scoreRed: this._hostScoreRed,
             scoreBlue: this._hostScoreBlue,
@@ -955,8 +1064,10 @@ class GokBallApp {
 
     /** Handle game over in host mode */
     _hostGameOver() {
+        if (this._hostGameState === 'ended') return;
         const winner = this._hostScoreRed > this._hostScoreBlue ? 'red' : 'blue';
         this._hostGameState = 'ended';
+        this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'pause', matchEpoch: this._matchEpoch, paused: true });
         this._randomizeTeamJerseys();
 
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
@@ -977,6 +1088,8 @@ class GokBallApp {
 
         // Send game over to server for relay to other players
         this.network.socket?.emit('hostGameOverEvent', {
+            protocolVersion: NETWORK_PROTOCOL_VERSION,
+            matchEpoch: this._matchEpoch,
             winner: winner,
             scoreRed: this._hostScoreRed,
             scoreBlue: this._hostScoreBlue,
@@ -1072,6 +1185,7 @@ class GokBallApp {
         if (this._resumeAnimating) {
             this._cancelResumeAnimation();
             this._showPauseOverlay();
+            this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'pause', matchEpoch: this._matchEpoch, paused: true });
             this.network.socket?.emit('pauseGame', { paused: true });
             if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             return;
@@ -1083,6 +1197,7 @@ class GokBallApp {
         } else {
             // Pause immediately
             this._isPaused = true;
+            this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'pause', matchEpoch: this._matchEpoch, paused: true });
             this._showPauseOverlay();
             this.network.socket?.emit('pauseGame', { paused: true });
         }
@@ -1149,6 +1264,7 @@ class GokBallApp {
             this._resumeTimeout = null;
             this._resumeAnimating = false;
             this._isPaused = false;
+            this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'pause', matchEpoch: this._matchEpoch, paused: false });
             this._removePauseOverlay();
             document.getElementById('gameCanvas')?.classList.remove('paused');
             this.network.socket?.emit('pauseGame', { paused: false });
@@ -1176,6 +1292,7 @@ class GokBallApp {
         if (!players) return;
         const playerData = players.find(p => p.id === playerId);
         if (!playerData) return;
+        this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'updatePlayer', matchEpoch: this._matchEpoch, playerId, players });
         
         // Find existing disc
         const existingDisc = this.physics.discs.find(d => d.id === playerId || d.ownerId === playerId);
@@ -1264,6 +1381,7 @@ class GokBallApp {
         }
 
         const state = {
+            protocolVersion: NETWORK_PROTOCOL_VERSION,
             matchEpoch: this._matchEpoch,
             tick: this._hostPhysicsTick,
             snapshotSeq: this._hostAuthoritySendCounter,
@@ -1307,7 +1425,8 @@ class GokBallApp {
         this.network.on('roomCreated', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
-            this._isHostAuthority = false;
+            this._isHostAuthority = true;
+            this.network.connectRoomPeers(data);
             this._peerHostRtt = null;
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
@@ -1318,6 +1437,7 @@ class GokBallApp {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
             this._isHostAuthority = false;
+            this.network.connectRoomPeers(data);
             this._peerHostRtt = null;
             // New room: force the next ping snapshot to repaint the player list
             this._pingSignature = null;
@@ -1342,10 +1462,19 @@ class GokBallApp {
             alert(data.error || 'Bir hata olu\u015ftu');
         });
 
+        this.network.on('protocolMismatch', () => {
+            alert('Oyunun ağ protokolü uyumsuz. Sayfayı yenileyip güncel sürüme bağlanın.');
+        });
+
+
         this.network.on('playerJoined', (data) => {
             if (this.currentRoomData && data.players) {
                 this.currentRoomData.players = data.players;
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+                if (this._isHostAuthority && this.gameRunning) {
+                    const player = data.players.find(item => item.id === data.playerId);
+                    if (player) this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'addPlayer', matchEpoch: this._matchEpoch, player });
+                }
             }
         });
 
@@ -1357,7 +1486,40 @@ class GokBallApp {
             if (this._isHost() && data?.playerId) {
                 this._remoteInputs.delete(data.playerId);
                 this._lastRemoteInputSeq.delete(data.playerId);
+                this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'removePlayer', matchEpoch: this._matchEpoch, playerId: data.playerId });
             }
+        });
+
+        this.network.on('playerReconnected', (data) => {
+            if (!this.currentRoomData) return;
+            const hostChanged = !!data.hostId && data.hostId !== this.currentRoomData.creatorId;
+            if (data.players) this.currentRoomData.players = data.players;
+            if (data.creatorId) this.currentRoomData.creatorId = data.creatorId;
+            this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'rekeyPlayer', matchEpoch: this._matchEpoch, previousId: data.previousId, playerId: data.playerId, players: data.players });
+            if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+            if (hostChanged) {
+                this.network.connectRoomPeers({ ...this.currentRoomData, creatorId: data.hostId, adminId: data.hostId });
+                if (!this._isHost()) this.network.requestFullState(this._matchEpoch || null);
+            }
+        });
+
+        this.network.on('roomResumed', (data) => {
+            this.currentRoomData = data;
+            this.currentRoomData.creatorId = data.creatorId;
+            this.physics.myPlayerId = this.network.socket?.id;
+            this.network.connectRoomPeers(data);
+            this._isHostAuthority = this._isHost();
+            if (this.gameRunning && this._isHostAuthority) {
+                this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'rekeyPlayer', matchEpoch: this._matchEpoch, previousId: data.previousId, playerId: data.playerId, players: data.players });
+            } else if (this.gameRunning) {
+                this._fullStateReady = false;
+                this.network.requestFullState(this._matchEpoch || null);
+            }
+            if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
+        });
+
+        this.network.on('resumeRoomError', (data) => {
+            console.warn('[Network] Room resume failed:', data?.error || 'unknown reason');
         });
 
         this.network.on('teamChanged', (data) => {
@@ -1384,20 +1546,24 @@ class GokBallApp {
         });
 
         this.network.on('gameStarted', (data) => {
+            if (data?.protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+                this.network._trigger('protocolMismatch', { expected: NETWORK_PROTOCOL_VERSION, received: data?.protocolVersion });
+                return;
+            }
             if (data?.roomData) {
                 this.currentRoomData = data.roomData;
                 this.stadiumData = data.roomData.stadium || this.stadiumData;
             }
 
             // Check if this is host-authority mode
-            this._isHostAuthority = false;
+            this._isHostAuthority = this._isHost();
 
             this._serverGameState = 'playing';
             this.startGame(this.currentRoomData); // Loads stadium
 
             // IMPORTANT: Spawn player discs AFTER startGame loaded the stadium
             // Otherwise startGame's loadStadium clears all discs
-            if (data?.state?.matchEpoch) this._handleGameState(data.state, !!data.state.fullState);
+            if (!this._isHostAuthority && data?.state?.matchEpoch) this._handleGameState(data.state, !!data.state.fullState);
         });
 
         // Remote inputs from other players (relayed by server)
@@ -1417,6 +1583,7 @@ class GokBallApp {
                     seq,
                     receivedAt: performance.now()
                 });
+                this._hostPhysicsWorker?.postMessage({ v: NETWORK_PROTOCOL_VERSION, type: 'input', matchEpoch: this._matchEpoch, playerId: data.playerId, seq, input: data.input });
             }
         });
 
@@ -1664,6 +1831,11 @@ class GokBallApp {
                     this.currentRoomData.ballSpeedMultiplier = data.ballSpeedMultiplier;
                     this.physics.ballSpeedMultiplier = data.ballSpeedMultiplier;
                 }
+                if (this._isHostAuthority) this._hostPhysicsWorker?.postMessage({
+                    v: NETWORK_PROTOCOL_VERSION, type: 'settings', matchEpoch: this._matchEpoch,
+                    playerSpeedMultiplier: this.currentRoomData.playerSpeedMultiplier || 1,
+                    ballSpeedMultiplier: this.currentRoomData.ballSpeedMultiplier || 1
+                });
                 if (this.inGameMenu.isVisible) this.inGameMenu.render(this.currentRoomData);
             }
         });
@@ -1675,6 +1847,10 @@ class GokBallApp {
                 if (data.team && data.teamColors) {
                     this.currentRoomData.teamColors[data.team] = data.teamColors;
                 }
+                if (this._isHostAuthority) this._hostPhysicsWorker?.postMessage({
+                    v: NETWORK_PROTOCOL_VERSION, type: 'teamColors', matchEpoch: this._matchEpoch,
+                    teamColors: this.currentRoomData.teamColors
+                });
                 const lobby = this.ui.screens.roomLobby;
                 if (this.ui.currentScreen === 'roomLobby' && lobby) {
                     lobby.updateTeamColors(this.currentRoomData.teamColors);
@@ -1770,7 +1946,7 @@ class GokBallApp {
         // Skip if stadium hasn't loaded yet (race condition guard)
         if (this.gameRunning && !this._stadiumReady) return;
 
-        if (!state?.matchEpoch) return; // Untrusted server placeholders cannot seed host-authority simulation.
+        if (state?.protocolVersion !== NETWORK_PROTOCOL_VERSION || !state?.matchEpoch) return;
         if (isFullState) {
             if (this._matchEpoch !== state.matchEpoch) {
                 this._snapshotBuffer.clear();
@@ -1781,6 +1957,8 @@ class GokBallApp {
             }
             this._matchEpoch = state.matchEpoch;
             this._fullStateReady = true;
+            this._firstStateReceived = true;
+            this.network.setAuthorityStreamActive(true);
         } else {
             if (!this._fullStateReady) return;
             if (state.matchEpoch !== this._matchEpoch) {

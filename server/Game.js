@@ -1,592 +1,54 @@
 /**
- * Server-side Game manager
- * Manages game state, scoring, and physics simulation
+ * Room-side match lifecycle and settings. Physics is owned by the room host's
+ * Dedicated Worker; this class never advances a match simulation.
  */
-import { GamePhysics } from './physics/GamePhysics.js';
-
 export class Game {
     constructor(room) {
         this.room = room;
-        this.physics = new GamePhysics();
-        this._goalCooldownUntil = 0; // tick count until we ignore further goals
-        this._forceKickOffIgnoreUntil = 0; // timestamp to ignore incoming kickOffTeam from admin right after start
-        this._lastGoalTeam = null; // track last detected goal team from authority to avoid duplicates
-        this.state = 'stopped'; // 'stopped' | 'countdown' | 'playing' | 'goal' | 'ended'
-        this.scoreRed = 0;
-        this.scoreBlue = 0;
-        this.timeElapsed = 0;       // in ticks
-        this.scoreLimit = 3;
-        this.timeLimit = 3 * 60;    // seconds
-        this.tickRate = 60;         // FPS
-        this.tickInterval = null;
-        this.countdownTicks = 0;
-        this.goalPauseTicks = 0;
-        this.overtimeEnabled = true;
-        this.playerDiscs = new Map(); // playerId -> disc index
-        this._lastInputSeq = new Map(); // playerId -> last processed seq number
-        this.matchEpoch = null;
-        this.physicsTick = 0;
-        this.paused = false;
-        this.resuming = false;
-
-        // Match statistics tracking
-        this._matchStats = {}; // playerId -> { goals, assists, saves, touches }
-        this._touchHistory = []; // ring buffer of recent toucher IDs for goal attribution
-        this._lastToucher = null; // last player who touched the ball
-        this._prevToucher = null; // second-to-last toucher
-    }
-
-    rebuildPlayerDiscMap() {
-        this.playerDiscs.clear();
-        for (let i = 0; i < this.physics.discs.length; i++) {
-            const disc = this.physics.discs[i];
-            if (disc.isPlayer && disc.ownerId) {
-                this.playerDiscs.set(disc.ownerId, i);
-                const player = this.room.players.get(disc.ownerId);
-                if (player) {
-                    player.discIndex = i;
-                }
-            }
-        }
-    }
-
-    /**
-     * Load stadium into physics
-     */
-    setStadium(stadiumData) {
-        this.physics.loadStadium(stadiumData);
-        this.stadiumData = stadiumData;
-    }
-
-    /**
-     * Start the game
-     */
-    start() {
-        if (this.state === 'playing') return;
-
+        this.state = 'stopped';
         this.scoreRed = 0;
         this.scoreBlue = 0;
         this.timeElapsed = 0;
-
-        // Reset match statistics
-        this._matchStats = {};
-        this._touchHistory = [];
-        this._lastToucher = null;
-        this._prevToucher = null;
-        this.matchEpoch = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-        this.physicsTick = 0;
-        this._lastInputSeq.clear();
+        this.scoreLimit = 3;
+        this.timeLimit = 180;
+        this.tickRate = 60;
+        this.overtimeEnabled = true;
         this.paused = false;
         this.resuming = false;
+        this.matchEpoch = null;
+        this.stadiumData = null;
+        this._resumeTimer = null;
+    }
 
-        // Start immediately without countdown
+    setStadium(stadiumData) {
+        this.stadiumData = stadiumData;
+    }
+
+    start() {
+        if (this.state === 'playing') return;
+        this.scoreRed = 0;
+        this.scoreBlue = 0;
+        this.timeElapsed = 0;
+        this.matchEpoch = null;
+        this.paused = false;
+        this.resuming = false;
         this.state = 'playing';
-
-        // Reset physics and spawn players
-        this.physics.loadStadium(this.stadiumData);
-        this._spawnPlayers();
-
-        // Set kickoff team (red by default)
-        this.physics.setKickOffTeam('red');
-
-        // Do NOT automatically lock teams on start - keep current room.teamsLocked state
-
-        // Start game loop
-        this._startLoop();
-
-        // Ignore incoming kick-off team updates briefly to avoid race with restart
-        // Increase window to avoid accepting stale client-authoritative kickoff team
-        this._forceKickOffIgnoreUntil = Date.now() + 2000; // 2s
-
-        // Clear last goal tracker so local-authority goal detection from previous match
-        // cannot leak into the new match
-        this._lastGoalTeam = null;
-
-        // Broadcast start immediately to clients
         this.room.broadcast('gameStarted', {
-            scoreRed: this.scoreRed,
-            scoreBlue: this.scoreBlue,
+            scoreRed: 0,
+            scoreBlue: 0,
             roomData: this.room.getRoomData(),
-            state: { ...this._getGameState(), fullState: true }
+            hostId: this.room.hostId,
+            protocolVersion: 1
         });
-
         return { scoreRed: 0, scoreBlue: 0 };
     }
 
-    /**
-     * Stop the game
-     */
     stop() {
         this.state = 'stopped';
         this.paused = false;
         this.resuming = false;
-        this._stopLoop();
-        this._removeAllPlayerDiscs();
-    }
-
-    _spawnPlayers() {
-        this._removeAllPlayerDiscs();
-        const basePlayerPhysics = this.stadiumData.playerPhysics || {};
-        const spawnDist = this.stadiumData.spawnDistance || 170;
-
-        // Apply speed multiplier from room settings
-        const speedMult = this.room.playerSpeedMultiplier || 1.0;
-        const playerPhysics = {
-            ...basePlayerPhysics,
-            acceleration: (basePlayerPhysics.acceleration || 0.1) * speedMult,
-            kickingAcceleration: (basePlayerPhysics.kickingAcceleration || 0.065) * speedMult,
-        };
-
-        const redPlayers = this.room.getTeamPlayers('red');
-        const bluePlayers = this.room.getTeamPlayers('blue');
-
-        // Spawn red team
-        const redSpacing = 40;
-        for (let i = 0; i < redPlayers.length; i++) {
-            const p = redPlayers[i];
-            const y = (i - (redPlayers.length - 1) / 2) * redSpacing;
-            const discIdx = this.physics.addPlayerDisc(playerPhysics, 'red', -spawnDist, y, p.id);
-            this.playerDiscs.set(p.id, discIdx);
-            p.discIndex = discIdx;
-
-            // Assign name/avatar for client rendering
-            const disc = this.physics.discs[discIdx];
-            if (disc) {
-                disc._playerName = p.name;
-                disc._avatar = p.avatar;
-                if (this.room.teamColors && this.room.teamColors['red']) {
-                    const tc = this.room.teamColors['red'];
-                    disc.color = tc.colors[0];
-                    disc.colors = tc.colors;
-                    disc.colorAngle = tc.angle;
-                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
-                } else {
-                    disc.color = 'c70000'; // Default Red
-                    disc.colors = ['c70000'];
-                    disc.colorAngle = 0;
-                    disc.avatarColor = 'FFFFFF';
-                }
-            }
-        }
-
-        // Spawn blue team
-        const blueSpacing = 40;
-        for (let i = 0; i < bluePlayers.length; i++) {
-            const p = bluePlayers[i];
-            const y = (i - (bluePlayers.length - 1) / 2) * blueSpacing;
-            const discIdx = this.physics.addPlayerDisc(playerPhysics, 'blue', spawnDist, y, p.id);
-            this.playerDiscs.set(p.id, discIdx);
-            p.discIndex = discIdx;
-
-            // Assign name/avatar for client rendering
-            const disc = this.physics.discs[discIdx];
-            if (disc) {
-                disc._playerName = p.name;
-                disc._avatar = p.avatar;
-                if (this.room.teamColors && this.room.teamColors['blue']) {
-                    const tc = this.room.teamColors['blue'];
-                    disc.color = tc.colors[0];
-                    disc.colors = tc.colors;
-                    disc.colorAngle = tc.angle;
-                    disc.avatarColor = tc.avatarColor || tc.textColor || 'FFFFFF';
-                } else {
-                    disc.color = '00008c'; // Default Blue
-                    disc.colors = ['00008c'];
-                    disc.colorAngle = 0;
-                    disc.avatarColor = 'FFFFFF';
-                }
-            }
-        }
-
-        // Ensure ball color starts as FFB82E
-        if (this.physics.ballDisc) {
-            this.physics.ballDisc.color = 'FFB82E';
-        }
-    }
-
-    _removeAllPlayerDiscs() {
-        // Remove from end to avoid index shifting
-        const indices = [...this.playerDiscs.values()].sort((a, b) => b - a);
-        for (const idx of indices) {
-            this.physics.removeDisc(idx);
-        }
-        this.playerDiscs.clear();
-    }
-
-    /**
-     * Update player input
-     */
-    setPlayerInput(playerId, input) {
-        // Server-side guard: ignore inputs from non-playing players (spectators)
-        const player = this.room.players.get(playerId);
-        if (!player) return;
-        if (player.team !== 'red' && player.team !== 'blue') return;
-
-        const discIdx = this.playerDiscs.get(playerId);
-        if (discIdx === undefined) return;
-
-        const disc = this.physics.discs[discIdx];
-        // Extra safety: ensure the disc actually belongs to this player
-        if (!disc || disc.ownerId !== playerId) return;
-
-        // Track input sequence number for reconciliation
-        if (input && input._seq !== undefined) {
-            this._lastInputSeq.set(playerId, input._seq);
-        }
-
-        // Apply input (strip _seq before applying to disc)
-        const cleanInput = { up: !!input.up, down: !!input.down, left: !!input.left, right: !!input.right, kick: !!input.kick };
-        disc.input = cleanInput;
-    }
-
-    _startLoop() {
-        this._stopLoop();
-
-        this.physics.setKickOffTeam('red'); // Red gets the first kickoff
-        const interval = 1000 / this.tickRate;
-        this.tickInterval = setInterval(() => this._tick(), interval);
-    }
-
-    _stopLoop() {
-        if (this.tickInterval) {
-            clearInterval(this.tickInterval);
-            this.tickInterval = null;
-        }
-    }
-
-    _tick() {
-        if (this.paused) {
-            this.lastPhysTime = performance.now();
-            this._broadcastCounter = (this._broadcastCounter || 0) + 1;
-            if (this._broadcastCounter % 30 === 0) this.room.broadcast('gameState', this._getGameState());
-            return;
-        }
-
-        if (this.state === 'countdown') {
-            this.countdownTicks--;
-            if (this.countdownTicks <= 0) {
-                this.state = 'playing';
-                this.room.broadcast('gameStarted', {
-                    scoreRed: this.scoreRed,
-                    scoreBlue: this.scoreBlue,
-                    roomData: this.room.getRoomData(),
-                    state: this._getGameState()
-                });
-            } else {
-                const secondsLeft = Math.ceil(this.countdownTicks / this.tickRate);
-                if (this.countdownTicks % this.tickRate === 0) {
-                    this.room.broadcast('countdown', { seconds: secondsLeft });
-                }
-            }
-            return;
-        }
-
-        if (this.state === 'goal') {
-            // Keep running physics during goal pause so ball continues moving
-            // Use stepFree() so players are NOT teleported by kickoff constraints
-            const now = performance.now();
-            const dt = now - (this.lastPhysTime || now);
-            this.lastPhysTime = now;
-
-            this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
-            const stepSize = 1000 / this.tickRate;
-
-            while (this.accumulator >= stepSize) {
-                this.physics.stepFree(); // No kickoff constraints, no goal checking
-                this.accumulator -= stepSize;
-                this.physicsTick++;
-            }
-
-            this.goalPauseTicks--;
-            if (this.goalPauseTicks <= 0) {
-                // Teleport ball to center after pause
-                if (this.physics.ballDisc) {
-                    this.physics.ballDisc.pos.x = 0;
-                    this.physics.ballDisc.pos.y = 0;
-                    this.physics.ballDisc.speed.x = 0;
-                    this.physics.ballDisc.speed.y = 0;
-                    this.physics.ballDisc.color = 'FFB82E';
-                    this.physics.ballDisc.lastTouchedBy = null;
-                    this.physics.ballDisc.lastTouchedTeam = null;
-                }
-                // Reset touch tracking for next goal
-                this._lastToucher = null;
-                this._prevToucher = null;
-                this._touchHistory = [];
-
-                // Check if game should end
-                if (this._checkGameEnd()) {
-                    this.state = 'ended';
-                    // Decrement AFK match counters
-                    this.room._decrementAfkCounters();
-                    this.room.broadcast('gameOver', {
-                        scoreRed: this.scoreRed,
-                        scoreBlue: this.scoreBlue,
-                        winner: this.scoreRed > this.scoreBlue ? 'red' : 'blue',
-                        roomData: this.room.getRoomData(),
-                        matchStats: this._buildMatchStats()
-                    });
-                    this._stopLoop();
-                    return;
-                }
-
-                // Reset for next kickoff
-                this.physics.resetPositions();
-                this._spawnPlayers();
-                this.state = 'playing';
-            }
-            // Still broadcast state during goal pause
-            this.room.broadcast('gameState', this._getGameState());
-            return;
-        }
-
-        if (this.state !== 'playing') {
-            this.lastPhysTime = performance.now();
-            return;
-        }
-
-        // Fixed Timestep Accumulator for Server Physics (Matches Client exactly!)
-        const now = performance.now();
-        const dt = now - (this.lastPhysTime || now);
-        this.lastPhysTime = now;
-
-        this.accumulator = (this.accumulator || 0) + Math.min(dt, 100);
-        const stepSize = 1000 / this.tickRate; // Exact 60Hz step
-
-        let goalTeam = null;
-
-        while (this.accumulator >= stepSize) {
-            const result = this.physics.step();
-            this.physicsTick++;
-            if (result.goalTeam) goalTeam = result.goalTeam;
-
-            // Track ball touches for goal attribution (scorer/assist)
-            if (this.physics.ballDisc) {
-                const toucher = this.physics.ballDisc.lastTouchedBy;
-                if (toucher && toucher !== this._lastToucher) {
-                    this._prevToucher = this._lastToucher;
-                    this._lastToucher = toucher;
-                    this._touchHistory.push(toucher);
-                    if (this._touchHistory.length > 10) this._touchHistory.shift();
-
-                    // Track saves: defender touches ball near own goal
-                    const toucherPlayer = this.room.players.get(toucher);
-                    const ball = this.physics.ballDisc;
-                    if (toucherPlayer && toucherPlayer.team) {
-                        const goalX = toucherPlayer.team === 'red' ? -(this.stadiumData?.bg?.width || 370) : (this.stadiumData?.bg?.width || 370);
-                        const distToGoal = Math.abs(ball.pos.x - goalX);
-                        if (distToGoal < 80) {
-                            this._ensurePlayerStats(toucher);
-                            this._matchStats[toucher].saves++;
-                        }
-                    }
-                }
-            }
-
-            // Increment time logic safely within loop
-            // Do not advance match clock while kickoff reset is active (waiting for kickoff touch)
-            // Auto-release kickoff reset if ball moves (in case client missed the touch)
-            if (this.physics.kickOffReset && this.physics.ballDisc) {
-                const b = this.physics.ballDisc;
-                const speed = Math.sqrt((b.speed.x || 0) ** 2 + (b.speed.y || 0) ** 2);
-                const kickOffRadius = this.stadium?.bg?.kickOffRadius || 75;
-                const dist = Math.sqrt((b.pos.x || 0) * (b.pos.x || 0) + (b.pos.y || 0) * (b.pos.y || 0));
-                if (speed > 0.5 || dist > (kickOffRadius + (b.radius || 0))) {
-                    this.physics.kickOffReset = false;
-                }
-            }
-
-            if (!this.physics.kickOffReset) {
-                this.timeElapsed++;
-            }
-            this.accumulator -= stepSize;
-        }
-
-        // Check goal (guard against rapid re-triggering)
-        if (goalTeam) {
-            if (this.timeElapsed >= this._goalCooldownUntil) {
-                this._handleGoal(goalTeam);
-            }
-        }
-
-        // Notify clients to release held kick if server-side physics auto-triggered a kick
-        // Iterate discs and if disc._autoKickReleased is set, inform the owning player
-        try {
-            for (const disc of this.physics.discs) {
-                if (disc._autoKickReleased && disc.ownerId) {
-                    const player = this.room.players.get(disc.ownerId);
-                    if (player && player.socket) {
-                        player.socket.emit('kickReleased');
-                    }
-                    disc._autoKickReleased = false;
-                }
-            }
-        } catch (e) {
-            // swallow errors here to avoid crashing server loop
-        }
-
-        // Check time limit
-        if (this.timeLimit > 0 && this.timeElapsed / this.tickRate >= this.timeLimit) {
-            if (this.scoreRed !== this.scoreBlue) {
-                this.state = 'ended';
-                this.room._decrementAfkCounters();
-                this.room.broadcast('gameOver', {
-                    scoreRed: this.scoreRed,
-                    scoreBlue: this.scoreBlue,
-                    winner: this.scoreRed > this.scoreBlue ? 'red' : 'blue',
-                    matchStats: this._buildMatchStats()
-                });
-                this._stopLoop();
-                return;
-            }
-            // Overtime - continue until a goal
-        }
-
-        // Broadcast state
-        this._broadcastCounter = (this._broadcastCounter || 0) + 1;
-        if (this._broadcastCounter % 2 === 0) {
-            this.room.broadcast('gameState', this._getGameState());
-        }
-    }
-
-    _buildMatchStats() {
-        const stats = {};
-        for (const [playerId, s] of Object.entries(this._matchStats)) {
-            const player = this.room.players.get(playerId);
-            stats[playerId] = {
-                name: player ? player.name : 'Unknown',
-                team: player ? player.team : 'spectator',
-                goals: s.goals || 0,
-                assists: s.assists || 0,
-                saves: s.saves || 0,
-                ownGoals: s.ownGoals || 0
-            };
-        }
-        return stats;
-    }
-
-    _ensurePlayerStats(playerId) {
-        if (!this._matchStats[playerId]) {
-            this._matchStats[playerId] = { goals: 0, assists: 0, saves: 0, ownGoals: 0 };
-        }
-    }
-
-    _handleGoal(scoredOnTeam) {
-
-        // Basic scoring handler
-        // Prevent duplicate handling: ignore if we've recently handled a goal
-        const nowTicks = this.timeElapsed;
-        if (nowTicks < this._goalCooldownUntil) return;
-        // `scoredOnTeam` is the team whose goal line the ball crossed (i.e. the
-        // team that conceded). The scoring team is the opposite team.
-        const scoringTeam = scoredOnTeam === 'red' ? 'blue' : 'red';
-        if (scoringTeam === 'red') this.scoreRed++;
-        else this.scoreBlue++;
-        this.state = 'goal';
-        this.physics.kickOffReset = true;
-
-        // Award own goals to the last player from the team that conceded.
-        const lastTouchPlayer = this._lastToucher ? this.room.players.get(this._lastToucher) : null;
-        const ownGoal = !!lastTouchPlayer && lastTouchPlayer.team === scoredOnTeam;
-        if (ownGoal) {
-            this._ensurePlayerStats(this._lastToucher);
-            this._matchStats[this._lastToucher].ownGoals++;
-        } else if (this._lastToucher && lastTouchPlayer?.team === scoringTeam) {
-            this._ensurePlayerStats(this._lastToucher);
-            this._matchStats[this._lastToucher].goals++;
-        }
-        if (!ownGoal && this._prevToucher) {
-            const assisterPlayer = this.room.players.get(this._prevToucher);
-            if (assisterPlayer && assisterPlayer.team === scoringTeam && this._prevToucher !== this._lastToucher) {
-                this._ensurePlayerStats(this._prevToucher);
-                this._matchStats[this._prevToucher].assists++;
-            }
-        }
-
-        // Broadcast goal with scorer/assist info
-        const scorerName = this._lastToucher ? (lastTouchPlayer?.name || '') : '';
-        const assisterName = !ownGoal && this._prevToucher && this._prevToucher !== this._lastToucher
-            ? (this.room.players.get(this._prevToucher)?.name || '')
-            : '';
-        this.room.broadcast('goalScored', {
-            team: scoringTeam,
-            scoreRed: this.scoreRed,
-            scoreBlue: this.scoreBlue,
-            scorer: scorerName,
-            assister: assisterName,
-            ownGoal
-        });
-        // set cooldown until we allow next goal to be counted (score pause length in ticks)
-        // Add a small safety margin to avoid re-processing due to rounding or
-        // tick-edge conditions.
-        const pauseTicks = 60; // 1 second at 60Hz
-        const safetyMargin = 2; // extra ticks
-        this._goalCooldownUntil = this.timeElapsed + pauseTicks + safetyMargin;
-
-        this.state = 'goal';
-        this.goalPauseTicks = 3 * this.tickRate; // 3 second pause - ball keeps moving freely during this time
-
-        // The team conceded the goal gets the next kick-off
-        this.physics.setKickOffTeam(scoredOnTeam);
-        // Ensure kickoff reset so clock doesn't advance
-        this.physics.kickOffReset = true;
-
-        // Send gameState immediately so clients see the goal
-        this.room.broadcast('gameState', this._getGameState());
-    }
-
-    _checkGameEnd() {
-        if (this.scoreLimit > 0) {
-            if (this.scoreRed >= this.scoreLimit || this.scoreBlue >= this.scoreLimit) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Apply state from an authoritative client (Admin in Local mode)
-     */
-    applyAuthorityState(state) {
-        // No-op: local mode removed
-    }
-
-    _getGameState() {
-        // Sync typing status from players to physics discs
-        for (const player of this.room.players.values()) {
-            if (player.discIndex >= 0 && this.physics.discs[player.discIndex]) {
-                this.physics.discs[player.discIndex].typing = player.typing;
-            }
-        }
-
-        // Collect last processed input seq per team for client reconciliation
-        let lastInputRed = 0;
-        let lastInputBlue = 0;
-        for (const [pid, seq] of this._lastInputSeq) {
-            const p = this.room.players.get(pid);
-            if (!p) continue;
-            if (p.team === 'red' && seq > lastInputRed) lastInputRed = seq;
-            if (p.team === 'blue' && seq > lastInputBlue) lastInputBlue = seq;
-        }
-
-        return {
-            matchEpoch: this.matchEpoch,
-            tick: this.physicsTick,
-            physicsTick: this.physicsTick,
-            snapshotSeq: this.physicsTick,
-            lastProcessedSeq: Object.fromEntries(this._lastInputSeq),
-            paused: this.paused,
-            resuming: this.resuming,
-            state: this.state,
-            physics: this.physics.getState(),
-            scoreRed: this.scoreRed,
-            scoreBlue: this.scoreBlue,
-            time: Math.floor(this.timeElapsed / this.tickRate),
-            scoreLimit: this.scoreLimit,
-            timeLimit: this.timeLimit,
-            lastInputRed,
-            lastInputBlue
-        };
+        clearTimeout(this._resumeTimer);
+        this._resumeTimer = null;
     }
 
     getInfo() {
@@ -594,10 +56,12 @@ export class Game {
             state: this.state,
             scoreRed: this.scoreRed,
             scoreBlue: this.scoreBlue,
-            time: Math.floor(this.timeElapsed / this.tickRate),
+            timeElapsed: this.timeElapsed,
             scoreLimit: this.scoreLimit,
             timeLimit: this.timeLimit,
-            matchStats: this._matchStats
+            overtimeEnabled: this.overtimeEnabled,
+            paused: this.paused,
+            matchEpoch: this.matchEpoch
         };
     }
 }

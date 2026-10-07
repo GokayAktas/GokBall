@@ -8,6 +8,7 @@ const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 const CONNECT_TIMEOUT = 15000;
 const MAX_BUFFERED_SNAPSHOT_BYTES = 32 * 1024;
 const MAX_BUFFERED_INPUT_BYTES = 4 * 1024;
+import { isProtocolPacket, encodeProtocolPacket, MAX_NETWORK_PACKET_BYTES } from './Protocol.js';
 
 export class PeerLink {
     constructor({ socket, peerId = null, onMessage, onState }) {
@@ -101,13 +102,14 @@ export class PeerLink {
         if (this._closed || !from || (this.peerId && from !== this.peerId)) return;
         this.peerId = from;
 
+        if (typeof payload !== 'string' || new TextEncoder().encode(payload).byteLength > MAX_NETWORK_PACKET_BYTES) return;
         let msg;
         try {
             msg = JSON.parse(payload);
         } catch {
             return;
         }
-        this.onMessage(msg);
+        if (isProtocolPacket(msg)) this.onMessage(msg);
     }
 
     _startConnectTimer() {
@@ -199,13 +201,14 @@ export class PeerLink {
         };
         channel.onmessage = (event) => {
             if (this._closed) return;
+            if (typeof event.data !== 'string' || new TextEncoder().encode(event.data).byteLength > MAX_NETWORK_PACKET_BYTES) return;
             let msg;
             try {
                 msg = JSON.parse(event.data);
             } catch {
                 return;
             }
-            this.onMessage(msg);
+            if (isProtocolPacket(msg)) this.onMessage(msg);
         };
     }
 
@@ -230,8 +233,10 @@ export class PeerLink {
      * queues drop the current snapshot and wait for the next one.
      */
     send(msg) {
+        let payload;
+        try { payload = encodeProtocolPacket(msg); } catch { return false; }
         return this.sendSerialized(
-            JSON.stringify(msg),
+            payload,
             msg?.type === 'state',
             msg?.type === 'input'
         );

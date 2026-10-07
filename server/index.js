@@ -8,6 +8,7 @@ import { attachSignaling, getIceServers } from './signaling.js';
 import { isValidFullGameState } from '../src/network/AuthorityProtocol.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +55,8 @@ app.get('/', (req, res) => {
 // ============================================
 const rooms = new Map(); // roomId -> Room
 const playerRooms = new Map(); // socketId -> roomId
+const resumeTickets = new Map(); // opaque room-scoped token -> short-lived disconnected player
+const RESUME_WINDOW_MS = 20000;
 
 // ============================================
 // Rooms per IP limit
@@ -167,6 +170,7 @@ io.on('connection', (socket) => {
         playerRooms.set(socket.id, room.id);
         socket.join(room.id);
 
+        result.resumeToken = issueResumeTicket(room, socket.id);
         socket.emit('roomCreated', result);
         console.log(`[Server] Room created: ${room.name} (${room.id}) by ${socket.id}`);
     });
@@ -201,6 +205,7 @@ io.on('connection', (socket) => {
         playerRooms.set(socket.id, room.id);
         socket.join(room.id);
 
+        result.resumeToken = issueResumeTicket(room, socket.id);
         socket.emit('roomJoined', result);
         console.log(`[Server] Player ${socket.id} joined room ${room.name}`);
 
@@ -210,9 +215,55 @@ io.on('connection', (socket) => {
                 scoreRed: room.game.scoreRed,
                 scoreBlue: room.game.scoreBlue,
                 roomData: room.getRoomData(),
-                isHostAuthority: false,
-                state: { ...room.game._getGameState(), fullState: true }
+                protocolVersion: 1,
+                hostId: room.hostId
             });
+        }
+    });
+
+    socket.on('resumeRoom', (data = {}) => {
+        const { roomId, token } = data || {};
+        if (typeof token !== 'string' || token.length > 128 || typeof roomId !== 'string') return;
+        const ticket = resumeTickets.get(token);
+        if (!ticket || ticket.roomId !== roomId || ticket.expiresAt <= Date.now()) {
+            socket.emit('resumeRoomError', { error: 'Odaya devam etme süresi doldu.' });
+            return;
+        }
+        const room = rooms.get(roomId);
+        const previous = room?.players.get(ticket.playerId);
+        if (!room || !previous || previous.socket?.connected) {
+            socket.emit('resumeRoomError', { error: 'Oda bağlantısı artık kullanılamıyor.' });
+            return;
+        }
+        clearTimeout(ticket.timer);
+        resumeTickets.delete(token);
+        playerRooms.delete(ticket.playerId);
+        const resumed = room.resumePlayer(ticket.playerId, socket);
+        if (!resumed) return;
+        playerRooms.set(socket.id, room.id);
+        socket.join(room.id);
+        const nextToken = issueResumeTicket(room, socket.id);
+        const roomData = room.getRoomData();
+        const payload = {
+            ...roomData,
+            roomId: room.id,
+            creatorId: room.creatorId,
+            previousId: ticket.playerId,
+            playerId: socket.id,
+            player: resumed.player.toJSON(),
+            resumeToken: nextToken
+        };
+        socket.emit('roomResumed', payload);
+        room.broadcast('playerReconnected', {
+            previousId: ticket.playerId,
+            playerId: socket.id,
+            player: resumed.player.toJSON(),
+            players: room.getPlayerList(),
+            hostId: room.hostId,
+            creatorId: room.creatorId
+        }, socket.id);
+        if (room.game.state === 'playing' || room.game.state === 'goal' || room.game.state === 'countdown') {
+            socket.emit('gameStarted', { roomData: payload, protocolVersion: 1, hostId: room.hostId });
         }
     });
 
@@ -265,19 +316,6 @@ io.on('connection', (socket) => {
                     : null
             };
 
-            // Apply to active discs if game running
-            if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
-                room.game.physics.discs.forEach(d => {
-                    if (d.isPlayer && d.team === team) {
-                        d.color = colors[0];
-                        d.colors = colors;
-                        d.colorAngle = angle;
-                        d.avatarColor = avatarColor;
-                    }
-                });
-                io.to(room.id).emit('gameState', room.game._getGameState());
-            }
-
             io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
             io.to(room.id).emit('chatMessage', { playerName: 'SİSTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
         } catch (e) {
@@ -295,48 +333,41 @@ io.on('connection', (socket) => {
         if (room) room.clearTeam(socket.id, team);
     });
 
-    // --- Game Input ---
-    socket.on('input', (input) => {
-        const room = getPlayerRoom(socket.id);
-        if (!room || room.game.state !== 'playing') return;
-
-        // Server-owned physics is independent of browser tab visibility.
-        room.game.setPlayerInput(socket.id, input);
-    });
-
     socket.on('releasePlayerKick', ({ playerId } = {}) => {
         const room = getPlayerRoom(socket.id);
         if (!room || socket.id !== room.hostId || !playerId) return;
         room.players.get(playerId)?.socket?.emit('kickReleased');
     });
 
-    // --- Authority State (from Host in host-authority mode) ---
-    // Host runs physics and sends authoritative state; server relays to other players
-    socket.on('authorityState', (state) => {
-        const room = getPlayerRoom(socket.id);
-        if (!room) return;
-        // Only accept from the host
-        if (socket.id !== room.hostId) return;
-        // Broadcast to everyone EXCEPT the host (includes lastProcessedSeq)
-        socket.to(room.id).volatile.emit('authorityState', state);
-    });
-
     // Full-state transfer is reliable and unicast to any room member.
-    socket.on('requestFullState', ({ matchEpoch } = {}) => {
+    socket.on('requestFullState', (data = {}) => {
+        const { matchEpoch, protocolVersion } = data || {};
         const room = getPlayerRoom(socket.id);
         if (!room || !room.players.has(socket.id)) return;
+        if (protocolVersion !== 1) {
+            socket.emit('protocolMismatch', { expected: 1, received: protocolVersion });
+            return;
+        }
         if (!['playing', 'goal', 'countdown'].includes(room.game?.state)) return;
         const now = Date.now();
         if (socket._lastFullStateRequestAt && now - socket._lastFullStateRequestAt < 900) return;
         socket._lastFullStateRequestAt = now;
-        const state = { ...room.game._getGameState(), fullState: true };
-        state.requestedEpoch = typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null;
-        socket.emit('fullGameState', state);
+        const host = io.sockets.sockets.get(room.hostId);
+        if (!host || host.id === socket.id) return;
+        host.emit('fullStateRequest', {
+            playerId: socket.id,
+            protocolVersion: 1,
+            matchEpoch: typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null
+        });
     });
 
-    socket.on('fullGameState', ({ playerId, state } = {}) => {
+    socket.on('fullGameState', (data = {}) => {
+        const { playerId, state } = data || {};
         const room = getPlayerRoom(socket.id);
         if (!room || socket.id !== room.hostId || !playerId || playerId === socket.id) return;
+        if (state?.protocolVersion !== 1) return;
+        if (!room.game.matchEpoch && typeof state.matchEpoch === 'string') room.game.matchEpoch = state.matchEpoch;
+        if (state.matchEpoch !== room.game.matchEpoch) return;
         if (!room.players.has(playerId) || !isValidFullGameState(state)) return;
         const target = room.players.get(playerId)?.socket;
         if (target) target.emit('fullGameState', state);
@@ -354,13 +385,11 @@ io.on('connection', (socket) => {
             room.game._resumeTimer = setTimeout(() => {
                 room.game.paused = false;
                 room.game.resuming = false;
-                room.broadcast('gameState', room.game._getGameState());
             }, Math.max(1000, Math.min(5000, data.durationMs)));
         } else if (!room.game.paused) {
             clearTimeout(room.game._resumeTimer);
             room.game._resumeTimer = null;
         }
-        room.broadcast('gameState', room.game._getGameState());
         socket.to(room.id).emit('gamePaused', {
             paused: !!data?.paused,
             resuming: !!data?.resuming,
@@ -371,10 +400,20 @@ io.on('connection', (socket) => {
     });
 
     // --- Host Goal Event (relay to non-host players) ---
+    socket.on('hostMatchStarted', (data = {}) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room || socket.id !== room.hostId || data?.protocolVersion !== 1 || typeof data.matchEpoch !== 'string' || data.matchEpoch.length > 100) return;
+        room.game.matchEpoch = data.matchEpoch;
+    });
+
     socket.on('hostGoalEvent', (data) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
+        if (data?.protocolVersion !== 1 || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue) || !['red', 'blue'].includes(data?.team)) return;
+        room.game.scoreRed = data.scoreRed;
+        room.game.scoreBlue = data.scoreBlue;
+        room.game.state = 'goal';
         socket.to(room.id).emit('goalScored', { 
             team: data.team, 
             scoreRed: data.scoreRed, 
@@ -385,11 +424,22 @@ io.on('connection', (socket) => {
         });
     });
 
+    socket.on('hostMatchState', (data = {}) => {
+        const room = getPlayerRoom(socket.id);
+        if (!room || socket.id !== room.hostId) return;
+        if (data?.protocolVersion !== 1 || data.state !== 'playing' || data.matchEpoch !== room.game.matchEpoch) return;
+        if (room.game.state === 'goal') room.game.state = 'playing';
+    });
+
     // --- Host Game Over Event (relay to non-host players) ---
     socket.on('hostGameOverEvent', (data) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
+        if (data?.protocolVersion !== 1 || data.matchEpoch !== room.game.matchEpoch || !Number.isFinite(data?.scoreRed) || !Number.isFinite(data?.scoreBlue)) return;
+        room.game.scoreRed = data.scoreRed;
+        room.game.scoreBlue = data.scoreBlue;
+        room.game.state = 'ended';
         socket.to(room.id).emit('gameOver', {
             winner: data.winner,
             scoreRed: data.scoreRed,
@@ -415,7 +465,7 @@ io.on('connection', (socket) => {
 
         try {
             room.game.start();
-            console.log(`[Server] Game started (server-authority) in room ${room.id}`);
+            console.log(`[Server] Host-authority game started in room ${room.id}`);
         } catch (err) {
             console.error('[Server] Error starting game:', err);
             socket.emit('roomError', { error: 'Oyun başlatılırken bir hata oluştu.' });
@@ -556,13 +606,7 @@ io.on('connection', (socket) => {
             const val = parseFloat(multiplier);
             if (isFinite(val) && val > 0 && val <= 3) {
                 const normalized = Math.round(val * 100) / 100;
-                const ratio = normalized / (room.playerSpeedMultiplier || 1);
                 room.playerSpeedMultiplier = normalized;
-                for (const disc of room.game.physics.discs) {
-                    if (!disc.isPlayer) continue;
-                    disc.acceleration *= ratio;
-                    disc.kickingAcceleration *= ratio;
-                }
                 room.broadcast('roomUpdate', { playerSpeedMultiplier: room.playerSpeedMultiplier });
             }
         }
@@ -576,7 +620,6 @@ io.on('connection', (socket) => {
             const val = parseFloat(multiplier);
             if (isFinite(val) && val > 0 && val <= 3) {
                 room.ballSpeedMultiplier = Math.round(val * 100) / 100;
-                room.game.physics.ballSpeedMultiplier = room.ballSpeedMultiplier;
                 room.broadcast('roomUpdate', { ballSpeedMultiplier: room.ballSpeedMultiplier });
             }
         }
@@ -585,7 +628,12 @@ io.on('connection', (socket) => {
     // --- Disconnect ---
     socket.on('disconnect', () => {
         console.log(`[Server] Player disconnected: ${socket.id}`);
-        leaveCurrentRoom(socket);
+        const room = getPlayerRoom(socket.id);
+        if (room?.players.has(socket.id)) {
+            issueResumeTicket(room, socket.id, true);
+        } else {
+            leaveCurrentRoom(socket);
+        }
     });
 });
 
@@ -597,18 +645,79 @@ function getPlayerRoom(socketId) {
     return roomId ? rooms.get(roomId) : null;
 }
 
+function issueResumeTicket(room, playerId, disconnected = false) {
+    const player = room.players.get(playerId);
+    if (!player) return null;
+    if (player.resumeToken) {
+        const previous = resumeTickets.get(player.resumeToken);
+        if (previous) {
+            clearTimeout(previous.timer);
+            if (!disconnected) return player.resumeToken;
+            previous.expiresAt = Date.now() + RESUME_WINDOW_MS;
+            previous.timer = setTimeout(() => expireResumeTicket(previous), RESUME_WINDOW_MS);
+            previous.timer.unref?.();
+            return player.resumeToken;
+        }
+    }
+    const token = randomBytes(32).toString('base64url');
+    const ticket = { token, roomId: room.id, playerId, expiresAt: disconnected ? Date.now() + RESUME_WINDOW_MS : Infinity, timer: null };
+    if (disconnected) ticket.timer = setTimeout(() => expireResumeTicket(ticket), RESUME_WINDOW_MS);
+    ticket.timer?.unref?.();
+    player.resumeToken = token;
+    resumeTickets.set(token, ticket);
+    return token;
+}
+
+function expireResumeTicket(ticket) {
+    if (resumeTickets.get(ticket.token) !== ticket) return;
+    resumeTickets.delete(ticket.token);
+    const room = rooms.get(ticket.roomId);
+    const player = room?.players.get(ticket.playerId);
+    if (!room || !player || player.socket?.connected) return;
+    if (room.hostId === ticket.playerId || room.creatorId === ticket.playerId) {
+        room.close('Oda sahibi bağlantıyı yeniden kuramadı');
+        rooms.delete(room.id);
+        clearRoomResumeTickets(room.id);
+        for (const [id, idRoom] of playerRooms) if (idRoom === room.id) playerRooms.delete(id);
+    } else {
+        const remaining = room.removePlayer(ticket.playerId);
+        playerRooms.delete(ticket.playerId);
+        if (remaining === 0) {
+            room.close('Oda boşaldı');
+            rooms.delete(room.id);
+            clearRoomResumeTickets(room.id);
+        }
+    }
+}
+
+function clearRoomResumeTickets(roomId) {
+    for (const [token, ticket] of resumeTickets) {
+        if (ticket.roomId !== roomId) continue;
+        clearTimeout(ticket.timer);
+        resumeTickets.delete(token);
+    }
+}
+
 function leaveCurrentRoom(socket) {
     const roomId = playerRooms.get(socket.id);
     if (!roomId) return;
 
     const room = rooms.get(roomId);
     if (room) {
+        const player = room.players.get(socket.id);
+        if (player?.resumeToken) {
+            const ticket = resumeTickets.get(player.resumeToken);
+            if (ticket) clearTimeout(ticket.timer);
+            resumeTickets.delete(player.resumeToken);
+            player.resumeToken = null;
+        }
         // HOST MODE: the room does not outlive its host. When the host leaves
         // the room is closed for everyone instead of transferring ownership.
         if (socket.id === room.creatorId || socket.id === room.hostId) {
             socket.leave(roomId);
             room.close('Oda sahibi ayrıldı');
             rooms.delete(roomId);
+            clearRoomResumeTickets(roomId);
 
             // Everyone still in the closed room must forget it, otherwise they
             // would be treated as members of a room that no longer exists.
@@ -627,6 +736,7 @@ function leaveCurrentRoom(socket) {
         if (remaining === 0) {
             room.close('Oda boşaldı');
             rooms.delete(roomId);
+            clearRoomResumeTickets(roomId);
             console.log(`[Server] Room deleted: ${roomId}`);
         }
     }
@@ -706,19 +816,6 @@ app.post('/admin/rooms/:id/teamColors', express.json(), (req, res) => {
 
     if (!room.teamColors) room.teamColors = { red: null, blue: null };
     room.teamColors[team] = { angle, avatarColor, colors };
-
-    // Apply and broadcast similar to socket handler
-    if (room.game && (room.game.state === 'playing' || room.game.state === 'countdown' || room.game.state === 'goal')) {
-        room.game.physics.discs.forEach(d => {
-            if (d.isPlayer && d.team === team) {
-                d.color = colors[0];
-                d.colors = colors;
-                d.colorAngle = angle;
-                d.avatarColor = avatarColor;
-            }
-        });
-        io.to(room.id).emit('gameState', room.game._getGameState());
-    }
 
     io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
     return res.json({ ok: true, teamColors: room.teamColors[team] });

@@ -10,7 +10,7 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "dev:lan": "concurrently \"npm run server\" \"vite --host\"",
     "build": "vite build",
-    "test": "node --test tests/network-sync.test.js",
+    "test": "node --test tests/network-sync.test.js tests/network-protocol.test.js",
     "preview": "vite preview",
     "tint-assets": "node scripts/tint-assets.js"
   },

@@ -26,14 +26,17 @@ export class NetworkDebugPanel {
     render() {
         const app = this.app;
         const localId = app.network.socket?.id;
+        const hostLink = app.network._peerHostId ? app.network._peerLinks.get(app.network._peerHostId) : null;
         const localDisc = app.physics.discs.find((disc) => disc.id === localId);
         const authDisc = app._lastConfirmedServerState?.discs?.find((disc) => disc.id === localId);
         const remotes = app._snapshotBuffer.getLatestState()?.physics?.discs?.filter((disc) => disc.isPlayer && disc.id !== localId) || [];
+        const route = app._isHostAuthority ? 'host worker' : hostLink?.relaying ? 'Socket.IO relay' : hostLink?.connected ? 'direct WebRTC' : 'connecting';
+        const ack = app._isHostAuthority ? app._lastRemoteInputSeq.get(localId) : app._lastConfirmedServerSeq;
         const lines = [
-            `route: ${app.network._peerHostId ? 'WebRTC/relay' : 'host'} | ping ${fmt(app._peerHostRtt?.ping ?? app.network.ping)} ms`,
+            `route: ${route} | ping ${fmt(app._peerHostRtt?.ping ?? app.network.ping)} ms`,
             `jitter ${fmt(app.network.jitter)} ms | loss ${fmt(app.network.packetLoss)}%`,
-            `epoch ${app._matchEpoch || '-'} | host tick ${fmt(app._lastAuthorityTick)} | client tick ${fmt(app._physicsTickCount)}`,
-            `input ${app.network.getInputSeqNum()} | ack ${app._lastConfirmedServerSeq} | buffer ${app._snapshotBuffer.getSize()} @ ${Math.round(app._snapshotBuffer.getDelay())} ms`,
+            `epoch ${app._matchEpoch || '-'} | host tick ${fmt(app._isHostAuthority ? app._hostPhysicsTick : app._lastAuthorityTick)} | client tick ${fmt(app._physicsTickCount)}`,
+            `input ${app.network.getInputSeqNum()} | ack ${fmt(ack)} | buffer ${app._snapshotBuffer.getSize()} @ ${Math.round(app._snapshotBuffer.getDelay())} ms`,
             `reconcile error ${distance(localDisc?.pos, authDisc)}`,
             `local predicted ${point(localDisc?.pos)} | authoritative ${point(authDisc)} | render ${point(localDisc?._renderPosition)}`,
             `remote net/render ${remotes.map((disc) => `${disc.id}:${point(disc)} / ${point(app.physics.discs.find((d) => d.id === disc.id)?._renderPosition)}`).join(' ; ') || '-'}`

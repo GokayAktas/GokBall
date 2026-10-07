@@ -874,7 +874,9 @@ export class Physics {
                 bCoef: d.bCoef,
                 invMass: d.invMass,
                 cMask: d.cMask,
-                cGroup: d.cGroup
+                cGroup: d.cGroup,
+                lastTouchedBy: d.lastTouchedBy || null,
+                lastTouchedTeam: d.lastTouchedTeam || null
             }))
         };
     }
@@ -935,6 +937,8 @@ export class Physics {
                 disc.color = sd.color;
             }
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
+            if (sd.lastTouchedBy !== undefined) disc.lastTouchedBy = sd.lastTouchedBy;
+            if (sd.lastTouchedTeam !== undefined) disc.lastTouchedTeam = sd.lastTouchedTeam;
             if (sd.typing !== undefined) disc.typing = sd.typing;
             if (sd.radius) disc.radius = sd.radius;
 

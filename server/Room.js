@@ -139,7 +139,6 @@ export class Room {
         // Game
         this.game = new Game(this);
         this.game.setStadium(this.stadium);
-        this.game.physics.ballSpeedMultiplier = this.ballSpeedMultiplier;
         this.game.scoreLimit = options.scoreLimit !== undefined ? options.scoreLimit : 3;
         this.game.timeLimit = options.timeLimit !== undefined ? options.timeLimit : 180;
     }
@@ -167,6 +166,7 @@ export class Room {
 
         // Notify others
         this.broadcast('playerJoined', {
+            playerId: player.id,
             player: player.toJSON(),
             players: this.getPlayerList()
         }, player.id);
@@ -202,24 +202,25 @@ export class Room {
         };
     }
 
+    resumePlayer(previousId, socket) {
+        const player = this.players.get(previousId);
+        if (!player) return null;
+        this.players.delete(previousId);
+        player.id = socket.id;
+        player.socket = socket;
+        player.discIndex = -1;
+        this.players.set(socket.id, player);
+        if (this.hostId === previousId) this.hostId = socket.id;
+        if (this.creatorId === previousId) this.creatorId = socket.id;
+        return { player, previousId };
+    }
+
     /**
      * Remove a player from the room
      */
     removePlayer(socketId) {
         const player = this.players.get(socketId);
         if (!player) return this.players.size;
-
-        // Always drop the player's disc from the pitch, whatever the game
-        // state is. Leaving players must not keep running around as a ghost.
-        const discIdx = this.game.playerDiscs.get(socketId);
-        if (discIdx !== undefined) {
-            this.game.physics.removeDisc(discIdx);
-            this.game.playerDiscs.delete(socketId);
-            this.game.rebuildPlayerDiscMap();
-        }
-
-        // Drop any queued input so a stale keypress cannot keep the disc moving
-        this.game._lastInputSeq?.delete?.(socketId);
 
         this.players.delete(socketId);
 
@@ -312,50 +313,7 @@ export class Room {
 
         player.team = team;
 
-        // If game is running, handle disc update (just like adminMovePlayer)
-        if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-            // Remove old disc if it exists
-            const oldDiscIdx = this.game.playerDiscs.get(socketId);
-            if (oldDiscIdx !== undefined) {
-                this.game.physics.removeDisc(oldDiscIdx);
-                this.game.playerDiscs.delete(socketId);
-            }
-
-            // Add new disc if moved to red/blue
-            if (team === 'red' || team === 'blue') {
-                const spawnX = (team === 'red' ? -1 : 1) * (this.stadium.spawnDistance || 170);
-                const basePhysics = this.stadium.playerPhysics || {};
-                const speedMultiplier = this.playerSpeedMultiplier || 1;
-                const playerPhysics = {
-                    ...basePhysics,
-                    acceleration: (basePhysics.acceleration || 0.1) * speedMultiplier,
-                    kickingAcceleration: (basePhysics.kickingAcceleration || 0.065) * speedMultiplier
-                };
-                const discIdx = this.game.physics.addPlayerDisc(playerPhysics, team, spawnX, 0, socketId);
-                const disc = this.game.physics.discs[discIdx];
-                if (disc) {
-                    disc._playerName = player.name;
-                    disc._avatar = player.avatar;
-                    disc.ownerId = socketId;
-                    if (this.teamColors && this.teamColors[team]) {
-                        disc.color = this.teamColors[team].colors[0];
-                        disc.colors = this.teamColors[team].colors;
-                        disc.colorAngle = this.teamColors[team].angle;
-                        disc.avatarColor = this.teamColors[team].avatarColor || this.teamColors[team].textColor || 'FFFFFF';
-                    } else {
-                        disc.color = team === 'red' ? 'c70000' : '00008c';
-                        disc.colors = [disc.color];
-                        disc.colorAngle = 0;
-                        disc.avatarColor = 'FFFFFF';
-                    }
-                }
-            } else {
-                player.discIndex = -1;
-            }
-
-            // Rebuild mapping after add/remove
-            this.game.rebuildPlayerDiscMap();
-        }
+        player.discIndex = -1;
 
         this.broadcast('teamChanged', {
             playerId: socketId,
@@ -442,43 +400,7 @@ export class Room {
 
         target.team = team;
 
-        // If game is running, handle disc update
-        if (this.game.state === 'playing' || this.game.state === 'countdown' || this.game.state === 'goal') {
-            // Remove old disc if it exists
-            const oldDiscIdx = this.game.playerDiscs.get(targetId);
-            if (oldDiscIdx !== undefined) {
-                this.game.physics.removeDisc(oldDiscIdx);
-                this.game.playerDiscs.delete(targetId);
-            }
-
-            // Add new disc if moved to red/blue
-            if (team === 'red' || team === 'blue') {
-                const spawnX = (team === 'red' ? -1 : 1) * (this.stadium.spawnDistance || 170);
-                const discIdx = this.game.physics.addPlayerDisc(this.stadium.playerPhysics || {}, team, spawnX, 0, targetId);
-                const disc = this.game.physics.discs[discIdx];
-                if (disc) {
-                    disc._playerName = target.name;
-                    disc._avatar = target.avatar;
-                    disc.ownerId = targetId; // Critical for proper sync
-                    if (this.teamColors && this.teamColors[team]) {
-                        disc.color = this.teamColors[team].colors[0];
-                        disc.colors = this.teamColors[team].colors;
-                        disc.colorAngle = this.teamColors[team].angle;
-                        disc.avatarColor = this.teamColors[team].avatarColor || this.teamColors[team].textColor || 'FFFFFF';
-                    } else {
-                        disc.color = team === 'red' ? 'c70000' : '00008c';
-                        disc.colors = [disc.color];
-                        disc.colorAngle = 0;
-                        disc.avatarColor = 'FFFFFF';
-                    }
-                }
-            } else {
-                target.discIndex = -1; // Explicitly set spectator index
-            }
-
-            // Always rebuild map after any add/remove during game!
-            this.game.rebuildPlayerDiscMap();
-        }
+        target.discIndex = -1;
 
         this.broadcast('teamChanged', {
             playerId: targetId,
@@ -662,16 +584,7 @@ export class Room {
     }
 
     _applyAvatarToDisc(player) {
-        if (this.game.state !== 'playing' && this.game.state !== 'countdown' && this.game.state !== 'goal') return;
-
-        const discIdx = this.game.playerDiscs.get(player.id);
-        if (discIdx === undefined) return;
-
-        const disc = this.game.physics.discs[discIdx];
-        if (disc) {
-            disc.avatar = player.avatar;
-            disc._avatar = player.avatar;
-        }
+        this.broadcast('roomUpdate', { players: this.getPlayerList() });
     }
 
     /**
@@ -679,18 +592,9 @@ export class Room {
      * Called when colors change mid-game.
      */
     _applyTeamColorsToDiscs(team) {
-        if (this.game.state !== 'playing' && this.game.state !== 'countdown' && this.game.state !== 'goal') return;
         const tc = this.teamColors?.[team];
         if (!tc) return;
-        this.game.physics.discs.forEach(d => {
-            if (d.isPlayer && d.team === team) {
-                d.color = tc.colors[0];
-                d.colors = tc.colors;
-                d.colorAngle = tc.angle;
-                d.avatarColor = tc.avatarColor;
-            }
-        });
-        this.broadcast('gameState', this.game._getGameState());
+        this.broadcast('teamColorsUpdated', { team, teamColors: tc, allTeamColors: this.teamColors });
     }
 
     _handleCommand(player, cmd) {

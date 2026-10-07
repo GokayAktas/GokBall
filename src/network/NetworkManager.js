@@ -4,6 +4,7 @@
  */
 import { io } from 'socket.io-client';
 import { PeerLink } from './PeerLink.js';
+import { NETWORK_PROTOCOL_VERSION, encodeProtocolPacket } from './Protocol.js';
 
 // A ping that is never answered within this window counts as lost.
 const PING_TIMEOUT = 3000;
@@ -25,6 +26,9 @@ export class NetworkManager {
         this.socket = null;
         this.connected = false;
         this.playerId = null;
+        this._resumeToken = null;
+        this._resumeRoomId = null;
+        this._hasConnectedOnce = false;
         this.callbacks = {};
 
         // RTT to the server. `null` means "not measured yet" - never fake a value.
@@ -84,7 +88,7 @@ export class NetworkManager {
             this.socket = io(url, {
                 transports: ['websocket', 'polling'],
                 reconnection: true,
-                reconnectionAttempts: 3,
+                reconnectionAttempts: Infinity,
                 reconnectionDelay: 1000,
                 timeout: 5000
             });
@@ -98,6 +102,10 @@ export class NetworkManager {
                 cleanupAll();
                 this.connected = true;
                 this.playerId = this.socket.id;
+                if (this._hasConnectedOnce && this._resumeToken && this._resumeRoomId) {
+                    this.socket.emit('resumeRoom', { token: this._resumeToken, roomId: this._resumeRoomId });
+                }
+                this._hasConnectedOnce = true;
                 console.log('[Network] Connected:', this.playerId);
                 resolve(this.playerId);
             });
@@ -119,8 +127,12 @@ export class NetworkManager {
 
             // Game events
             this.socket.on('roomList', (rooms) => this._trigger('roomList', rooms));
-            this.socket.on('roomCreated', (data) => this._trigger('roomCreated', data));
-            this.socket.on('roomJoined', (data) => this._trigger('roomJoined', data));
+            this.socket.on('roomCreated', (data) => { this._rememberResume(data); this._trigger('roomCreated', data); });
+            this.socket.on('roomJoined', (data) => { this._rememberResume(data); this._trigger('roomJoined', data); });
+            this.socket.on('roomResumed', (data) => { this._rememberResume(data); this._trigger('roomResumed', data); });
+            this.socket.on('resumeRoomError', (data) => this._trigger('resumeRoomError', data));
+            this.socket.on('playerReconnected', (data) => this._trigger('playerReconnected', data));
+            this.socket.on('protocolMismatch', (data) => this._trigger('protocolMismatch', data));
             this.socket.on('roomError', (data) => this._trigger('roomError', data));
             this.socket.on('playerJoined', (data) => this._trigger('playerJoined', data));
             this.socket.on('playerLeft', (data) => {
@@ -130,10 +142,6 @@ export class NetworkManager {
             this.socket.on('teamChanged', (data) => this._trigger('teamChanged', data));
             this.socket.on('teamLockChanged', (data) => this._trigger('teamLockChanged', data));
             this.socket.on('gameState', (state) => this._trigger('serverGameState', state));
-            this.socket.on('authorityState', (state) => {
-                this._noteAuthorityState(state);
-                this._trigger('gameState', state);
-            });
             this.socket.on('fullStateRequest', (data) => this._trigger('fullStateRequest', data));
             this.socket.on('fullGameState', (state) => {
                 this._noteAuthorityState(state);
@@ -214,7 +222,10 @@ export class NetworkManager {
             this.socket.on('p2pPeerJoined', (data) => this._onPeerJoined(data));
             this.socket.on('p2pSignal', (data) => this._onPeerSignal(data));
             this.socket.on('p2pRelay', (data) => this._onPeerRelay(data));
-            this.socket.on('p2pError', (data) => this._trigger('peerError', data));
+            this.socket.on('p2pError', (data) => {
+                if (data?.expected !== undefined) this._trigger('protocolMismatch', data);
+                this._trigger('peerError', data);
+            });
         });
     }
 
@@ -289,6 +300,12 @@ export class NetworkManager {
 
     // === Room Management ===
 
+    _rememberResume(data) {
+        if (!data?.resumeToken) return;
+        this._resumeToken = data.resumeToken;
+        this._resumeRoomId = data.roomId || data.id || null;
+    }
+
     listRooms() {
         this.socket.emit('listRooms');
     }
@@ -302,6 +319,8 @@ export class NetworkManager {
     }
 
     leaveRoom() {
+        this._resumeToken = null;
+        this._resumeRoomId = null;
         this.socket.emit('leaveRoom');
     }
 
@@ -315,16 +334,21 @@ export class NetworkManager {
 
     sendInput(input) {
         this._inputSeqNum = (this._inputSeqNum || 0) + 1;
-        const packet = { ...input, _seq: this._inputSeqNum };
-        // Every player, including the host, sends input to the server physics
-        // authority. A single ordered stream keeps host and joiner timelines
-        // identical and is independent of a browser tab's rendering cadence.
-        if (this.socket?.connected) this.socket.emit('input', packet);
+        const packet = { v: NETWORK_PROTOCOL_VERSION, type: 'input', epoch: this._peerAuthorityEpoch, seq: this._inputSeqNum, input };
+        if (!this._isPeerHost && this._peerHostId) {
+            const link = this._peerLinks.get(this._peerHostId);
+            if (!link) {
+                this.socket?.volatile.emit('p2pRelay', { to: this._peerHostId, payload: encodeProtocolPacket(packet) });
+            } else if (!link.send(packet)) {
+                link.useRelay('input channel backlog');
+                link.send(packet);
+            }
+        }
         return this._inputSeqNum;
     }
 
     requestFullState(matchEpoch = null) {
-        this.socket?.emit('requestFullState', { matchEpoch });
+        this.socket?.emit('requestFullState', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch });
     }
 
     sendFullGameState(playerId, state) {
@@ -350,12 +374,13 @@ export class NetworkManager {
         this._peerRoomId = roomId;
         this._peerHostId = hostId;
         this._isPeerHost = hostId === this.playerId;
+        this._inputSeqNum = 0;
         this._authorityStreamActive = false;
         this._authorityStateAt = null;
         this._lastPeerAuthorityTick = -1;
         this._peerAuthorityEpoch = null;
         this._lastInputRelayAt = -Infinity;
-        if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId });
+        if (!this._isPeerHost) this.socket.emit('p2pJoin', { roomId, protocolVersion: NETWORK_PROTOCOL_VERSION });
         this._peerPingTimer = setInterval(() => this._sendPeerPings(), PEER_PING_INTERVAL);
     }
 
@@ -403,6 +428,7 @@ export class NetworkManager {
 
     /** Broadcast one current authoritative snapshot to connected guests. */
     sendAuthorityState(state) {
+        if (state?.matchEpoch) this._peerAuthorityEpoch = state.matchEpoch;
         if (state?.matchEpoch && this._lastAuthorityEpoch !== state.matchEpoch) {
             this._lastAuthorityEpoch = state.matchEpoch;
             this._lastAuthorityTick = -1;
@@ -460,18 +486,21 @@ export class NetworkManager {
                 discs: compactDiscs
             }
         };
-        const payload = JSON.stringify({ type: 'state', state: compactState });
+        const payload = encodeProtocolPacket({ type: 'state', epoch: state?.matchEpoch, tick, seq: state?.snapshotSeq || tick, state: compactState });
         if (this._peerLinks.size === 0) {
             // A room can be playable while a peer is negotiating or unable to
             // establish WebRTC. Keep snapshots flowing without queuing stale
             // positions; active peer links continue to carry the fast path.
-            this.socket?.volatile.emit('authorityState', compactState);
             return;
         }
         for (const link of this._peerLinks.values()) link.sendSerialized(payload, true);
     }
 
     _onPeerReady(data = {}) {
+        if (data.protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+            this._trigger('protocolMismatch', { expected: NETWORK_PROTOCOL_VERSION, received: data.protocolVersion });
+            return;
+        }
         if (data.solo || !data.initiator || !data.hostId || this._isPeerHost) return;
         this._peerHostId = data.hostId;
 
@@ -484,6 +513,10 @@ export class NetworkManager {
     }
 
     _onPeerJoined(data = {}) {
+        if (data.protocolVersion !== NETWORK_PROTOCOL_VERSION) {
+            this._trigger('protocolMismatch', { expected: NETWORK_PROTOCOL_VERSION, received: data.protocolVersion });
+            return;
+        }
         const peerId = data.peerId;
         if (!this._isPeerHost || !peerId || peerId === this.playerId) return;
 
@@ -549,12 +582,14 @@ export class NetworkManager {
                 ping: performance.now() - sentAt,
                 direct: !!this._peerLinks.get(peerId)?.connected && !this._peerLinks.get(peerId)?.relaying
             });
-        } else if (message?.type === 'input' && this._isPeerHost) {
+        } else if (message?.type === 'input' && this._isPeerHost && message.v === NETWORK_PROTOCOL_VERSION &&
+            message.epoch === this._peerAuthorityEpoch && Number.isSafeInteger(message.seq)) {
             this._trigger('remoteInput', {
                 playerId: peerId,
-                input: message.input
+                input: { ...message.input, _seq: message.seq }
             });
-        } else if (message?.type === 'state' && !this._isPeerHost) {
+        } else if (message?.type === 'state' && !this._isPeerHost && message.v === NETWORK_PROTOCOL_VERSION &&
+            message.epoch === message.state?.matchEpoch && Number.isSafeInteger(message.tick)) {
             this._noteAuthorityState(message.state);
             this._trigger('gameState', message.state);
         }
@@ -613,6 +648,10 @@ export class NetworkManager {
 
     startGame() {
         this.socket.emit('startGame');
+    }
+
+    sendResumeRoom(token, roomId) {
+        this.socket?.emit('resumeRoom', { token, roomId });
     }
 
     stopGame() {

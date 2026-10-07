@@ -20,6 +20,25 @@ const ICE_SERVERS = (process.env.ICE_SERVERS || 'stun:stun.l.google.com:19302,st
     .map(s => s.trim())
     .filter(Boolean)
     .map(url => ({ urls: url }));
+const TURN_URLS = (process.env.TURN_URLS || '').split(',').map(url => url.trim()).filter(Boolean);
+if (TURN_URLS.length && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    ICE_SERVERS.push({
+        urls: TURN_URLS,
+        username: process.env.TURN_USERNAME,
+        credential: process.env.TURN_CREDENTIAL
+    });
+}
+const MAX_SIGNAL_BYTES = 64 * 1024;
+const MAX_RELAY_BYTES = 64 * 1024;
+
+function packetSize(value) {
+    try { return Buffer.byteLength(JSON.stringify(value), 'utf8'); } catch { return Infinity; }
+}
+
+function isPeerPair(room, firstId, secondId) {
+    return !!room && room.players.has(firstId) && room.players.has(secondId) &&
+        (firstId === room.hostId || secondId === room.hostId);
+}
 
 export function getIceServers() {
     return ICE_SERVERS;
@@ -34,7 +53,12 @@ export function getIceServers() {
 export function attachSignaling(io, ctx) {
     io.on('connection', (socket) => {
         // --- Ask to be connected to the room host ---
-        socket.on('p2pJoin', ({ roomId } = {}) => {
+        socket.on('p2pJoin', (data = {}) => {
+            const { roomId, protocolVersion } = data || {};
+            if (protocolVersion !== 1) {
+                socket.emit('p2pError', { error: 'Uyumsuz ağ protokolü', expected: 1, received: protocolVersion });
+                return;
+            }
             const room = ctx.getPlayerRoom(socket.id);
             // Only a real member of that room may ask to be meshed into it
             if (!room || room.id !== roomId) {
@@ -45,7 +69,7 @@ export function attachSignaling(io, ctx) {
             const hostSocket = io.sockets.sockets.get(room.hostId);
             if (!hostSocket || room.hostId === socket.id) {
                 // Nobody to connect to: a solo host does not need a peer link
-                socket.emit('p2pReady', { initiator: false, solo: true });
+                socket.emit('p2pReady', { initiator: false, solo: true, protocolVersion: 1 });
                 return;
             }
 
@@ -54,27 +78,30 @@ export function attachSignaling(io, ctx) {
             socket.emit('p2pReady', {
                 initiator: true,
                 hostId: room.hostId,
-                iceServers: ICE_SERVERS
+                iceServers: ICE_SERVERS,
+                protocolVersion: 1
             });
 
             // Tell the host a peer is waiting so it can answer later
             hostSocket.emit('p2pPeerJoined', {
                 peerId: socket.id,
                 name: room.players.get(socket.id)?.name || 'Oyuncu',
-                iceServers: ICE_SERVERS
+                iceServers: ICE_SERVERS,
+                protocolVersion: 1
             });
         });
 
         // --- Relay offer / answer / ICE between two peers ---
         // The server forwards the payload untouched and never inspects it.
-        socket.on('p2pSignal', ({ to, type, payload } = {}) => {
-            if (!to || typeof payload === 'undefined') return;
+        socket.on('p2pSignal', (data = {}) => {
+            const { to, type, payload } = data || {};
+            if (!to || !['offer', 'answer', 'ice'].includes(type) || typeof payload === 'undefined' || packetSize(payload) > MAX_SIGNAL_BYTES) return;
 
             // Only relay inside the same room, so a peer cannot use the
             // signaling server to reach arbitrary connected users.
             const senderRoom = ctx.getPlayerRoom(socket.id);
             const targetRoom = ctx.getPlayerRoom(to);
-            if (!senderRoom || !targetRoom || senderRoom.id !== targetRoom.id) return;
+            if (!senderRoom || !targetRoom || senderRoom.id !== targetRoom.id || !isPeerPair(senderRoom, socket.id, to)) return;
 
             const target = io.sockets.sockets.get(to);
             if (!target) return;
@@ -83,21 +110,28 @@ export function attachSignaling(io, ctx) {
         });
 
         // --- Either side reports the direct channel is usable ---
-        socket.on('p2pPeerReady', ({ to } = {}) => {
+        socket.on('p2pPeerReady', (data = {}) => {
+            const { to } = data || {};
+            const room = ctx.getPlayerRoom(socket.id);
+            if (!isPeerPair(room, socket.id, to)) return;
             const target = to && io.sockets.sockets.get(to);
-            if (target) target.emit('p2pPeerReady', { peerId: socket.id });
+            if (target) target.emit('p2pPeerReady', { peerId: socket.id, protocolVersion: 1 });
         });
 
         // --- Reverse connection / relay fallback ---
         // When a direct channel cannot be opened (symmetric NAT, UPnP disabled,
         // a filtering safe-browsing profile), the same messages are relayed
         // here instead. Gameplay keeps working; only the latency is the server's.
-        socket.on('p2pRelay', ({ to, payload } = {}) => {
-            if (!to || typeof payload === 'undefined') return;
+        socket.on('p2pRelay', (data = {}) => {
+            const { to, payload } = data || {};
+            if (!to || typeof payload !== 'string' || Buffer.byteLength(payload, 'utf8') > MAX_RELAY_BYTES) return;
+            let packet;
+            try { packet = JSON.parse(payload); } catch { return; }
+            if (packet?.v !== 1 || !['input', 'state', 'ping', 'pong'].includes(packet.type)) return;
 
             const senderRoom = ctx.getPlayerRoom(socket.id);
             const targetRoom = ctx.getPlayerRoom(to);
-            if (!senderRoom || !targetRoom || senderRoom.id !== targetRoom.id) return;
+            if (!senderRoom || !targetRoom || senderRoom.id !== targetRoom.id || !isPeerPair(senderRoom, socket.id, to)) return;
 
             const target = io.sockets.sockets.get(to);
             // Input and snapshots are replaceable real-time state. Dropping an
