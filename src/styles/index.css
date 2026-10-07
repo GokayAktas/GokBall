@@ -244,6 +244,8 @@ body::before {
   max-width: 300px;
   height: auto;
   display: block;
+  -webkit-user-drag: none;
+  user-select: none;
   mix-blend-mode: screen;
   margin: 0 auto;
 }

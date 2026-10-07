@@ -21,18 +21,18 @@ export function pingLevel(ms) {
  * HTML for the badge shown next to a player's name.
  *
  * @param {object} player     room player entry (ping, pingLoss)
- * @param {number|null} ownPing  locally measured ping, used for the own entry
- *                              so it updates instantly instead of every 2s
  */
-export function renderPingBadge(player, ownPing = null) {
-    const ping = ownPing != null ? ownPing : player.ping;
+export function renderPingBadge(player) {
+    // Use the server's probe for every row, including our own. The local
+    // Socket.IO ping is a different route and used to show a mismatched value.
+    const ping = player?.ping;
     const level = pingLevel(ping);
 
     const parts = [];
     if (level === 'unknown') {
         parts.push('<span class="ping-badge ping-unknown" title="Ping ölçülmedi">--</span>');
     } else {
-        const jittery = player.pingLoss > 0
+        const jittery = player?.pingLoss > 0
             ? `<span class="ping-bars" title="${player.pingLoss} kayıp ping">▮</span>`
             : '';
         parts.push(`<span class="ping-badge ping-${level}" title="Ping">${ping}</span>${jittery}`);

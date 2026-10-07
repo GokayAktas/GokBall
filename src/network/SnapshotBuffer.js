@@ -4,7 +4,9 @@
  */
 
 const FIXED_STEP_MS = 1000 / 60;
-const MAX_EXTRAPOLATION_MS = 250;
+// Keep extrapolation to a few host ticks. Long linear projections overshoot
+// walls and collisions, then appear to teleport backwards at the next packet.
+const MAX_EXTRAPOLATION_MS = 50;
 const MIN_INTERPOLATION_DELAY_MS = FIXED_STEP_MS * 2;
 const MAX_INTERPOLATION_DELAY_MS = 180;
 

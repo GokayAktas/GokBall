@@ -284,8 +284,14 @@ export class Room {
 
         if (!['red', 'blue', 'spectator'].includes(team)) return;
 
-        // The lock is the only restriction on voluntary team changes. Players
-        // can move during a match whenever the admin has left teams unlocked.
+        // Non-admin players cannot switch teams once a match is underway.
+        // Lobby team locking remains an independent pre-match setting.
+        if (!player.isAdmin && ['playing', 'countdown', 'goal'].includes(this.game.state)) {
+            player.socket.emit('roomError', { error: 'Maç devam ederken takım değiştirilemez.' });
+            return;
+        }
+
+        // The lock controls voluntary team changes while waiting in the lobby.
         if (this.teamsLocked && !player.isAdmin) {
             player.socket.emit('roomError', { error: 'Takımlar kilitli; geçiş yapamazsınız.' });
             return;

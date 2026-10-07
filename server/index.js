@@ -258,7 +258,11 @@ io.on('connection', (socket) => {
             room.teamColors[team] = {
                 angle,
                 avatarColor,
-                colors
+                colors,
+                random: payload.random === true,
+                jerseyId: typeof payload.jerseyId === 'string' && /^[a-z0-9-]{1,48}$/.test(payload.jerseyId)
+                    ? payload.jerseyId
+                    : null
             };
 
             // Apply to active discs if game running

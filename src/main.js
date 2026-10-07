@@ -26,6 +26,7 @@ import { InputHistory } from './network/InputHistory.js';
 import { limitRenderPosition } from './network/RenderSmoothing.js';
 import { NetworkDebugPanel } from './ui/components/NetworkDebugPanel.js';
 import { pingLevel } from './ui/components/PingBadge.js';
+import { pickRandomJersey } from './ui/screens/JerseyPresets.js';
 
 const MAX_LOCAL_RENDER_CORRECTION = 4;
 const MAX_LOCAL_RENDER_FRAME_MS = 33;
@@ -35,7 +36,7 @@ function clampRenderCorrection(value) {
     return Math.max(-MAX_LOCAL_RENDER_CORRECTION, Math.min(MAX_LOCAL_RENDER_CORRECTION, value));
 }
 
-const REMOTE_INPUT_TIMEOUT_MS = 1500;
+const REMOTE_INPUT_TIMEOUT_MS = 250;
 
 class GokBallApp {
     constructor() {
@@ -77,6 +78,7 @@ class GokBallApp {
         this._reconciliationPending = false;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
         this._localRenderPosition = null;
+        this._remoteRenderPositions = new Map();
         this._lastServerBallState = null; // {x, y, sx, sy} for collision reconciliation
 
         // Host-authority mode (room creator runs physics)
@@ -88,6 +90,8 @@ class GokBallApp {
         this._hostTimeElapsed = 0;
         this._hostGoalPauseTicks = 0;
         this._hostGameState = 'stopped';
+        this._hostPositionResetId = 0;
+        this._lastPositionResetId = null;
         this._hostScoreLimit = 3;
         this._hostTimeLimit = 180;
         this._hostKickOffTeam = 'red';
@@ -291,10 +295,12 @@ class GokBallApp {
         this._firstStateReceived = false; // Wait for initial server state before client prediction
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
         this._snapshotBuffer.clear();
+        this._remoteRenderPositions.clear();
         this._lastAuthorityTick = -1;
         this._lastAuthoritySnapshotSeq = -1;
         this._lastConfirmedServerState = null;
         this._inputHistory.reset();
+        this._lastPositionResetId = null;
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
         this._fullStateReady = this._isHost() && this._isHostAuthority;
@@ -331,7 +337,7 @@ class GokBallApp {
         this._physicsClock = new FixedStepClock();
         this._physicsClock.reset(performance.now());
         clearInterval(this._physicsTimer);
-        this._physicsTimer = setInterval(() => this._physicsLoop(), 1000 / 60);
+        this._physicsTimer = null;
         clearInterval(this._resyncTimer);
         if (!this._fullStateReady) {
             this.network.requestFullState();
@@ -379,9 +385,9 @@ class GokBallApp {
     }
 
 
-    _physicsLoop() {
+    _physicsLoop(now = performance.now()) {
         if (!this.gameRunning || !this._physicsClock) return;
-        const now = performance.now();
+        this._authorityStateDirty = false;
         this._physicsClock.advance(now, (stepIndex, dueSteps) => {
             if (!this.gameRunning) return;
             const inputState = this.input.getInput();
@@ -390,6 +396,12 @@ class GokBallApp {
             const inputSeq = this.network.sendInput(inputState, inputState);
             this._physicsTick(inputState, inputSeq, stepIndex, dueSteps);
         });
+        // Do not queue intermediate states when a delayed frame catches up.
+        // The newest state is what guests need to render and predict from.
+        if (this._authorityStateDirty && this._isHost() && this._isHostAuthority) {
+            this._authorityStateDirty = false;
+            this._sendAuthorityState();
+        }
     }
 
     _physicsTick(inputState, inputSeq, stepIndex = 0, dueSteps = 1) {
@@ -404,7 +416,7 @@ class GokBallApp {
                     // Still send occasional authority state so non-host clients sync
                     this._hostAuthoritySendCounter = (this._hostAuthoritySendCounter || 0) + 1;
                     if (this._hostAuthoritySendCounter % 30 === 0) {
-                        this._sendAuthorityState();
+                        this._authorityStateDirty = true;
                     }
                     return;
                 }
@@ -491,7 +503,7 @@ class GokBallApp {
                     );
 
                     // Send authority state to server (relayed to other players)
-                    this._sendAuthorityState();
+                    this._authorityStateDirty = true;
                 }
 
                 else if (this._hostGameState === 'goal') {
@@ -508,7 +520,7 @@ class GokBallApp {
                     this._hostGoalPauseTicks--;
 
                     // Send authority state during goal pause so non-host clients see the ball
-                    this._sendAuthorityState();
+                    this._authorityStateDirty = true;
 
                     if (this._hostGoalPauseTicks <= 0) {
                         // Reset ball to center
@@ -532,11 +544,12 @@ class GokBallApp {
                         this.physics.kickOffTeam = this._hostKickOffTeam;
                         this.physics.inGoalPause = false;
                         this.physics.resetPositions();
+                        this._hostPositionResetId++;
                         this._hostGameState = 'playing';
                         this._serverGameState = 'playing';
                         
                         // Send authority state immediately so non-host clients see the reset
-                        this._sendAuthorityState();
+                        this._authorityStateDirty = true;
                     }
                 }
 
@@ -601,6 +614,9 @@ class GokBallApp {
     _gameLoop() {
         if (!this.gameRunning) return;
         const now = performance.now();
+        // Keep simulation and rendering on the same browser clock so fixed
+        // ticks cannot drift in phase against display frames.
+        this._physicsLoop(now);
         // Rendering follows the display refresh rate; simulation has its own 60 Hz clock.
         this._applyInterpolatedSnapshots(now);
         this._interpolateLocallySimulatedDiscs(now);
@@ -692,6 +708,7 @@ class GokBallApp {
         for (const disc of this.physics.discs) {
             if (disc.isPlayer && disc.id) localById.set(disc.id, disc);
         }
+        const activeRemotePlayers = new Set();
 
         for (let i = 0; i < snapshots.length; i++) {
             const snapshot = snapshots[i];
@@ -706,9 +723,27 @@ class GokBallApp {
             disc.pos.y = snapshot.y;
             disc.speed.x = snapshot.sx;
             disc.speed.y = snapshot.sy;
-            disc._renderPosition = { x: snapshot.x, y: snapshot.y };
+            if (snapshot.isPlayer && snapshot.id !== myId) {
+                activeRemotePlayers.add(snapshot.id);
+                const previous = this._remoteRenderPositions.get(snapshot.id);
+                const elapsed = previous
+                    ? Math.max(0, Math.min(100, localTime - previous.updatedAt))
+                    : 0;
+                const maxDistance = Math.max(
+                    0.75,
+                    Math.hypot(snapshot.sx || 0, snapshot.sy || 0) * elapsed / (1000 / 60) * 1.35 + 0.2
+                );
+                const rendered = limitRenderPosition(previous, { x: snapshot.x, y: snapshot.y }, maxDistance);
+                this._remoteRenderPositions.set(snapshot.id, { ...rendered, updatedAt: localTime });
+                disc._renderPosition = rendered;
+            } else {
+                disc._renderPosition = { x: snapshot.x, y: snapshot.y };
+            }
             if (snapshot.kicking !== undefined) disc.kicking = snapshot.kicking;
             if (snapshot.color !== undefined) disc.color = snapshot.color;
+        }
+        for (const playerId of this._remoteRenderPositions.keys()) {
+            if (!activeRemotePlayers.has(playerId)) this._remoteRenderPositions.delete(playerId);
         }
 
         const localDisc = localById.get(myId);
@@ -810,6 +845,7 @@ class GokBallApp {
         this._hostGoalPauseTicks = 0;
         this._hostGameState = 'playing';
         this._hostPhysicsTick = 0;
+        this._hostPositionResetId = 0;
         this._matchEpoch = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
         this._hostKickOffTeam = 'red';
         this._hostScoreLimit = this.currentRoomData?.game?.scoreLimit || 3;
@@ -959,6 +995,7 @@ class GokBallApp {
     _hostGameOver() {
         const winner = this._hostScoreRed > this._hostScoreBlue ? 'red' : 'blue';
         this._hostGameState = 'ended';
+        this._randomizeTeamJerseys();
 
         const winTeamStr = winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
         const winColor = winner === 'red' ? 'var(--red)' : 'var(--blue)';
@@ -1045,6 +1082,22 @@ class GokBallApp {
                 this.ui.showScreen('roomList');
             }
         }, 5000);
+    }
+
+    _randomizeTeamJerseys() {
+        if (!this._isHost() || !this._isHostAuthority) return;
+        for (const team of ['red', 'blue']) {
+            const previousJerseyId = this.currentRoomData?.teamColors?.[team]?.jerseyId;
+            const jersey = pickRandomJersey(previousJerseyId);
+            this.network.socket?.emit('setTeamColors', {
+                team,
+                angle: jersey.angle,
+                avatarColor: jersey.avatarColor,
+                colors: jersey.colors,
+                random: true,
+                jerseyId: jersey.id
+            });
+        }
     }
 
     /** Toggle pause state (host only) */
@@ -1253,6 +1306,7 @@ class GokBallApp {
             tick: this._hostPhysicsTick,
             snapshotSeq: this._hostAuthoritySendCounter,
             physicsTick: this._hostPhysicsTick,
+            positionResetId: this._hostPositionResetId,
             paused: this._isPaused,
             resuming: this._resumeAnimating,
             resumeDurationMs: 3200,
@@ -1783,6 +1837,7 @@ class GokBallApp {
                 this._lastAuthoritySnapshotSeq = -1;
                 this._lastAuthorityTick = -1;
                 this._inputHistory.reset();
+                this._lastPositionResetId = null;
             }
             this._matchEpoch = state.matchEpoch;
             this._fullStateReady = true;
@@ -1831,9 +1886,23 @@ class GokBallApp {
             this._removePauseOverlay();
         }
 
-        // Clear interpolation buffer on state transitions to prevent stale data
-        if (this._serverGameState !== state.state) {
+        const stateChanged = this._serverGameState !== state.state;
+        const goalRestart = this._serverGameState === 'goal' && state.state === 'playing';
+        const positionResetChanged = Number.isFinite(state.positionResetId) &&
+            this._lastPositionResetId !== null && state.positionResetId !== this._lastPositionResetId;
+        const hardPositionSync = isFullState || goalRestart || positionResetChanged;
+
+        // A kickoff reset is an explicit position discontinuity. Clear the
+        // render history and move to the host's new positions in one frame.
+        if (stateChanged || hardPositionSync) {
             this._snapshotBuffer.clear();
+            this._remoteRenderPositions.clear();
+        }
+        if (hardPositionSync && state.physics) {
+            this._applyAuthoritativePositionReset(state.physics, state.lastProcessedSeq);
+        }
+        if (Number.isFinite(state.positionResetId)) {
+            this._lastPositionResetId = state.positionResetId;
         }
         this._serverGameState = state.state;
 
@@ -1871,7 +1940,7 @@ class GokBallApp {
 
         // Sync metadata (colors, physics params, kickoff state) without overwriting positions.
         // Positions are handled by the interpolation buffer in the game loop.
-        if (state.physics) {
+        if (state.physics && !hardPositionSync) {
             this._syncPhysicsMetadata(state.physics);
         }
 
@@ -1982,6 +2051,44 @@ class GokBallApp {
             if (sd.radius !== undefined) disc.radius = sd.radius;
             if (sd.kicking !== undefined) disc.kicking = sd.kicking;
             if (sd.typing !== undefined) disc.typing = sd.typing;
+        }
+    }
+
+    /** Apply a host reset/full sync without animating from stale positions. */
+    _applyAuthoritativePositionReset(physicsState, lastProcessedSeq = {}) {
+        if (!physicsState?.discs) return;
+        this._syncPhysicsMetadata(physicsState);
+        this._remoteRenderPositions.clear();
+
+        const localId = this.network.socket?.id;
+        const playersById = new Map(
+            this.physics.discs
+                .filter(disc => disc.isPlayer && disc.id != null)
+                .map(disc => [disc.id, disc])
+        );
+        physicsState.discs.forEach((snapshot, index) => {
+            const disc = snapshot.isPlayer
+                ? playersById.get(snapshot.id)
+                : this.physics.discs[index];
+            if (!disc) return;
+            disc.pos.x = snapshot.x;
+            disc.pos.y = snapshot.y;
+            disc.speed.x = snapshot.sx || 0;
+            disc.speed.y = snapshot.sy || 0;
+            disc._renderPosition = null;
+            if (snapshot.kicking !== undefined) disc.kicking = snapshot.kicking;
+            if (snapshot.color !== undefined) disc.color = snapshot.color;
+        });
+
+        this._localRenderPosition = null;
+        this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
+        this._reconciliationPending = false;
+        if (localId) {
+            const acknowledgedSeq = Number.isFinite(lastProcessedSeq?.[localId])
+                ? lastProcessedSeq[localId]
+                : 0;
+            this._lastConfirmedServerSeq = acknowledgedSeq;
+            this._inputHistory.reset(acknowledgedSeq);
         }
     }
 }

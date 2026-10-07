@@ -13,7 +13,7 @@ export class MainMenu {
       <div class="particles-bg" id="particles"></div>
       <div class="menu-container">
         <div class="logo-container">
-          <img src="/logo.png" alt="GokBall — ücretsiz çevrimiçi çok oyunculu futbol oyunu logosu" class="logo-banner" />
+          <img src="/logo.png" alt="GokBall — ücretsiz çevrimiçi çok oyunculu futbol oyunu logosu" class="logo-banner" draggable="false" />
         </div>
 
         <div class="card" style="width: 100%;">

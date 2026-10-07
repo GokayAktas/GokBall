@@ -5,6 +5,9 @@ import { InputHistory } from '../src/network/InputHistory.js';
 import { SnapshotBuffer } from '../src/network/SnapshotBuffer.js';
 import { isValidFullGameState } from '../src/network/AuthorityProtocol.js';
 import { limitRenderPosition } from '../src/network/RenderSmoothing.js';
+import { pingLevel } from '../src/ui/components/PingBadge.js';
+import { JERSEY_PRESETS, pickRandomJersey } from '../src/ui/screens/JerseyPresets.js';
+import { Room } from '../server/Room.js';
 
 test('fixed clock runs all due 60 Hz simulation steps without dropping elapsed time', () => {
     const clock = new FixedStepClock();
@@ -45,7 +48,7 @@ test('snapshot buffer rejects duplicate and reordered packets while continuing a
     assert.equal(buffer.getInterpolatedState(110).physics.discs[0].x >= 2, true);
 });
 
-test('snapshot buffer extrapolates briefly during packet loss and clamps the prediction', () => {
+test('snapshot buffer only extrapolates a few ticks during packet loss', () => {
     const buffer = new SnapshotBuffer(50);
     const state = {
         matchEpoch: 'match-a', snapshotSeq: 1, tick: 1, physicsTick: 1,
@@ -53,7 +56,7 @@ test('snapshot buffer extrapolates briefly during packet loss and clamps the pre
     };
     buffer.addSnapshot(0, state);
     const extrapolated = buffer.getInterpolatedState(1000).physics.discs[0];
-    assert.ok(Math.abs(extrapolated.x - 30) < 1e-9); // 250 ms / 60 Hz * 2 units per tick
+    assert.ok(Math.abs(extrapolated.x - 6) < 1e-9); // 50 ms / 60 Hz * 2 units per tick
 });
 
 test('snapshot buffer starts with a low two-tick render delay', () => {
@@ -75,4 +78,37 @@ test('full state validation requires match identity, tick, scores and finite dis
     assert.equal(isValidFullGameState(valid), true);
     assert.equal(isValidFullGameState({ ...valid, matchEpoch: undefined }), false);
     assert.equal(isValidFullGameState({ ...valid, physics: { discs: [{ x: NaN, y: 2, sx: 0, sy: 0 }] } }), false);
+});
+
+test('remote players cannot switch teams while a match is active', () => {
+    const room = new Room();
+    const messages = [];
+    const player = {
+        id: 'guest-1',
+        isAdmin: false,
+        team: 'red',
+        socket: { emit: (event, payload) => messages.push({ event, payload }) }
+    };
+    room.players.set(player.id, player);
+    room.game.state = 'playing';
+
+    room.changeTeam(player.id, 'blue');
+
+    assert.equal(player.team, 'red');
+    assert.equal(messages[0]?.event, 'roomError');
+});
+
+test('random jersey is the first choice and rerolls do not repeat the previous kit', () => {
+    assert.equal(JERSEY_PRESETS[0].name, 'Rastgele');
+    assert.equal(JERSEY_PRESETS[0].flag, null);
+    for (let i = 0; i < 20; i++) {
+        assert.notEqual(pickRandomJersey('galatasaray').id, 'galatasaray');
+    }
+});
+
+test('ping badges use quality colors based on the measured value', () => {
+    assert.equal(pingLevel(45), 'good');
+    assert.equal(pingLevel(130), 'fair');
+    assert.equal(pingLevel(240), 'bad');
+    assert.equal(pingLevel(null), 'unknown');
 });

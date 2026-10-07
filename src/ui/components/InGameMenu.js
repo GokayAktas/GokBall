@@ -19,6 +19,7 @@ export class InGameMenu {
         const players = roomData.players || [];
         const me = players.find(p => p.id === this.app.network.playerId);
         const isAdmin = me?.isAdmin;
+        const canChangeTeam = isAdmin || !this.app.gameRunning;
 
         const redTeam = players.filter(p => p.team === 'red');
         const blueTeam = players.filter(p => p.team === 'blue');
@@ -40,15 +41,6 @@ export class InGameMenu {
                         <span style="font-size:12px; color:var(--text-muted); margin-top:2px;">${roomData.stadiumName || 'Klasik Saha'} • ${players.length} Oyuncu</span>
                     </div>
                     <div style="display:flex; gap:12px; align-items:center;">
-                        ${isAdmin ? `
-                            <button class="btn ${roomData.teamsLocked ? 'btn-danger' : 'btn-primary'} btn-sm" id="btnToggleLock" title="${roomData.teamsLocked ? 'Takımlar Kilitli' : 'Takımları Kilitle'}">
-                                ${roomData.teamsLocked ?
-                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' :
-                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>'
-                }
-                                <span>${roomData.teamsLocked ? 'Kilidi Aç' : 'Takımları Kilitle'}</span>
-                            </button>
-                        ` : ''}
                         <button class="btn btn-danger btn-sm" id="btnLeaveRoom" style="display:flex; align-items:center; gap:6px; font-weight:700;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
                             AYRIL
@@ -60,7 +52,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamRed">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--red-team); font-weight:bold;">🔴 Kırmızı</span>
-                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(canChangeTeam && (isAdmin || !roomData.teamsLocked)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinRed" style="font-size:9px;">Katıl</button>` : ''}
                         </div>
                         <div class="player-list" id="redPlayers" style="min-height:100px;">
                             ${redTeam.map(p => `
@@ -68,7 +60,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--red-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
-                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
+                                        ${renderPingBadge(p)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>
@@ -79,7 +71,7 @@ export class InGameMenu {
                     <div class="mgmt-column" id="teamSpectator">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <span style="color:var(--text-muted); font-weight:bold;">👁️ İzleyiciler</span>
-                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
+                            ${(canChangeTeam && (isAdmin || !roomData.teamsLocked)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinSpec" style="font-size:9px;">İzle</button>` : ''}
                         </div>
                         <div class="player-list" id="spectatorPlayers" style="min-height:100px;">
                             ${specs.map(p => `
@@ -87,7 +79,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--text-muted);">${p.avatar || p.name[0]}</div>
                                         <span style="color:var(--text-muted);">${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
-                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
+                                        ${renderPingBadge(p)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>
@@ -97,7 +89,7 @@ export class InGameMenu {
 
                     <div class="mgmt-column" id="teamBlue">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            ${(isAdmin || !roomData.teamsLocked) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
+                            ${(canChangeTeam && (isAdmin || !roomData.teamsLocked)) ? `<button class="btn btn-secondary btn-xs" id="btnJoinBlue" style="font-size:9px;">Katıl</button>` : ''}
                             <span style="color:var(--blue-team); font-weight:bold;">🔵 Mavi</span>
                         </div>
                         <div class="player-list" id="bluePlayers" style="min-height:100px;">
@@ -106,7 +98,7 @@ export class InGameMenu {
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div class="mini-avatar" style="background:var(--blue-team);">${p.avatar || p.name[0]}</div>
                                         <span>${p.name} ${p.id === this.app.network.playerId ? '(Ben)' : ''}</span>
-                                        ${renderPingBadge(p, p.id === this.app.network.playerId ? this.app.network.ping : null)}
+                                        ${renderPingBadge(p)}
                                     </div>
                                     ${adminActions(p)}
                                 </div>
@@ -156,18 +148,12 @@ export class InGameMenu {
         this.container.querySelector('#btnJoinSpec')?.addEventListener('click', () => this.app.network.changeTeam('spectator'));
 
         if (isAdmin) {
-            this.container.querySelector('#btnStopGame')?.addEventListener('click', () => this.app.network.stopGame());
+            this.container.querySelector('#btnStopGame')?.addEventListener('click', () => {
+                this.app._randomizeTeamJerseys?.();
+                this.app.network.stopGame();
+            });
             this.container.querySelector('#btnPauseGame')?.addEventListener('click', () => {
                 this.app._togglePause();
-            });
-
-            this.container.querySelector('#btnToggleLock')?.addEventListener('click', () => {
-                const nextLocked = !this.app.currentRoomData?.teamsLocked;
-                if (this.app.currentRoomData) {
-                    this.app.currentRoomData.teamsLocked = nextLocked;
-                    this.render(this.app.currentRoomData);
-                }
-                this.app.network.socket.emit('toggleTeamLock');
             });
 
             this.container.querySelectorAll('.kick-btn').forEach(btn => {
