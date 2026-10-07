@@ -4,7 +4,7 @@
  */
 import { io } from 'socket.io-client';
 import { PeerLink } from './PeerLink.js';
-import { NETWORK_PROTOCOL_VERSION, encodeProtocolPacket } from './Protocol.js';
+import { NETWORK_PROTOCOL_VERSION, encodeProtocolPacket, isProtocolPacket, MAX_NETWORK_PACKET_BYTES } from './Protocol.js';
 
 // A ping that is never answered within this window counts as lost.
 const PING_TIMEOUT = 3000;
@@ -427,7 +427,7 @@ export class NetworkManager {
     }
 
     /** Broadcast one current authoritative snapshot to connected guests. */
-    sendAuthorityState(state) {
+    sendAuthorityState(state, roomPlayerIds = []) {
         if (state?.matchEpoch) this._peerAuthorityEpoch = state.matchEpoch;
         if (state?.matchEpoch && this._lastAuthorityEpoch !== state.matchEpoch) {
             this._lastAuthorityEpoch = state.matchEpoch;
@@ -487,13 +487,22 @@ export class NetworkManager {
             }
         };
         const payload = encodeProtocolPacket({ type: 'state', epoch: state?.matchEpoch, tick, seq: state?.snapshotSeq || tick, state: compactState });
-        if (this._peerLinks.size === 0) {
-            // A room can be playable while a peer is negotiating or unable to
-            // establish WebRTC. Keep snapshots flowing without queuing stale
-            // positions; active peer links continue to carry the fast path.
-            return;
+        // WebRTC remains the fast path, but a missing/late PeerLink must not
+        // freeze the match. Relay to room members without a link through the
+        // server's validated, volatile gameplay channel.
+        const targets = new Set(roomPlayerIds.filter(id => typeof id === 'string' && id !== this.playerId));
+        if (targets.size === 0) {
+            for (const disc of discs) if (disc.isPlayer && disc.id && disc.id !== this.playerId) targets.add(disc.id);
         }
-        for (const link of this._peerLinks.values()) link.sendSerialized(payload, true);
+        for (const peerId of targets) {
+            const link = this._peerLinks.get(peerId);
+            if (link) {
+                if (link.sendSerialized(payload, true)) continue;
+            }
+            if (this.socket?.connected) {
+                this.socket.volatile.emit('p2pRelay', { to: peerId, payload });
+            }
+        }
     }
 
     _onPeerReady(data = {}) {
@@ -566,7 +575,21 @@ export class NetworkManager {
     _onPeerRelay(data = {}) {
         const peerId = data.from;
         if (!peerId) return;
-        this._peerLinks.get(peerId)?.receiveRelay(data);
+        const link = this._peerLinks.get(peerId);
+        if (link) {
+            link.receiveRelay(data);
+            return;
+        }
+
+        // A valid Socket.IO relay can beat the signaling notification that
+        // creates its PeerLink. Do not lose the match stream during that race.
+        if (typeof data.payload !== 'string' || new TextEncoder().encode(data.payload).byteLength > MAX_NETWORK_PACKET_BYTES) return;
+        try {
+            const packet = JSON.parse(data.payload);
+            if (isProtocolPacket(packet)) this._onPeerMessage(peerId, packet);
+        } catch {
+            // Ignore malformed relay payloads.
+        }
     }
 
     _onPeerMessage(peerId, message) {

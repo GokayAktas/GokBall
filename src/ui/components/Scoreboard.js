@@ -26,6 +26,7 @@ export class Scoreboard {
                             <span class="score-text" id="hud-score-blue">0</span>
                             <div class="score-box blue"></div>
                         </div>
+                        <span class="overtime-label hidden" id="hud-overtime" aria-live="polite">UZATMA!</span>
                         <div class="timer-text" id="hud-timer">00:00</div>
                     </div>
                 </div>
@@ -97,20 +98,25 @@ export class Scoreboard {
     if (el) el.textContent = name;
   }
 
-  update(scoreRed, scoreBlue, timeSeconds, timeLimitSeconds = 0) {
+  update(scoreRed, scoreBlue, timeSeconds, timeLimitSeconds = 0, isOvertime = false) {
     this.updateScore(scoreRed, scoreBlue);
 
     const elapsedSeconds = Math.max(0, Number.isFinite(timeSeconds) ? timeSeconds : 0);
     const timeLimit = Math.max(0, Number.isFinite(timeLimitSeconds) ? timeLimitSeconds : 0);
     const isLimited = timeLimit > 0;
-    const displayedSeconds = isLimited ? Math.max(0, timeLimit - elapsedSeconds) : elapsedSeconds;
+    const displayedSeconds = isOvertime
+      ? Math.max(0, elapsedSeconds - timeLimit)
+      : isLimited ? Math.max(0, timeLimit - elapsedSeconds) : elapsedSeconds;
 
     const timerEl = document.getElementById('hud-timer');
     if (timerEl) {
       const mins = Math.floor(displayedSeconds / 60);
       const secs = Math.floor(displayedSeconds % 60);
-      timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      timerEl.textContent = `${isOvertime ? '+' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      timerEl.classList.toggle('overtime-timer', !!isOvertime);
     }
+    const overtimeEl = document.getElementById('hud-overtime');
+    if (overtimeEl) overtimeEl.classList.toggle('hidden', !isOvertime);
 
   }
 

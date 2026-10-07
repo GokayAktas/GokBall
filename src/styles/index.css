@@ -2119,6 +2119,26 @@ select.input option {
   font-variant-numeric: tabular-nums;
 }
 
+.overtime-label {
+  color: #ffd54f;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  white-space: nowrap;
+  text-shadow: 0 0 12px #ffd54f66;
+  animation: overtime-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.timer-text.overtime-timer {
+  min-width: 78px;
+  color: #ffd54f;
+}
+
+@keyframes overtime-pulse {
+  from { opacity: .72; }
+  to { opacity: 1; }
+}
+
 /* ============================================================
    Goal Effect
    ============================================================ */

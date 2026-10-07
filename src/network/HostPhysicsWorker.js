@@ -25,6 +25,8 @@ let scoreBlue = 0;
 let elapsedTicks = 0;
 let scoreLimit = 3;
 let timeLimit = 180;
+let overtimeEnabled = true;
+let overtime = false;
 let positionResetId = 0;
 let lastToucher = null;
 let previousToucher = null;
@@ -119,6 +121,7 @@ function makeState(sequence, fullState = false) {
         time: Math.floor(elapsedTicks / 60),
         scoreLimit,
         timeLimit,
+        overtime,
         matchStats,
         physics: physics.getState(),
         lastProcessedSeq: Object.fromEntries(lastProcessedSeq),
@@ -203,6 +206,7 @@ function handleGoal(concededTeam) {
         scorer: scorer?.name || '',
         assister: assister?.name || '',
         ownGoal,
+        overtime,
         matchStats
     });
 }
@@ -271,8 +275,12 @@ function step() {
         if (result.goalTeam && gameState === 'playing') handleGoal(result.goalTeam);
         else if (!physics.kickOffReset) elapsedTicks++;
 
-        if (gameState === 'playing' && timeLimit > 0 && elapsedTicks >= timeLimit * 60 && scoreRed !== scoreBlue) {
-            finishMatch('timeLimit');
+        if (timeLimit > 0 && elapsedTicks >= timeLimit * 60) {
+            if (scoreRed === scoreBlue && overtimeEnabled) {
+                overtime = true;
+            } else if (gameState === 'playing') {
+                finishMatch('timeLimit');
+            }
         }
     }
 
@@ -297,6 +305,8 @@ self.onmessage = ({ data }) => {
         elapsedTicks = 0;
         scoreLimit = data.scoreLimit ?? 3;
         timeLimit = data.timeLimit ?? 180;
+        overtimeEnabled = data.overtimeEnabled !== false;
+        overtime = false;
         spawnPlayers();
         physics.kickOffReset = true;
         physics.kickOffTeam = 'red';

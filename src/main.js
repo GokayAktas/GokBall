@@ -686,7 +686,8 @@ class GokBallApp {
             playerSpeedMultiplier: this.currentRoomData?.playerSpeedMultiplier || 1,
             ballSpeedMultiplier: this.currentRoomData?.ballSpeedMultiplier || 1,
             scoreLimit: this._hostScoreLimit,
-            timeLimit: this._hostTimeLimit
+            timeLimit: this._hostTimeLimit,
+            overtimeEnabled: this.currentRoomData?.game?.overtimeEnabled !== false
         });
         this.network.socket?.emit('hostMatchStarted', { protocolVersion: NETWORK_PROTOCOL_VERSION, matchEpoch: this._matchEpoch });
     }
@@ -827,7 +828,8 @@ class GokBallApp {
             this._hostScoreRed,
             this._hostScoreBlue,
             Math.floor(this._hostTimeElapsed / 60),
-            this._hostTimeLimit
+            this._hostTimeLimit,
+            !!result.overtime
         );
         this.scoreboard.showGoal(scoringTeam);
         this.audio.playGoal();
@@ -1185,7 +1187,8 @@ class GokBallApp {
             state.fullState = true;
             this.network.sendFullGameState(targetPlayerId, state);
         } else {
-            this.network.sendAuthorityState(state);
+            const roomPlayerIds = (this.currentRoomData?.players || []).map(player => player.id);
+            this.network.sendAuthorityState(state, roomPlayerIds);
         }
     }
 
@@ -1849,7 +1852,8 @@ class GokBallApp {
             state.scoreRed,
             state.scoreBlue,
             state.time,
-            state.timeLimit ?? this.currentRoomData?.game?.timeLimit ?? 0
+            state.timeLimit ?? this.currentRoomData?.game?.timeLimit ?? 0,
+            !!state.overtime
         );
     }
 
