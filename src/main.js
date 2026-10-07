@@ -513,7 +513,9 @@ class GokBallApp {
 
         const alpha = Math.max(0, Math.min(1, clock.accumulator / clock.stepMs));
         for (const disc of this.physics.discs) {
-            if (!host && (!disc.isPlayer || disc.id !== localId)) continue;
+            // Only interpolate this client's predicted disc here. The host's
+            // and other players' discs are rendered from authority snapshots.
+            if (!disc.isPlayer || disc.id !== localId) continue;
             // Host reconciliation can leave a large temporary offset when
             // packets arrive in bursts. Keep that correction bounded so it
             // cannot drag the locally predicted player away from the current
