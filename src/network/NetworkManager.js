@@ -13,7 +13,6 @@ const PEER_PING_INTERVAL = 500;
 const PEER_PING_TIMEOUT = 1200;
 const PEER_PING_FAILURE_THRESHOLD = 2;
 const AUTHORITY_STATE_TIMEOUT = 1200;
-const SHADOW_INPUT_INTERVAL = 50;
 const AUTHORITY_METADATA_INTERVAL = 15; // refresh static metadata 4 times per second
 const AUTHORITY_METADATA_FIELDS = [
     'colors', 'colorAngle', 'avatarColor', 'name', 'avatar',
@@ -314,30 +313,13 @@ export class NetworkManager {
 
     // === Game Actions ===
 
-    sendInput(input, serverFallbackInput = input) {
+    sendInput(input) {
         this._inputSeqNum = (this._inputSeqNum || 0) + 1;
-        // Send with sequence number for reconciliation
         const packet = { ...input, _seq: this._inputSeqNum };
-
-        // The host already has its local input. Guests prefer the direct peer
-        // link, but keep a low-rate reliable server copy as a safety net. Input
-        // sequence numbers let the host discard delayed copies after a newer
-        // direct packet has already arrived.
-        if (!this._isPeerHost) {
-            const link = this._peerHostId && this._peerLinks.get(this._peerHostId);
-            const directAvailable = !!link?.connected && !link.relaying &&
-                link.channel?.readyState === 'open' && link.pc?.connectionState === 'connected';
-            const sentDirect = directAvailable && link.send({ type: 'input', playerId: this.playerId, input: packet });
-            const now = performance.now();
-            const relayDue = !sentDirect || now - this._lastInputRelayAt >= SHADOW_INPUT_INTERVAL;
-            if (relayDue && this.socket?.connected) {
-                this.socket.emit('input', {
-                    ...serverFallbackInput,
-                    _seq: this._inputSeqNum
-                });
-                this._lastInputRelayAt = now;
-            }
-        }
+        // Every player, including the host, sends input to the server physics
+        // authority. A single ordered stream keeps host and joiner timelines
+        // identical and is independent of a browser tab's rendering cadence.
+        if (this.socket?.connected) this.socket.emit('input', packet);
         return this._inputSeqNum;
     }
 

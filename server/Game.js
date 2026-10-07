@@ -24,6 +24,10 @@ export class Game {
         this.overtimeEnabled = true;
         this.playerDiscs = new Map(); // playerId -> disc index
         this._lastInputSeq = new Map(); // playerId -> last processed seq number
+        this.matchEpoch = null;
+        this.physicsTick = 0;
+        this.paused = false;
+        this.resuming = false;
 
         // Match statistics tracking
         this._matchStats = {}; // playerId -> { goals, assists, saves, touches }
@@ -69,6 +73,11 @@ export class Game {
         this._touchHistory = [];
         this._lastToucher = null;
         this._prevToucher = null;
+        this.matchEpoch = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        this.physicsTick = 0;
+        this._lastInputSeq.clear();
+        this.paused = false;
+        this.resuming = false;
 
         // Start immediately without countdown
         this.state = 'playing';
@@ -98,7 +107,7 @@ export class Game {
             scoreRed: this.scoreRed,
             scoreBlue: this.scoreBlue,
             roomData: this.room.getRoomData(),
-            state: this._getGameState()
+            state: { ...this._getGameState(), fullState: true }
         });
 
         return { scoreRed: 0, scoreBlue: 0 };
@@ -109,6 +118,8 @@ export class Game {
      */
     stop() {
         this.state = 'stopped';
+        this.paused = false;
+        this.resuming = false;
         this._stopLoop();
         this._removeAllPlayerDiscs();
     }
@@ -244,6 +255,13 @@ export class Game {
     }
 
     _tick() {
+        if (this.paused) {
+            this.lastPhysTime = performance.now();
+            this._broadcastCounter = (this._broadcastCounter || 0) + 1;
+            if (this._broadcastCounter % 30 === 0) this.room.broadcast('gameState', this._getGameState());
+            return;
+        }
+
         if (this.state === 'countdown') {
             this.countdownTicks--;
             if (this.countdownTicks <= 0) {
@@ -276,6 +294,7 @@ export class Game {
             while (this.accumulator >= stepSize) {
                 this.physics.stepFree(); // No kickoff constraints, no goal checking
                 this.accumulator -= stepSize;
+                this.physicsTick++;
             }
 
             this.goalPauseTicks--;
@@ -338,6 +357,7 @@ export class Game {
 
         while (this.accumulator >= stepSize) {
             const result = this.physics.step();
+            this.physicsTick++;
             if (result.goalTeam) goalTeam = result.goalTeam;
 
             // Track ball touches for goal attribution (scorer/assist)
@@ -550,11 +570,20 @@ export class Game {
         }
 
         return {
+            matchEpoch: this.matchEpoch,
+            tick: this.physicsTick,
+            physicsTick: this.physicsTick,
+            snapshotSeq: this.physicsTick,
+            lastProcessedSeq: Object.fromEntries(this._lastInputSeq),
+            paused: this.paused,
+            resuming: this.resuming,
             state: this.state,
             physics: this.physics.getState(),
             scoreRed: this.scoreRed,
             scoreBlue: this.scoreBlue,
             time: Math.floor(this.timeElapsed / this.tickRate),
+            scoreLimit: this.scoreLimit,
+            timeLimit: this.timeLimit,
             lastInputRed,
             lastInputBlue
         };

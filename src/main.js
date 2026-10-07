@@ -127,7 +127,7 @@ class GokBallApp {
         // P key for pause (host only)
         window.addEventListener('keydown', (e) => {
             if (e.key === 'p' || e.key === 'P') {
-                if (this.gameRunning && this._isHost() && this._isHostAuthority) {
+                if (this.gameRunning && this._isHost()) {
                     e.preventDefault();
                     this._togglePause();
                 }
@@ -291,7 +291,7 @@ class GokBallApp {
         this._removePauseOverlay();
         this.gameRunning = true;
         this.currentRoomData = roomData;
-        this.network.setAuthorityStreamActive(!this._isHost());
+        this.network.setAuthorityStreamActive(false);
         this._firstStateReceived = false; // Wait for initial server state before client prediction
         this._stadiumReady = false; // Guard against gameState arriving before stadium loads
         this._snapshotBuffer.clear();
@@ -303,7 +303,7 @@ class GokBallApp {
         this._lastPositionResetId = null;
         this._lastConfirmedServerSeq = 0;
         this._reconciliationPending = false;
-        this._fullStateReady = this._isHost() && this._isHostAuthority;
+        this._fullStateReady = false;
         this._lastAuthorityReceivedAt = 0;
         this._localRenderCorrection = { x: 0, y: 0, updatedAt: performance.now() };
         this._localRenderPosition = null;
@@ -342,7 +342,7 @@ class GokBallApp {
         if (!this._fullStateReady) {
             this.network.requestFullState();
             this._resyncTimer = setInterval(() => {
-                if (!this.gameRunning || this._isHost()) return;
+                if (!this.gameRunning) return;
                 if (!this._fullStateReady || performance.now() - this._lastAuthorityReceivedAt > 1200) {
                     this._fullStateReady = false;
                     this.network.requestFullState(this._matchEpoch || null);
@@ -725,17 +725,10 @@ class GokBallApp {
             disc.speed.y = snapshot.sy;
             if (snapshot.isPlayer && snapshot.id !== myId) {
                 activeRemotePlayers.add(snapshot.id);
-                const previous = this._remoteRenderPositions.get(snapshot.id);
-                const elapsed = previous
-                    ? Math.max(0, Math.min(100, localTime - previous.updatedAt))
-                    : 0;
-                const maxDistance = Math.max(
-                    0.75,
-                    Math.hypot(snapshot.sx || 0, snapshot.sy || 0) * elapsed / (1000 / 60) * 1.35 + 0.2
-                );
-                const rendered = limitRenderPosition(previous, { x: snapshot.x, y: snapshot.y }, maxDistance);
-                this._remoteRenderPositions.set(snapshot.id, { ...rendered, updatedAt: localTime });
-                disc._renderPosition = rendered;
+                // SnapshotBuffer already interpolates on the authoritative tick
+                // timeline. A second speed limiter adds lag and visible snapping
+                // whenever a collision changes the player's velocity.
+                disc._renderPosition = { x: snapshot.x, y: snapshot.y };
             } else {
                 disc._renderPosition = { x: snapshot.x, y: snapshot.y };
             }
@@ -759,37 +752,6 @@ class GokBallApp {
             };
         }
 
-        // Independent interpolation can briefly place the ball inside a
-        // player's disc between two collision-resolved host snapshots. Keep
-        // the rendered positions tangent while leaving simulation state intact.
-        const ball = this.physics.ballDisc;
-        if (!ball) return;
-        const ballPos = { ...(ball._renderPosition || ball.pos) };
-        for (let pass = 0; pass < 2; pass++) {
-            for (const player of this.physics.discs) {
-                if (!player.isPlayer) continue;
-                const playerPos = player._renderPosition || player.pos;
-                let dx = ballPos.x - playerPos.x;
-                let dy = ballPos.y - playerPos.y;
-                let distance = Math.hypot(dx, dy);
-                const minDistance = ball.radius + player.radius;
-                if (distance >= minDistance) continue;
-                if (distance < 0.001) {
-                    dx = player.speed.x - ball.speed.x;
-                    dy = player.speed.y - ball.speed.y;
-                    distance = Math.hypot(dx, dy);
-                    if (distance < 0.001) {
-                        dx = player.team === 'red' ? 1 : -1;
-                        dy = 0;
-                        distance = 1;
-                    }
-                }
-                const correction = minDistance - distance + 0.1;
-                ballPos.x += (dx / distance) * correction;
-                ballPos.y += (dy / distance) * correction;
-            }
-        }
-        if (ball._renderPosition) ball._renderPosition = ballPos;
     }
 
     /** Check if this client is the room creator/host */
@@ -1006,7 +968,7 @@ class GokBallApp {
             .map(([id, s]) => ({
                 id, name: s.name, team: s.team,
                 goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
-                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
             }))
             .sort((a, b) => b.points - a.points);
 
@@ -1085,9 +1047,10 @@ class GokBallApp {
     }
 
     _randomizeTeamJerseys() {
-        if (!this._isHost() || !this._isHostAuthority) return;
+        if (!this._isHost()) return;
         for (const team of ['red', 'blue']) {
-            const previousJerseyId = this.currentRoomData?.teamColors?.[team]?.jerseyId;
+            if (this.currentRoomData?.teamColors?.[team]?.random !== true) continue;
+            const previousJerseyId = this.currentRoomData.teamColors[team].jerseyId;
             const jersey = pickRandomJersey(previousJerseyId);
             this.network.socket?.emit('setTeamColors', {
                 team,
@@ -1102,8 +1065,8 @@ class GokBallApp {
 
     /** Toggle pause state (host only) */
     _togglePause() {
-        if (!this._isHost() || !this._isHostAuthority) return;
-        if (this._hostGameState !== 'playing' && !this._isPaused) return;
+        if (!this._isHost()) return;
+        if (this._serverGameState !== 'playing' && !this._isPaused) return;
         
         // If resume animation is playing, cancel it and re-pause
         if (this._resumeAnimating) {
@@ -1181,7 +1144,7 @@ class GokBallApp {
         if (remote) return;
         this.network.socket?.emit('pauseGame', { paused: true, resuming: true, durationMs });
 
-        // The host remains authoritative; guests only render this countdown.
+        // The server holds the pause for the same countdown duration.
         this._resumeTimeout = setTimeout(() => {
             this._resumeTimeout = null;
             this._resumeAnimating = false;
@@ -1189,7 +1152,6 @@ class GokBallApp {
             this._removePauseOverlay();
             document.getElementById('gameCanvas')?.classList.remove('paused');
             this.network.socket?.emit('pauseGame', { paused: false });
-            this._sendAuthorityState();
         }, durationMs);
     }
 
@@ -1347,7 +1309,6 @@ class GokBallApp {
             this.currentRoomData.creatorId = data.creatorId;
             this._isHostAuthority = false;
             this._peerHostRtt = null;
-            this.network.connectRoomPeers(data);
             this.stadiumData = data.stadium;
             this.physics.myPlayerId = this.network.socket?.id;
             this.ui.showScreen('roomLobby', data);
@@ -1356,9 +1317,8 @@ class GokBallApp {
         this.network.on('roomJoined', (data) => {
             this.currentRoomData = data;
             this.currentRoomData.creatorId = data.creatorId;
-            this._isHostAuthority = ['playing', 'countdown', 'goal'].includes(data.game?.state);
+            this._isHostAuthority = false;
             this._peerHostRtt = null;
-            this.network.connectRoomPeers(data);
             // New room: force the next ping snapshot to repaint the player list
             this._pingSignature = null;
             this.stadiumData = data.stadium;
@@ -1430,33 +1390,14 @@ class GokBallApp {
             }
 
             // Check if this is host-authority mode
-            if (data?.isHostAuthority) {
-                this._isHostAuthority = true;
-                if (this._isHost()) {
-                    console.log('[GokBall] HOST: I am the game host, running physics locally');
-                    this._initHostGame();
-                }
-            }
+            this._isHostAuthority = false;
 
             this._serverGameState = 'playing';
             this.startGame(this.currentRoomData); // Loads stadium
 
             // IMPORTANT: Spawn player discs AFTER startGame loaded the stadium
             // Otherwise startGame's loadStadium clears all discs
-            if (this._isHost() && this._isHostAuthority) {
-                this._hostSpawnAllPlayers();
-                this.physics.kickOffReset = true;
-                this.physics.kickOffTeam = 'red';
-                this.physics.inGoalPause = false;
-                console.log('[GokBall] Host players spawned:', this.currentRoomData?.players?.length);
-            }
-
-            // A late join receives the server's placeholder physics state
-            // before the host's live authority stream. It has no host tick and
-            // must not seed prediction or the guest interpolation timeline.
-            if (data?.state && (!data?.isHostAuthority || Number.isFinite(data.state.tick))) {
-                this._handleGameState(data.state);
-            }
+            if (data?.state?.matchEpoch) this._handleGameState(data.state, !!data.state.fullState);
         });
 
         // Remote inputs from other players (relayed by server)
@@ -1480,12 +1421,10 @@ class GokBallApp {
         });
 
         this.network.on('gameState', (state) => {
-            if (this._isHost() && this._isHostAuthority) return;
             if (this.gameRunning) this._handleGameState(state);
         });
 
         this.network.on('fullGameState', (state) => {
-            if (this._isHost() && this._isHostAuthority) return;
             if (this.gameRunning) this._handleGameState(state, true);
         });
 
@@ -1529,6 +1468,7 @@ class GokBallApp {
         });
 
         this.network.on('gameOver', (data) => {
+            if (this._isHost()) this._randomizeTeamJerseys();
             const winnerStr = data.winner === 'red' ? 'K\u0131rm\u0131z\u0131' : 'Mavi';
             const winnerColor = data.winner === 'red' ? 'var(--red)' : 'var(--blue)';
 
@@ -1540,7 +1480,7 @@ class GokBallApp {
                         ranked.push({
                             id, name: s.name, team: s.team,
                             goals: s.goals || 0, assists: s.assists || 0, saves: s.saves || 0, ownGoals: s.ownGoals || 0,
-                            points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25
+                points: (s.goals || 0) * 3 + (s.assists || 0) * 1 + (s.saves || 0) * 0.25 - (s.ownGoals || 0) * 3
                         });
                     }
                 }

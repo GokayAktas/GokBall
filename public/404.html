@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071411">
+  <title>404 | GokBall</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#071411;color:#f0f5ef;font-synthesis:none}
+    *{box-sizing:border-box}body{min-height:100svh;margin:0;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 112%,#1f4b31 0,transparent 52%),linear-gradient(145deg,#0d2119,#071411 62%)}
+    body:before,body:after{content:"";position:fixed;inset:0;pointer-events:none}body:before{opacity:.13;background:repeating-linear-gradient(90deg,transparent 0 9.7%,#b8d7b1 9.8% 10%,transparent 10.1% 20%);mask-image:linear-gradient(transparent 8%,#000 100%)}body:after{border:1px solid #71977435;inset:20px;border-radius:24px}
+    main{position:relative;width:min(680px,calc(100% - 40px));padding:clamp(30px,7vw,68px);border:1px solid #aec7a52a;border-radius:28px;background:linear-gradient(145deg,#152a20e8,#0c1b15ed);box-shadow:0 32px 100px #0008;text-align:center}
+    .brand{display:inline-flex;align-items:center;gap:10px;margin-bottom:54px;color:#aac2a9;font-size:12px;font-weight:800;letter-spacing:.24em;text-transform:uppercase}.ball{width:25px;height:25px;border:2px solid #c8f07b;border-radius:50%;display:grid;place-items:center;color:#c8f07b;font-size:12px;box-shadow:0 0 24px #bdf56855}
+    .score{display:flex;align-items:center;justify-content:center;gap:clamp(18px,5vw,48px);margin:0 auto 16px}.digit{font-size:clamp(92px,22vw,174px);font-weight:950;line-height:.85;letter-spacing:-.095em;color:#f5f8ed;text-shadow:0 10px 40px #0005}.divider{height:92px;width:1px;background:linear-gradient(transparent,#b4c8a777,transparent);transform:rotate(18deg)}
+    .error{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #dd756045;border-radius:999px;background:#dc5b3512;color:#ff9b7e;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.error i{width:6px;height:6px;border-radius:50%;background:#ff8065;box-shadow:0 0 12px #ff8065}
+    h1{margin:24px 0 10px;font-size:clamp(25px,5vw,38px);letter-spacing:-.045em}p{max-width:400px;margin:0 auto;color:#a8b9ad;font-size:15px;line-height:1.7}.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:34px}a{min-height:48px;padding:0 20px;display:inline-flex;align-items:center;justify-content:center;border-radius:13px;color:#f4f7ef;font-size:13px;font-weight:800;text-decoration:none;transition:transform .18s,background .18s}a:hover{transform:translateY(-2px)}.primary{background:#c8f07b;color:#172416;box-shadow:0 10px 30px #b8eb6b24}.primary:hover{background:#d5ff8b}.secondary{border:1px solid #aec7a52c;background:#ffffff07}.secondary:hover{background:#ffffff12}
+    .field{position:absolute;left:50%;bottom:-180px;width:440px;height:290px;border:1px solid #c4e6a51c;border-radius:50%;transform:translateX(-50%);pointer-events:none}.field:before{content:"";position:absolute;inset:34px 82px;border:1px solid #c4e6a516;border-radius:50%}.field:after{content:"";position:absolute;top:50%;left:50%;width:9px;height:9px;border-radius:50%;background:#c8f07b;box-shadow:0 0 28px 9px #c8f07b55;transform:translate(-50%,-50%)}
+    @media(max-width:480px){.brand{margin-bottom:40px}main{padding:34px 22px}.field{width:320px}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><span class="ball">✦</span> GokBall · Maç alanı</div>
+    <div class="score" aria-label="Hata kodu 404"><span class="digit">4</span><span class="divider"></span><span class="digit">04</span></div>
+    <span class="error"><i></i> Sayfa bulunamadı</span>
+    <h1>Bu maç burada oynanmıyor.</h1>
+    <p>Aradığın sayfa sahadan çıkmış olabilir. Ana menüye dönüp maça yeniden katılabilirsin.</p>
+    <div class="actions"><a class="primary" href="/">Ana menüye dön <span aria-hidden="true">&nbsp;↗</span></a><a class="secondary" href="javascript:history.back()">Önceki sayfa</a></div>
+    <div class="field" aria-hidden="true"></div>
+  </main>
+</body>
+</html>

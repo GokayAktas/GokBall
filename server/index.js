@@ -210,8 +210,8 @@ io.on('connection', (socket) => {
                 scoreRed: room.game.scoreRed,
                 scoreBlue: room.game.scoreBlue,
                 roomData: room.getRoomData(),
-                isHostAuthority: true,
-                state: room.game._getGameState()
+                isHostAuthority: false,
+                state: { ...room.game._getGameState(), fullState: true }
             });
         }
     });
@@ -300,19 +300,7 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (!room || room.game.state !== 'playing') return;
 
-        // HOST-AUTHORITY MODE: Relay non-host inputs to the host
-        if (room.hostId && socket.id !== room.hostId) {
-            const hostSocket = io.sockets.sockets.get(room.hostId);
-            if (!hostSocket) return;
-
-            // Inputs are coalesced by sequence number on the host. Keep this
-            // fallback reliable so a busy WebSocket cannot silently stop a
-            // guest's movement while the direct peer channel is degraded.
-            hostSocket.emit('remoteInput', { playerId: socket.id, input });
-            return;
-        }
-
-        // Normal mode: apply to server physics
+        // Server-owned physics is independent of browser tab visibility.
         room.game.setPlayerInput(socket.id, input);
     });
 
@@ -333,19 +321,17 @@ io.on('connection', (socket) => {
         socket.to(room.id).volatile.emit('authorityState', state);
     });
 
-    // Full-state transfer is reliable and unicast. Only room members may ask,
-    // and only the current room host may answer for a joined target player.
+    // Full-state transfer is reliable and unicast to any room member.
     socket.on('requestFullState', ({ matchEpoch } = {}) => {
         const room = getPlayerRoom(socket.id);
-        if (!room || room.hostId === socket.id || !room.players.has(socket.id)) return;
+        if (!room || !room.players.has(socket.id)) return;
         if (!['playing', 'goal', 'countdown'].includes(room.game?.state)) return;
         const now = Date.now();
         if (socket._lastFullStateRequestAt && now - socket._lastFullStateRequestAt < 900) return;
         socket._lastFullStateRequestAt = now;
-        room.players.get(room.hostId)?.socket?.emit('fullStateRequest', {
-            playerId: socket.id,
-            matchEpoch: typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null
-        });
+        const state = { ...room.game._getGameState(), fullState: true };
+        state.requestedEpoch = typeof matchEpoch === 'string' ? matchEpoch.slice(0, 100) : null;
+        socket.emit('fullGameState', state);
     });
 
     socket.on('fullGameState', ({ playerId, state } = {}) => {
@@ -361,6 +347,20 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket.id);
         if (!room) return;
         if (socket.id !== room.hostId) return;
+        room.game.paused = !!data?.paused;
+        room.game.resuming = !!data?.resuming;
+        if (room.game.paused && room.game.resuming && Number.isFinite(data?.durationMs)) {
+            clearTimeout(room.game._resumeTimer);
+            room.game._resumeTimer = setTimeout(() => {
+                room.game.paused = false;
+                room.game.resuming = false;
+                room.broadcast('gameState', room.game._getGameState());
+            }, Math.max(1000, Math.min(5000, data.durationMs)));
+        } else if (!room.game.paused) {
+            clearTimeout(room.game._resumeTimer);
+            room.game._resumeTimer = null;
+        }
+        room.broadcast('gameState', room.game._getGameState());
         socket.to(room.id).emit('gamePaused', {
             paused: !!data?.paused,
             resuming: !!data?.resuming,
@@ -414,22 +414,8 @@ io.on('connection', (socket) => {
         }
 
         try {
-            // In host-authority mode, server doesn't run physics loop.
-            // Just broadcast gameStarted, host handles physics.
-            room.game.state = 'playing';
-            room.game.scoreRed = 0;
-            room.game.scoreBlue = 0;
-            room.game.timeElapsed = 0;
-            
-            // Broadcast start to everyone
-            io.to(room.id).emit('gameStarted', {
-                scoreRed: 0,
-                scoreBlue: 0,
-                roomData: room.getRoomData(),
-                isHostAuthority: true
-            });
-            
-            console.log(`[Server] Game started (host-authority) in room ${room.id}`);
+            room.game.start();
+            console.log(`[Server] Game started (server-authority) in room ${room.id}`);
         } catch (err) {
             console.error('[Server] Error starting game:', err);
             socket.emit('roomError', { error: 'Oyun başlatılırken bir hata oluştu.' });
@@ -443,14 +429,8 @@ io.on('connection', (socket) => {
         const player = room.players.get(socket.id);
         if (!player || !player.isAdmin) return;
 
-        if (room.hostId && socket.id === room.hostId) {
-            // Host-authority: reset game state so admin can change stadium etc.
-            room.game.state = 'stopped';
-            io.to(room.id).emit('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
-        } else {
-            room.game.stop();
-            room.broadcast('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
-        }
+        room.game.stop();
+        room.broadcast('gameStopped', { reason: 'Stopped by admin', roomData: room.getRoomData() });
     });
 
     // --- Chat ---
@@ -742,4 +722,10 @@ app.post('/admin/rooms/:id/teamColors', express.json(), (req, res) => {
 
     io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
     return res.json({ ok: true, teamColors: room.teamColors[team] });
+});
+
+app.get('*', (req, res) => {
+    res.status(404).sendFile(path.join(__dirname, '../dist/404.html'), (error) => {
+        if (error) res.status(404).send('404 - Sayfa bulunamadı');
+    });
 });
