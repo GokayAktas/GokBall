@@ -3,6 +3,9 @@
   "main": "cloudflare/worker.js",
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://gokball.vercel.app,https://gokball.gokayaktas10.workers.dev"
+  },
   "assets": {
     "directory": "./dist-cloudflare",
     "binding": "ASSETS",
@@ -17,10 +20,6 @@
     ]
   },
   "exports": {
-    "GokBallContainer": {
-      "type": "durable-object",
-      "state": "deleted"
-    },
     "GameServerDurableObject": {
       "type": "durable-object",
       "storage": "sqlite"

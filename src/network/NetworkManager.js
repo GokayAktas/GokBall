@@ -79,7 +79,10 @@ export class NetworkManager {
             // Both deployment modes default to the site origin. The Cloudflare
             // build opens /ws; the standard build connects to the Socket.IO server.
             // Set VITE_SERVER_URL only when the client and server use different origins.
-            const url = serverUrl || import.meta.env.VITE_SERVER_URL || window.location.origin;
+            const url = serverUrl || import.meta.env.VITE_SERVER_URL ||
+                (import.meta.env.MODE === 'cloudflare'
+                    ? 'https://gokball.gokayaktas10.workers.dev'
+                    : window.location.origin);
             console.log('[Network] Connecting to:', url);
 
             // Connection timeout

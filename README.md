@@ -91,6 +91,8 @@ npm run deploy:cloudflare
 
 `wrangler.jsonc` statik istemciyi ve WebSocket sunucusunu aynı Worker'da dağıtır. Oda sunucusu tek bir Durable Object kullanır; oda verileri sunucu belleğinde tutulur ve sunucu yeniden başlatıldığında mevcut Node sunucusunda olduğu gibi odalar sıfırlanır. Cloudflare `Settings > Variables and Secrets` bölümünde isteğe bağlı olarak `ALLOWED_ORIGINS`, `ICE_SERVERS`, `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` ve `ADMIN_SECRET` tanımlanabilir. Ayrı bir istemci alan adı kullanılıyorsa `ALLOWED_ORIGINS` değerine tam origin'i ekleyin.
 
+Vercel'de ön yüzü yayımlayıp Cloudflare Worker'ı oyun sunucusu olarak kullanmak için `vercel.json` Cloudflare modunda build alır. `NetworkManager` varsayılan olarak `gokball.gokayaktas10.workers.dev` adresine bağlanır; `ALLOWED_ORIGINS` Vercel production origin'ine izin verir. Vercel projesinin kök dizini depo kökü olmalıdır.
+
 Harita kataloğunun yerleşik haritaları Workers üzerinde kullanılabilir. `maps/` altındaki yerel `.hbs` dosyaları yalnızca Node.js sunucusu tarafından yüklenir.
 
 ## Proje Yapısı
