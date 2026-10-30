@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   root: 'src',
   publicDir: '../public',
   server: {
@@ -15,7 +15,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../dist',
+    outDir: mode === 'cloudflare' ? '../dist-cloudflare' : '../dist',
     emptyOutDir: true
   }
-});
+}));

@@ -4,7 +4,7 @@
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    "directory": "./dist",
+    "directory": "./dist-cloudflare",
     "binding": "ASSETS",
     "run_worker_first": ["/ws", "/admin/*"]
   },
