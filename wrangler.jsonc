@@ -17,6 +17,10 @@
     ]
   },
   "exports": {
+    "GokBallContainer": {
+      "type": "durable-object",
+      "state": "deleted"
+    },
     "GameServerDurableObject": {
       "type": "durable-object",
       "storage": "sqlite"
