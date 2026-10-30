@@ -518,6 +518,9 @@ export class Room {
      * Broadcast a message to all players (optionally exclude one)
      */
     broadcast(event, data, excludeId) {
+        if (event === 'chatMessage') {
+            this._recordChatMessage(data);
+        }
         for (const [id, player] of this.players) {
             if (id !== excludeId) {
                 player.socket.emit(event, data);
@@ -557,7 +560,6 @@ export class Room {
             message: message.substring(0, 200),
             team: sender.team
         };
-        this._recordChatMessage(payload);
         this.broadcast('chatMessage', payload);
     }
 
@@ -584,7 +586,7 @@ export class Room {
     }
 
     _applyAvatarToDisc(player) {
-        this.broadcast('roomUpdate', { players: this.getPlayerList() });
+        this.broadcast('roomUpdate', { playerId: player.id, players: this.getPlayerList() });
     }
 
     /**
@@ -608,7 +610,6 @@ export class Room {
                 } else {
                     player.avatar = parts.slice(1).join(' ').substring(0, 2);
                 }
-                this.broadcast('roomUpdate', { players: this.getPlayerList() });
                 this._applyAvatarToDisc(player);
                 break;
             case '/colors':

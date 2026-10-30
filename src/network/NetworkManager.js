@@ -162,6 +162,7 @@ export class NetworkManager {
             this.socket.on('goalScored', (data) => this._trigger('goalScored', data));
             this.socket.on('gameOver', (data) => this._trigger('gameOver', data));
             this.socket.on('chatMessage', (data) => this._trigger('chatMessage', data));
+            this.socket.on('playerTyping', (data) => this._trigger('playerTyping', data));
             this.socket.on('adminUpdate', (data) => this._trigger('adminUpdate', data));
             // Map system events
             this.socket.on('mapChanged', (data) => this._trigger('mapChanged', data));

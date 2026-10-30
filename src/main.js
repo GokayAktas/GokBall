@@ -112,6 +112,12 @@ class GokBallApp {
         // Load keybindings
         this.input.loadBindings();
 
+        window.addEventListener('pagehide', (event) => {
+            if (!event.persisted && this.currentRoomData && this.network.socket?.connected) {
+                this.network.leaveRoom();
+            }
+        });
+
         // Global Enter to Chat
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && this.gameRunning) {
@@ -1494,9 +1500,27 @@ class GokBallApp {
 
         // Chat messages (in-game)
         this.network.on('chatMessage', (data) => {
+            if (this.currentRoomData) {
+                const history = this.currentRoomData.chatHistory || (this.currentRoomData.chatHistory = []);
+                history.push({
+                    playerId: data.playerId || null,
+                    playerName: data.playerName || 'System',
+                    message: data.message,
+                    team: data.team || null,
+                    system: !!data.system
+                });
+                if (history.length > 100) history.shift();
+            }
             if (this.gameRunning) {
                 this.chat.addMessage(data);
             }
+        });
+
+        this.network.on('playerTyping', (data) => {
+            const player = this.currentRoomData?.players?.find(item => item.id === data?.playerId);
+            if (player) player.typing = !!data.typing;
+            const disc = this.physics.discs.find(item => item.isPlayer && item.id === data?.playerId);
+            if (disc) disc.typing = !!data.typing;
         });
         
         // Room closed (the host left, so the room is gone)
@@ -1590,6 +1614,18 @@ class GokBallApp {
                             disc.avatar = player.avatar;
                             disc._avatar = player.avatar;
                         }
+                    }
+                    const updatedPlayer = data.playerId
+                        ? data.players.find(player => player.id === data.playerId)
+                        : null;
+                    if (updatedPlayer && this._isHostAuthority && this.gameRunning) {
+                        this._hostPhysicsWorker?.postMessage({
+                            v: NETWORK_PROTOCOL_VERSION,
+                            type: 'updatePlayer',
+                            matchEpoch: this._matchEpoch,
+                            playerId: updatedPlayer.id,
+                            players: data.players
+                        });
                     }
                 }
                 if (data.playerSpeedMultiplier !== undefined) {

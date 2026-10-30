@@ -45,7 +45,13 @@ export class Chat {
         document.getElementById('gameChatSend')?.addEventListener('click', () => this._send());
         const chatInput = document.getElementById('gameChatInput');
         chatInput?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') this._send();
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this._send();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                chatInput.blur();
+            }
             e.stopPropagation();
         });
 
@@ -118,6 +124,9 @@ export class Chat {
     }
 
     hide() {
+        if (document.activeElement?.id === 'gameChatInput') {
+            document.activeElement.blur();
+        }
         if (this.container) {
             this.container.classList.add('hidden');
             this.container.innerHTML = '';
@@ -184,11 +193,9 @@ export class Chat {
         const msg = input.value.trim();
         if (msg) {
             this.app.network.sendChat(msg);
-            input.value = '';
-        } else {
-            input.value = '';
-            input.blur();
         }
+        input.value = '';
+        input.blur();
     }
 
     _esc(t) {

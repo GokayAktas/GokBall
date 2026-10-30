@@ -321,7 +321,7 @@ io.on('connection', (socket) => {
             };
 
             io.to(room.id).emit('teamColorsUpdated', { team, teamColors: room.teamColors[team], allTeamColors: room.teamColors });
-            io.to(room.id).emit('chatMessage', { playerName: 'SİSTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
+            room.broadcast('chatMessage', { playerName: 'SİSTEM', message: `${team.toUpperCase()} takım renkleri güncellendi.`, system: true });
         } catch (e) {
             console.error('[Server] setTeamColors error', e);
         }

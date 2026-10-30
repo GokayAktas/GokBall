@@ -1406,6 +1406,8 @@ select.input option {
 .lobby-chat {
   width: 350px;
   flex-shrink: 0;
+  height: 600px;
+  max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -1417,7 +1419,7 @@ select.input option {
     14px 100%, 0 calc(100% - 14px), 0 14px
   );
   box-shadow: var(--shadow-md);
-  min-height: 480px;
+  min-height: 0;
 }
 
 .lobby-chat-header {
@@ -1717,7 +1719,7 @@ select.input option {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 450px;
+  width: 562.5px;
   max-width: 90vw;
   max-height: calc(100vh - 20px);
   height: 250px;
@@ -2787,7 +2789,8 @@ select.input option {
 
   .lobby-chat {
     width: 100%;
-    min-height: 320px;
+    height: 360px;
+    max-height: calc(100vh - 100px);
   }
 
   .lobby-teams {

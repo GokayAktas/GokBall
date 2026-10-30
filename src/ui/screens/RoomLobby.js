@@ -228,6 +228,9 @@ export class RoomLobby {
 
     // Update player list
     this._updatePlayers(data?.players || []);
+    for (const message of data?.chatHistory || []) {
+      this._addChatMessage(message);
+    }
     // Show join hint (private message) if provided in server response
     if (data?.joinHint) {
       this._addChatMessage({ message: data.joinHint, system: true });
@@ -374,18 +377,19 @@ export class RoomLobby {
       if (e.key === 'Enter') {
         e.preventDefault();
         this._sendChat();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        chatInput.blur();
       }
     });
 
     // Network events - store references for cleanup
     this._registerHandler('playerJoined', (data) => {
       this._updatePlayers(data.players);
-      this._addSystemMessage(`${data.player.name} odaya katıldı`);
     });
 
     this._registerHandler('playerLeft', (data) => {
       this._updatePlayers(data.players);
-      this._addSystemMessage(`${data.playerName} ayrıldı`);
     });
 
     this._registerHandler('teamChanged', (data) => {
@@ -705,11 +709,9 @@ export class RoomLobby {
     const msg = input.value.trim();
     if (msg) {
       this.app.network.sendChat(msg);
-      input.value = '';
-    } else {
-      input.value = '';
-      input.blur();
     }
+    input.value = '';
+    input.blur();
     // NOTE: Don't add own message here! Server will broadcast it back to us.
   }
 
@@ -729,6 +731,9 @@ export class RoomLobby {
     }
 
     container.appendChild(div);
+    while (container.children.length > 100) {
+      container.removeChild(container.firstChild);
+    }
     container.scrollTop = container.scrollHeight;
   }
 

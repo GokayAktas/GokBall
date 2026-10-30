@@ -94,3 +94,49 @@ test('Cloudflare resume tickets restore the original player and host roles', asy
     assert.equal(resumed.creatorId, resumedSocket.id);
     assert.equal(server.rooms.get(created.roomId).hostId, resumedSocket.id);
 });
+
+test('room chat history stays synchronized and avatar changes broadcast once', async (t) => {
+    const server = new GameServerDurableObject({}, {});
+    t.after(() => clearInterval(server.timer));
+
+    const host = createSocket('chat-host');
+    const guest = createSocket('chat-guest', '127.0.0.2');
+    server.sockets.set(host.id, host);
+    server.sockets.set(guest.id, guest);
+
+    await server._handleEvent(host, 'createRoom', { name: 'Chat history test', playerName: 'Host' });
+    const created = emitted(host, 'roomCreated')[0];
+    await server._handleEvent(guest, 'joinRoom', {
+        roomId: created.roomId,
+        playerName: 'Guest'
+    });
+
+    const room = server.rooms.get(created.roomId);
+    await server._handleEvent(host, 'chatMessage', 'hello from the lobby');
+    assert.ok(room.getRoomData().chatHistory.some(message => message.message === 'hello from the lobby'));
+
+    await server._handleEvent(host, 'setTyping', true);
+    assert.equal(room.players.get(host.id).typing, true);
+    assert.deepEqual(emitted(guest, 'playerTyping').at(-1), {
+        playerId: host.id,
+        typing: true
+    });
+
+    await server._handleEvent(host, 'chatMessage', '/avatar GO');
+    assert.equal(room.players.get(host.id).avatar, 'GO');
+    assert.equal(emitted(host, 'roomUpdate').length, 1);
+    assert.equal(emitted(guest, 'roomUpdate').length, 1);
+
+    for (let i = 0; i < 105; i++) {
+        await server._handleEvent(host, 'chatMessage', `message ${i}`);
+    }
+    assert.equal(room.chatHistory.length, 100);
+    assert.equal(room.chatHistory.at(-1).message, 'message 104');
+
+    await server._handleEvent(guest, 'leaveRoom');
+    const leaveMessages = emitted(host, 'chatMessage')
+        .filter(message => message.system && message.message.includes('Guest odadan ayrıldı'));
+    assert.equal(leaveMessages.length, 1);
+    assert.match(leaveMessages[0].message, /❌/);
+    assert.equal(room.chatHistory.at(-1).message, leaveMessages[0].message);
+});
