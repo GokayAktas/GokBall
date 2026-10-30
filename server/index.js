@@ -10,6 +10,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { NETWORK_PROTOCOL_VERSION } from '../src/network/Protocol.js';
+import { loadExternalMaps } from './loadExternalMaps.js';
+
+loadExternalMaps();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

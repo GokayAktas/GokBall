@@ -8,12 +8,6 @@
  */
 
 import { createHash } from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // ─── Built-in map definitions ────────────────────────────────────────────────
 
@@ -190,39 +184,6 @@ class MapManagerClass {
         // Register built-in maps
         for (const [id, data] of Object.entries(BUILTIN_MAPS)) {
             this.registry.set(id, { id, data });
-        }
-
-        // Attempt to load .hbs files from maps/ directory
-        this._loadExternalMaps();
-    }
-
-    /**
-     * Load .hbs files from the maps/ directory
-     */
-    _loadExternalMaps() {
-        const mapsDir = path.join(__dirname, '..', 'maps');
-        try {
-            if (!fs.existsSync(mapsDir)) {
-                fs.mkdirSync(mapsDir, { recursive: true });
-                console.log('[MapManager] Created maps/ directory');
-                return;
-            }
-            const files = fs.readdirSync(mapsDir).filter(f => f.endsWith('.hbs'));
-            for (const file of files) {
-                try {
-                    const content = fs.readFileSync(path.join(mapsDir, file), 'utf-8');
-                    const data = JSON.parse(content);
-                    const id = file.replace('.hbs', '').toLowerCase();
-                    if (!this.registry.has(id)) {
-                        this.registry.set(id, { id, data });
-                        console.log(`[MapManager] Loaded external map: ${id} (${data.name || file})`);
-                    }
-                } catch (e) {
-                    console.warn(`[MapManager] Failed to load ${file}:`, e.message);
-                }
-            }
-        } catch (e) {
-            // maps/ directory doesn't exist or can't be read — not fatal
         }
     }
 

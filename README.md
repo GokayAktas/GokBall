@@ -33,14 +33,14 @@ Tüm tuşlar oyun içi **Ayarlar** ekranından yeniden atanabilir.
 | Katman | Teknoloji |
 | --- | --- |
 | İstemci | Vanilla JavaScript, Vite, HTML5 Canvas |
-| Sunucu | Node.js, Express, Socket.IO |
-| Ağ | Oda sahibi otoritesi, WebRTC P2P, Socket.IO sinyalleşme/yedek aktarım, client prediction, snapshot interpolasyon |
+| Sunucu | Cloudflare Workers, Durable Objects (alternatif yerel sunucu: Node.js, Express, Socket.IO) |
+| Ağ | Oda sahibi otoritesi, WebRTC P2P, WebSocket sinyalleşme/yedek aktarım, client prediction, snapshot interpolasyon |
 
 ### Mimari
 
 - Oda sahibi fizik simülasyonunu yürütür. Girdiler ve fizik snapshot'ları oyuncularla oda sahibi arasında WebRTC üzerinden taşınır; doğrudan bağlantı kurulamazsa güncel paketler Socket.IO aktarımına düşer.
 - Diğer istemciler kendi oyuncularını tahmin eder ve uzak oyuncuları sıralı snapshot interpolasyonu ile çizer.
-- Socket.IO oda yönetimi ve WebRTC sinyalleşmesini sağlar; anlık oyun paketleri yedek aktarımda kuyrukta bekletilmez.
+- Sunucu oda yönetimi ve WebRTC sinyalleşmesini sağlar; anlık oyun paketleri yedek aktarımda kuyrukta bekletilmez.
 - Oda sahibi sekmesini arka plana alırsa fizik döngüsü `setInterval` yedeğiyle çalışmaya devam eder.
 - Tekilleştirme (reconciliation) için girdi geçmişi ve sıra numaraları kullanılır.
 
@@ -72,6 +72,26 @@ npm start          # Express + Socket.IO sunucusu derlenmiş istemciyi sunar
 ```
 
 Ağ yapılandırması için ortam değişkenleri: `VITE_SERVER_URL`, `CLIENT_ORIGINS`, `ALLOW_ALL_ORIGINS`, `FORCE_WEBSOCKET` (bkz. `server/index.js`).
+
+### Cloudflare Workers'a dağıtım
+
+Cloudflare sunucu dağıtımı Docker, WSL veya Ubuntu gerektirmez. Node.js ve npm ile Wrangler kullanılır:
+
+```bash
+npm install
+npx --yes wrangler@4.156.0 login
+npm run dev:cloudflare
+```
+
+Üretime dağıtmak için:
+
+```bash
+npm run deploy:cloudflare
+```
+
+`wrangler.jsonc` statik istemciyi ve WebSocket sunucusunu aynı Worker'da dağıtır. Oda sunucusu tek bir Durable Object kullanır; oda verileri sunucu belleğinde tutulur ve sunucu yeniden başlatıldığında mevcut Node sunucusunda olduğu gibi odalar sıfırlanır. Cloudflare `Settings > Variables and Secrets` bölümünde isteğe bağlı olarak `ALLOWED_ORIGINS`, `ICE_SERVERS`, `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` ve `ADMIN_SECRET` tanımlanabilir. Ayrı bir istemci alan adı kullanılıyorsa `ALLOWED_ORIGINS` değerine tam origin'i ekleyin.
+
+Harita kataloğunun yerleşik haritaları Workers üzerinde kullanılabilir. `maps/` altındaki yerel `.hbs` dosyaları yalnızca Node.js sunucusu tarafından yüklenir.
 
 ## Proje Yapısı
 

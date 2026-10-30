@@ -3,6 +3,7 @@
  * Handles connection, room management, and game state sync
  */
 import { io } from 'socket.io-client';
+import { CloudflareSocketClient } from './CloudflareSocketClient.js';
 import { PeerLink } from './PeerLink.js';
 import { NETWORK_PROTOCOL_VERSION, encodeProtocolPacket, isProtocolPacket, MAX_NETWORK_PACKET_BYTES } from './Protocol.js';
 
@@ -75,11 +76,9 @@ export class NetworkManager {
      */
     connect(serverUrl) {
         return new Promise((resolve, reject) => {
-            // Default: connect to the same host the site is served from.
-            // In production the Express server (server/index.js) serves the site
-            // AND socket.io on the same port, so same-origin works everywhere
-            // (localhost, LAN, deployed URL) without extra config.
-            // Set VITE_SERVER_URL env var only for split dev setups (client on :3000, server on :3001).
+            // Both deployment modes default to the site origin. The Cloudflare
+            // build opens /ws; the standard build connects to the Socket.IO server.
+            // Set VITE_SERVER_URL only when the client and server use different origins.
             const url = serverUrl || import.meta.env.VITE_SERVER_URL || window.location.origin;
             console.log('[Network] Connecting to:', url);
 
@@ -89,13 +88,15 @@ export class NetworkManager {
                 reject(new Error('Connection timeout (5s)'));
             }, 5000);
             
-            this.socket = io(url, {
-                transports: ['websocket', 'polling'],
-                reconnection: true,
-                reconnectionAttempts: Infinity,
-                reconnectionDelay: 1000,
-                timeout: 5000
-            });
+            this.socket = import.meta.env.MODE === 'cloudflare'
+                ? new CloudflareSocketClient(url, { reconnectionDelay: 1000 })
+                : io(url, {
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionAttempts: Infinity,
+                    reconnectionDelay: 1000,
+                    timeout: 5000
+                });
 
             const cleanupAll = () => {
                 clearTimeout(connectTimeout);

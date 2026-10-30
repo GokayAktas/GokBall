@@ -10,7 +10,10 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "dev:lan": "concurrently \"npm run server\" \"vite --host\"",
     "build": "vite build",
-    "test": "node --test tests/network-sync.test.js tests/network-protocol.test.js tests/host-worker.test.js",
+    "build:cloudflare": "vite build --mode cloudflare",
+    "dev:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.156.0 dev",
+    "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.156.0 deploy",
+    "test": "node --test tests/network-sync.test.js tests/network-protocol.test.js tests/host-worker.test.js tests/cloudflare-worker.test.js",
     "preview": "vite preview",
     "tint-assets": "node scripts/tint-assets.js"
   },

@@ -1,0 +1,28 @@
+{
+  "name": "gokball",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/ws", "/admin/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GAME_SERVER",
+        "class_name": "GameServerDurableObject"
+      }
+    ]
+  },
+  "exports": {
+    "GameServerDurableObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "observability": {
+    "enabled": true
+  }
+}
